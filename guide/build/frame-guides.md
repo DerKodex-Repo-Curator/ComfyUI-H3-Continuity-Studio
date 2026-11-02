@@ -22,12 +22,19 @@ The panel offers:
 | **Edit image prompt** | The still prompt, which explicitly describes a single opening frame (First, Shot) or the ending frame (Last). **Rebuild prompt** recomposes it from the scene text, instruction and extra details. |
 | **Continuity source & seed** | Which video take or earlier accepted guide the new image should follow, and the **Image seed**. |
 | **Still instructions** | The reusable instruction used for stills. |
-| **Candidates (N)** | Each candidate keeps its prompt, exact seed and source. **Accept guide** assigns it; click a thumbnail for a large preview (**Esc** closes). |
+| **Candidates (N)** | Each candidate keeps its prompt, exact seed and source. **Use as guide** assigns it; click a thumbnail for a large preview (**Esc** closes). |
 | **Remove guide** | Removes the assignment. The image stays in your candidates. |
 
-After you accept a guide the panel reads **Guide in use**. A guide never changes a render until you accept it.
+After you accept a guide the panel reads **Guide in use**, and the marker above shows its thumbnail. A guide never changes a render until you accept it.
 
 ### Generating candidates
+
+[![Two Qwen Image 2.1 candidates for Clip 1's First frame](../assets/screens/still-candidates.png){ align=left width=300 }](../assets/screens/still-candidates.png)
+[![The same panel after Use as guide: Guide in use, with Remove guide and the scene-anchor controls](../assets/screens/still-guide-in-use.png){ align=right width=300 }](../assets/screens/still-guide-in-use.png)
+
+The screenshots show two candidates the Qwen Image 2.1 example generated for a clip's First frame (about 40 s each on one RTX 5090 Laptop GPU), then the panel after **Use as guide** on one of them. The marker above the panel and the Timeline's **1 · First** marker now show the picture. The other candidate stays in the list until you remove it.
+
+<div style="clear: both"></div>
 
 Still generation needs a **still recipe**: connect a native image-generator subgraph's `IMAGE` output to the **Still Recipe** node, and that node's output to the Timeline's `still_recipe` input. The example workflows include ready-made recipes:
 

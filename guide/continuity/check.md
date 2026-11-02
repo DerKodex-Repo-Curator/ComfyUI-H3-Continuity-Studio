@@ -6,7 +6,7 @@ After rendering, the Story's **Vision model** can check each rendered clip again
 
 In the Studio, the **Takes** tab of a rendered clip shows **Continuity check**. 
 
-[![The Continuity check panel](../assets/screens/check.png){ align=right width=300 }](../assets/screens/check.png)
+[![The Continuity check panel with a drift-only result](../assets/screens/check.png){ align=right width=300 }](../assets/screens/check.png)
 
 - **Check** checks that clip, even when it has a current result.
 - **Check all rendered clips**, on the Story node and the Story page, checks every rendered clip without a current result, in Timeline order, with one load of the model.
@@ -22,7 +22,9 @@ It reports only differences a viewer would notice: a character, prop or place th
 
 ## Reading the result
 
-The first line says where the clip stands: *Not checked yet.*, *Checked at 10:42 with vision-8b.* or *The last check was of an earlier render.* Below it, problems are grouped under the clip's characters and props by name, then **Place** and **Join**, with the shot where it shows when the model names one, such as *Her hood is down (shot 2).* *No problems found.* means the model found none; *The check couldn't read the Vision model's answer.* means its reply didn't fit, so press **Check** again.
+[![A finished check: Checked at 13:12 with a Vision model, No problems found](../assets/screens/check-vision.png){ align=right width=300 }](../assets/screens/check-vision.png)
+
+The first line says where the clip stands: *Not checked yet.*, *Checked at 10:42 with vision-8b.* or *The last check was of an earlier render.* Below it, problems are grouped under the clip's characters and props by name, then **Place** and **Join**, with the shot where it shows when the model names one, such as *Her hood is down (shot 2).* *No problems found.* (as in the second screenshot, from a Vision model running locally) means the model found none; *The check couldn't read the Vision model's answer.* means its reply didn't fit, so press **Check** again.
 
 **Retake** shows when the check found problems, drift or an unreadable answer. It is the clip's **Generate clip N** with a new seed: it renders that clip alone, and the old render moves to `takes/` where you can [play it and put it back](takes.md). Clips that continue from it keep their renders.
 
@@ -32,7 +34,7 @@ The first line says where the clip stands: *Not checked yet.*, *Checked at 10:42
 
 ## Without a Vision model
 
-With no `vision_model`, Check and Check all measure **drift only**, and the panel says so: *Checked at 07:08: drift only, because the Story has no Vision model.* (as in the screenshot). Once the Story has a Vision model, **Check all** checks those clips again.
+With no `vision_model`, Check and Check all measure **drift only**, and the panel says so: *Checked at 07:08: drift only, because the Story has no Vision model.* (the first screenshot above). Once the Story has a Vision model, **Check all** checks those clips again.
 
 ## When a result is current
 
