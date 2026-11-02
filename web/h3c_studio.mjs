@@ -1,0 +1,1199 @@
+// The Studio: the page's one full-window view of a Timeline. While open it holds the editor's regions, and the linked
+// Story's actions, story and files, in its own layout, and it gives each one back to the place it came from when it
+// closes, opens another Timeline or the Timeline's Story changes. Its Story page edits the Story node's inputs.
+import { liveBadge, progressText } from './h3c_render_watch.mjs?v=20261004-studio-1';
+import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
+import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
+
+import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
+
+const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
+const CENTER = ['viewer', 'story', 'cast', 'pictures', 'refmods'];
+const FOCUS = ['cast', 'story', 'pictures', 'refmods', 'project'];
+const CORE_HINT = 'For a moving preview, add KJNodes’ Model Preview Override before the sampler.';
+const OLDER_TAKE = 'Older take: this clip changed after it rendered.';
+const MOVING = 'Moving the take…';
+const NO_STORY = 'Link an H3 Story node to this Timeline’s story input to write with a model.';
+const STYLE_ID = 'h3cx-style';
+const MOBILE_QUERY = '(max-width:600px), (max-width:1100px) and (max-height:500px)';
+const CSS = `
+.h3cx-studio { position: fixed; inset: 0; z-index: 1500; display: flex; flex-direction: column; outline: none;
+  overflow: hidden; background: #15171c; color: var(--input-text, #ddd); font: 14px/1.45 system-ui, sans-serif; }
+.h3cx-studio * { box-sizing: border-box; }
+.h3cx-studio[hidden], .h3cx-studio [hidden] { display: none !important; }
+.h3cx-new-project { max-width: min(620px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow:auto; padding:20px; background:#1d2027; color:var(--input-text, #ddd); font:14px/1.45 system-ui,sans-serif; border:1px solid #535b6c; }
+.h3cx-new-project::backdrop { background:#0009; }
+.h3cx-new-project button { margin-right:8px; margin-top:8px; }
+.h3cx-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px;
+  background: #1d2027; border-bottom: 1px solid #2c313c; }
+.h3cx-name { font-weight: 600; white-space: nowrap; }
+.h3cx-slot { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.h3cx-grow { flex: 1 1 auto; }
+.h3cx-progress { color: #aab1bd; white-space: nowrap; }
+.h3cx-main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 256px minmax(0, 1fr) 346px; position: relative; }
+.h3cx-references-hidden .h3cx-main { grid-template-columns:minmax(0,1fr) 346px; }
+.h3cx-center { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.h3cx-center > .h3cx-player, .h3cx-center > .h3cx-focus { flex:1 1 auto; }
+.h3cx-player { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; overflow-y:auto; padding: 8px 10px; }
+.h3cx-player > * { flex-shrink:0; }
+.h3cx-inspector { display: flex; flex-direction: column; gap: 6px; min-width:0; min-height: 0; overflow-y: auto; padding: 8px 10px;
+  background: #1a1c22; border-left: 1px solid #2c313c; }
+.h3cx-switch { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.h3cx-switch .h3ct-button[aria-pressed="true"] { background: #293e60; border-color: #729cdd; }
+.h3cx-links { display: inline-flex; flex-wrap:wrap; align-items:center; min-width:0; max-width:100%; gap: 10px; margin-left: 8px; }
+.h3cx-stage { position: relative; flex: 1 1 auto; min-height: 120px; overflow: hidden;
+  background: #0c0d10; border: 1px solid #2c313c; border-radius: 6px; }
+.h3cx-screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #aab1bd; }
+.h3cx-screen video, .h3cx-screen img { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.h3cx-badge { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 4px; font-size: 12px;
+  background: rgba(12, 13, 16, .85); pointer-events: none; }
+.h3cx-hint, .h3cx-soundtrack { margin: 0; font-size: 12px; color: #aab1bd; }
+.h3cx-page { display: flex; flex-direction: column; gap: 6px; }
+.h3cx-inputs { display: flex; flex-direction: column; gap: 8px; }
+.h3cx-story-advanced > summary { cursor: pointer; color: #aab1bd; }
+.h3cx-story-advanced > .h3cx-inputs { margin-top: 8px; }
+.h3cx-field { display: flex; flex-direction: column; gap: 2px; }
+.h3cx-check { flex-direction: row; align-items: center; gap: 6px; }
+.h3cx-label, .h3cx-linked, .h3cx-note { color: #aab1bd; }
+.h3cx-linked, .h3cx-note { margin: 0; }
+.h3cx-field textarea, .h3cx-field select, .h3cx-field input[type="number"], .h3cx-field input[type="text"] { padding: 4px 6px; font: inherit; color: inherit;
+  background: var(--comfy-input-bg, #14161a); border: 1px solid var(--border-color, #333); border-radius: 4px; }
+.h3cx-field textarea { width: 100%; min-height: 72px; resize: vertical; }
+.h3cx-field input[type="number"] { width: 120px; }
+.h3cx-template { display: flex; flex-direction: column; gap: 4px; }
+.h3cx-template select { width: 100%; }
+.h3cx-template-details p, .h3cx-template-folder { margin: 0; font-size: 12px; color: #aab1bd; }
+.h3cx-template-folder { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; overflow-wrap: anywhere; }
+.h3cx-track { flex: 0 0 250px; min-height: 0; max-height: 40vh; overflow-y: auto; padding: 6px 10px 8px;
+  background: #1d2027; border-top: 1px solid #2c313c; }
+.h3cx-track .h3ct-hint { margin-top: 4px; }
+.h3cx-track .h3ct-ruler { height:1.2em; }
+.h3cx-track .h3ct-tick { height:100%; }
+.h3cx-bar { flex: 0 0 auto; min-height: 50px; flex-wrap: wrap; }
+.h3cx-bar > * { min-width:0; max-width:100%; }
+.h3cx-bar .h3cx-slot { flex-wrap:wrap; }
+.h3cx-name { white-space: normal; overflow-wrap: anywhere; }
+.h3cx-activity { flex:0 0 auto; display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:32px; padding:4px 10px; border-bottom:1px solid #2c313c; }
+.h3cx-progress { white-space:normal; }
+.h3cx-title { margin:0; font-size:14px; font-weight:600; overflow-wrap:anywhere; }
+.h3cx-library { min-width:0; min-height:0; overflow:auto; padding:12px; border-right:1px solid #2c313c; background:#1a1c22; }
+.h3cx-library-nav { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+.h3cx-library-nav button[aria-pressed="true"] { background:#293e60; border-color:#729cdd; }
+.h3cx-library .h3ct-row, .h3cx-library .h3cr-actions { flex-wrap:wrap; }
+.h3cx-focus { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.h3cx-focus-head { flex:0 0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #2c313c; }
+.h3cx-focus-body { min-height:0; overflow:auto; padding:16px; }
+.h3cx-focus .h3cx-page { max-width:100%; }
+.h3cx-focus .h3cc-cast { min-width:0; }
+.h3cx-focus .h3cc-name { white-space:normal; overflow-wrap:anywhere; }
+.h3cx-writer-message { min-width:0; overflow-wrap:anywhere; }
+.h3cx-focus textarea { min-width:0; }
+.h3cx-track-toolbar, .h3cx-audio-toolbar, .h3cx-text-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:6px; }
+.h3cx-track-toolbar .h3cx-slot { flex-wrap:wrap; }
+.h3cx-library-toggle { display:inline-block; }
+.h3cx-inspector-toggle { display:none; }
+.h3cx-studio button, .h3cx-studio input, .h3cx-studio select, .h3cx-studio textarea { font-size:14px; }
+.h3cx-studio .h3ct-hint, .h3cx-studio .h3ct-label { font-size:12px; }
+.h3cx-studio p, .h3cx-studio summary { overflow-wrap:anywhere; }
+.h3cx-studio .h3ct-panel-tabs { flex-wrap:wrap; }
+.h3cx-studio .h3ct-button { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.h3cx-inspector .h3ct-panel { min-width:0; }
+.h3cx-inspector input, .h3cx-inspector select, .h3cx-inspector textarea { max-width:100%; }
+.h3cx-project-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.h3cx-mobile-nav, .h3cx-mobile-more { display:none; }
+.h3cx-focus-body { flex:1; min-width:0; }
+@media(max-width:1150px) { .h3cx-main { grid-template-columns:220px minmax(0,1fr) 310px; } .h3cx-references-hidden .h3cx-main { grid-template-columns:minmax(0,1fr) 310px; } .h3cx-bar .h3cx-slot { font-size:12px; } }
+@media(max-width:899px) {
+ .h3cx-main, .h3cx-references-hidden .h3cx-main { grid-template-columns:minmax(0,1fr); }
+ .h3cx-inspector-toggle { display:inline-block; }
+ .h3cx-inspector { display:none; }
+ .h3cx-inspector-open .h3cx-inspector { display:flex; position:absolute; inset:0 0 0 auto; width:min(346px,100%); z-index:3; box-shadow:-8px 0 24px #0008; }
+ .h3cx-library-toggle { display:inline-block; }
+ .h3cx-library { display:none; }
+ .h3cx-library-open .h3cx-library { display:block; position:absolute; inset:0 auto 0 0; width:256px; z-index:2; box-shadow:8px 0 24px #0008; }
+ .h3cx-bar { flex-wrap:wrap; }
+ .h3cx-bar .h3cx-slot { display:none; }
+}
+@media ${MOBILE_QUERY} {
+ .h3cx-studio { height:var(--h3cx-viewport-height,100dvh); top:var(--h3cx-viewport-top,0px); bottom:auto; padding-top:env(safe-area-inset-top); }
+ .h3cx-bar { min-height:56px; flex-wrap:nowrap; padding:6px 12px; }
+ .h3cx-bar .h3cx-library-toggle, .h3cx-bar .h3cx-inspector-toggle { display:none; }
+ .h3cx-bar .h3cx-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+ .h3cx-bar .h3cx-grow { display:none; }
+ .h3cx-activity { min-height:0; max-height:20dvh; overflow:auto; padding:4px 12px; gap:4px; font-size:12px; }
+ .h3cx-activity.h3cx-empty { display:none; }
+ .h3cx-main { display:flex; overflow:hidden; }
+ .h3cx-main > .h3cx-center, .h3cx-main > .h3cx-library, .h3cx-main > .h3cx-inspector { display:none; }
+ .h3cx-studio[data-mobile-page="viewer"] .h3cx-center, .h3cx-studio[data-mobile-page="focus"] .h3cx-center { display:flex; width:100%; }
+ .h3cx-studio[data-mobile-page="references"] .h3cx-library { display:block; }
+ .h3cx-studio[data-mobile-page="clip"] .h3cx-inspector { display:flex; }
+ .h3cx-main > .h3cx-library, .h3cx-main > .h3cx-inspector { position:static; width:100%; flex:1; box-shadow:none; border:0; }
+ .h3cx-center > .h3cx-library-nav { display:none; }
+ .h3cx-player { padding:8px 12px; }
+ .h3cx-stage { flex:1 0 120px; }
+ .h3cx-switch { gap:6px; }
+ .h3cx-links { gap:6px; margin-left:0; }
+ .h3cx-focus-head { padding:8px 12px; }
+ .h3cx-focus-body { padding:12px; scroll-padding:12px; }
+ .h3cx-track { display:none; }
+ .h3cx-studio[data-mobile-page="timeline"] .h3cx-main { display:none; }
+ .h3cx-studio[data-mobile-page="timeline"] .h3cx-track { display:block; flex:1; max-height:none; padding:12px; }
+ .h3cx-track .h3ct-lane { overscroll-behavior-x:contain; touch-action:pan-x pan-y; }
+ .h3cx-track .h3ct-lane > .h3ct-stills, .h3cx-track .h3ct-lane > .h3ct-ruler,
+ .h3cx-track .h3ct-lane > .h3ct-track, .h3cx-track .h3ct-lane > .h3ct-audio { min-width:var(--h3cx-track-width,480px); }
+ .h3cx-track .h3ct-track { height:68px; touch-action:pan-x pan-y; }
+ .h3cx-track .h3ct-audio { touch-action:pan-x pan-y; }
+ .h3cx-track .h3ct-box, .h3cx-track .h3ct-audio-clip { touch-action:pan-x pan-y; }
+ .h3cx-track .h3ct-audio-lane { height:56px; }
+ .h3cx-track .h3ct-audio-clip { height:48px; }
+ .h3cx-track .h3ct-handle, .h3cx-track .h3ct-audio-handle { width:28px; touch-action:none; }
+ .h3cx-studio button, .h3cx-studio select, .h3cx-studio input:not([type="checkbox"]), .h3cx-studio summary, .h3cx-studio a.h3ct-link { min-height:44px; }
+ .h3cx-studio button, .h3cx-studio summary { padding:8px 10px; }
+ .h3cx-studio a.h3ct-link { display:inline-flex; align-items:center; }
+ .h3cx-studio input, .h3cx-studio select, .h3cx-studio textarea { font-size:16px; min-width:0; max-width:100%; }
+ .h3cx-studio .h3ct-field { flex-wrap:wrap; }
+ .h3cx-studio textarea { scroll-margin:12px; }
+ .h3cx-new-project { max-height:calc(100dvh - 24px); padding:16px; }
+ .h3cx-new-project button, .h3cx-new-project input { min-height:44px; font-size:16px; max-width:100%; }
+ .h3cx-mobile-nav { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); flex:0 0 auto; gap:2px; padding:6px 4px calc(6px + env(safe-area-inset-bottom)); background:#1d2027; border-top:1px solid #343a46; }
+ .h3cx-mobile-nav button { padding:10px 2px; font-size:12px; border-color:transparent; background:transparent; }
+ .h3cx-mobile-nav button[aria-pressed="true"] { background:#293e60; border-color:#729cdd; }
+ .h3cx-mobile-more { display:flex; flex-direction:column; gap:12px; flex:1; min-width:0; overflow:auto; padding:16px; }
+ .h3cx-mobile-more > button { text-align:left; }
+ .h3cx-mobile-more .h3cx-project-actions { display:flex; flex-direction:column; }
+}
+`;
+
+function ensureStyle() {
+  if (document.getElementById(STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = STYLE_ID;
+  style.textContent = CSS;
+  document.head.append(style);
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function button(text, title, onClick, className = '') {
+  const node = el('button', `h3ct-button ${className}`.trim(), text);
+  node.type = 'button';
+  if (title) node.title = title;
+  node.addEventListener('click', (event) => {
+    event.preventDefault();
+    onClick();
+  });
+  return node;
+}
+
+function link(className, text, title) {
+  const node = el('a', `h3ct-link ${className}`, text);
+  node.title = title;
+  return node;
+}
+
+class Studio {
+  constructor() {
+    ensureStyle();
+    this.host = null;
+    this.page = 'box';
+    this.libraryPage = 'references';
+    this.focusPage = null;
+    this.inspectorTarget = {kind: 'clip', box: null};
+    this.view = null;
+    this.bridgeBox = null;
+    // The take Play chose on the Box page, {box, bridge, video, label}; Switch flips between it and the take in use.
+    this.chosen = null;
+    this.resumeAt = null;
+    this.moving = false;
+    this.borrowed = [];
+    // undefined until the Story slot and page show a Story, or show that there is none (null).
+    this.story = undefined;
+    this.storyBorrowed = [];
+    this.before = null;
+    this.blob = null;
+    this.blobSrc = null;
+    this.trackWidth = 0;
+    this.mobileMedia = matchMedia(MOBILE_QUERY);
+    this.mobileLayout = this.mobileMedia.matches;
+    this.narrowMedia = matchMedia('(max-width:899px)');
+    this.mobilePage = 'viewer';
+    this.build();
+    this.mobileMedia.addEventListener('change', () => this.layoutChanged());
+    this.narrowMedia.addEventListener('change', () => this.layoutChanged());
+    window.visualViewport?.addEventListener('resize', () => this.resizeViewport());
+    window.visualViewport?.addEventListener('scroll', () => this.resizeViewport());
+  }
+
+  build() {
+    const root = this.root = el('div', 'h3cx-studio');
+    root.tabIndex = -1;
+    root.hidden = true;
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    root.setAttribute('aria-label', 'H3 Studio');
+    root.addEventListener('keydown', (event) => this.key(event));
+    // A button that its own click replaces, such as a take's Use, takes the focus with it to the page, where neither the
+    // Studio nor ComfyUI hears keys, so while the Studio is open the page's keys come to it.
+    document.addEventListener('keydown', (event) => {
+      if (root.hidden || (event.target !== document.body && event.target !== document.documentElement)) return;
+      root.focus({preventScroll: true});
+      this.key(event);
+    }, true);
+    root.addEventListener('pointerdown', (event) => event.stopPropagation());
+    // Selecting an edge also updates the inspector; keep the visible track available to measure and finish the trim.
+    root.addEventListener('pointerdown', (event) => {
+      if (event.button === 0 && this.mobileMedia.matches && this.mobilePage === 'timeline'
+        && event.target.closest('.h3ct-handle, .h3ct-audio-handle')) this.trimmingPointer = event.pointerId;
+    }, true);
+    for (const name of ['pointerup', 'pointercancel']) root.addEventListener(name, (event) => {
+      if (event.pointerId === this.trimmingPointer) this.trimmingPointer = null;
+    }, true);
+    root.addEventListener('focusin', (event) => {
+      this.focusedField = event.target.matches('input, textarea, select') ? event.target : null;
+    });
+    root.addEventListener('focusout', (event) => {
+      // CSS can hide a field and blur it before the breakpoint's change event arrives.
+      if (this.focusedField === event.target && event.target.getClientRects().length) this.focusedField = null;
+    });
+    root.addEventListener('h3c-inspect', (event) => this.inspect(event.detail));
+    root.addEventListener('h3c-show-page', (event) => this.setPage(event.detail?.page));
+    root.addEventListener('h3c-play-bridge', (event) => {
+      this.bridgeBox = event.detail?.box ?? null;
+      this.setView('bridge');
+    });
+    root.addEventListener('h3c-play-take', (event) => {
+      this.chosen = event.detail ?? null;
+      this.setView('chosen');
+    });
+    root.addEventListener('h3c-takes-listed', () => this.refresh());
+    root.addEventListener('h3c-takes-changing', () => this.letGo());
+    root.addEventListener('h3c-takes-changed', () => {
+      this.moving = false;
+      this.chosen = null;
+      if (this.view === 'chosen') this.view = 'take';
+      this.refresh();
+    });
+
+    const close = button('✕', 'Close the Studio (Esc)', () => this.close(), 'h3cx-close');
+    close.setAttribute('aria-label', 'Close the Studio');
+    this.nameEl = el('span', 'h3cx-name');
+    this.summarySlot = el('span', 'h3cx-slot');
+    this.savedSlot = el('span', 'h3cx-slot');
+    this.progressEl = el('span', 'h3cx-progress');
+    this.progressEl.setAttribute('aria-live', 'polite');
+    this.stopButton = button('Stop', 'Stop this render and clear every pending run in ComfyUI’s queue, including runs that are not H3’s',
+      () => this.host?.stop(), 'h3cx-stop');
+    this.storyEl = el('div', 'h3cx-story h3cx-slot');
+    this.writeOff = button('Write story', NO_STORY, () => {});
+    this.writeOff.disabled = true;
+    this.feedbackButton = button('Feedback', 'Open Story feedback', () => this.openFeedback(), 'h3cx-feedback');
+    this.actionsSlot = el('span', 'h3cx-slot');
+    this.newProjectButton = button('New project', 'Clear the current Timeline for a new project and keep its available sources', () => this.openNewProject());
+    this.projectButton = button('Project settings', 'Shared prompt and graph settings', () => this.openFocus('project'));
+    this.downloadVideo = button('Download video', '', () => {
+      const download = this.host?.editor.regions().download;
+      if (!this.downloadVideo.disabled) download?.click();
+    }, 'h3cx-download-video');
+    this.referencesVisible = innerWidth >= 900;
+    this.libraryToggle = button('References', 'Show or hide References', () => this.setReferencesVisible(!this.referencesVisible), 'h3cx-library-toggle');
+    this.libraryToggle.setAttribute('aria-controls', 'h3cx-references');
+    this.inspectorVisible = innerWidth >= 900;
+    this.inspectorToggle = button('Inspector', 'Show or hide clip, audio and text properties', () => this.setInspectorVisible(!this.inspectorVisible), 'h3cx-inspector-toggle');
+    this.inspectorToggle.setAttribute('aria-controls', 'h3cx-inspector');
+    const bar = el('header', 'h3cx-bar');
+    this.projectActions = el('div', 'h3cx-project-actions');
+    this.projectActions.append(this.newProjectButton, this.projectButton, this.downloadVideo);
+    bar.append(close, this.libraryToggle, this.inspectorToggle, this.nameEl, this.summarySlot, this.savedSlot,
+      el('span', 'h3cx-grow'), this.projectActions);
+    this.bar = bar;
+    const activity = el('div', 'h3cx-activity');
+    this.writerCancel = el('span', 'h3cx-slot');
+    this.writerMessage = el('span', 'h3cx-writer-message');
+    activity.append(this.progressEl, this.stopButton, this.writerCancel, this.writerMessage, el('span', 'h3cx-grow'), this.feedbackButton);
+    this.activity = activity;
+
+    const views = el('div', 'h3cx-switch');
+    this.fullButton = button('Full video', 'Play the whole Timeline', () => this.setView('full'));
+    this.takeButton = button('Clip take', 'Play the selected clip’s active take', () => this.setView('take'));
+    this.switchButton = button('Compare with active take', '', () => this.switchTake());
+    this.fullLinks = el('span', 'h3cx-links');
+    this.takeOpen = link('h3cx-take-open', 'Open in new tab', 'Open this take in a new tab');
+    this.takeOpen.target = '_blank';
+    this.takeOpen.rel = 'noopener';
+    this.takeDownload = link('h3cx-take-download', 'Download', 'Download this take');
+    this.pinButton = button('Pin moment for…', 'Remember the paused moment of this take for a character or place',
+      () => this.togglePins(), 'h3cx-pin');
+    this.takeLinks = el('span', 'h3cx-links');
+    this.takeLinks.append(this.takeOpen, this.takeDownload, this.pinButton);
+    this.pinMenu = el('span', 'h3cx-links h3cx-pin-menu');
+    this.pinMenu.hidden = true;
+    views.append(this.fullButton, this.takeButton, this.switchButton, this.fullLinks, this.takeLinks, this.pinMenu);
+    const stage = this.stage = el('div', 'h3cx-stage');
+    this.screen = el('div', 'h3cx-screen');
+    this.badge = el('span', 'h3cx-badge');
+    stage.append(this.screen, this.badge);
+    this.hint = el('p', 'h3cx-hint', CORE_HINT);
+    this.pinNote = el('p', 'h3cx-hint h3cx-pin-note');
+    this.pinNote.setAttribute('aria-live', 'polite');
+    this.pinNoteBox = null;
+    this.soundtrackNote = el('p', 'h3cx-soundtrack');
+    const player = el('section', 'h3cx-player');
+    player.setAttribute('aria-label', 'Viewer');
+    player.id = 'h3cx-page-viewer'; player.setAttribute('role', 'tabpanel');
+    player.setAttribute('aria-labelledby', 'h3cx-tab-viewer');
+    this.player = player;
+    player.append(views, stage, this.hint, this.pinNote, this.soundtrackNote);
+
+    this.library = el('aside', 'h3cx-library');
+    this.library.id = 'h3cx-references';
+    this.library.setAttribute('aria-label', 'References');
+    const nav = el('nav', 'h3cx-library-nav');
+    nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', 'Workspace views');
+    this.pageButtons = {};
+    this.pages = {};
+    for (const name of ['box', 'audio', 'text', 'timeline', ...FOCUS]) {
+      this.pages[name] = el('div', 'h3cx-page');
+      this.pages[name].dataset.page = name;
+    }
+    for (const name of CENTER) {
+      const label = name === 'refmods' ? 'RefMods' : name[0].toUpperCase() + name.slice(1);
+      this.pageButtons[name] = button(label, `Open ${label}`, () => name === 'viewer' ? this.backToViewer() : this.openFocus(name));
+      this.pageButtons[name].setAttribute('role', 'tab');
+      this.pageButtons[name].id = `h3cx-tab-${name}`;
+      this.pageButtons[name].setAttribute('aria-controls', `h3cx-page-${name}`);
+      if (this.pages[name]) {
+        this.pages[name].id = `h3cx-page-${name}`; this.pages[name].setAttribute('role', 'tabpanel');
+        this.pages[name].setAttribute('aria-labelledby', `h3cx-tab-${name}`);
+      }
+      this.pageButtons[name].addEventListener('keydown', event => {
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const index = CENTER.indexOf(name), next = event.key === 'Home' ? 0 : event.key === 'End' ? CENTER.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + CENTER.length) % CENTER.length;
+        this.pageButtons[CENTER[next]].click(); this.pageButtons[CENTER[next]].focus();
+      });
+      nav.append(this.pageButtons[name]);
+    }
+    this.library.append(el('h2', 'h3cx-title', 'References'), this.pages.timeline);
+    this.storyPage = el('div', 'h3cx-story-page');
+    this.pages.story.append(this.storyEl, this.storyPage);
+    this.inspector = el('section', 'h3cx-inspector');
+    this.inspector.id = 'h3cx-inspector';
+    this.inspector.setAttribute('aria-label', 'Inspector');
+    this.inspectorTitle = el('h2', 'h3cx-title h3cx-inspector-title');
+    this.clipPromptButton = button('Clip prompt', 'Inspect the selected clip’s prompt', () => {
+      const editor = this.host?.editor;
+      this.inspect({kind:'clip', box:editor?.box()?.id ?? null});
+      editor?.focusClipPrompt();
+    });
+    this.clipPromptButton.setAttribute('aria-label', 'Inspect selected clip prompt');
+    this.emptyInspector = el('p', 'h3cx-note h3cx-empty-inspector',
+      'Start with + Clip in the Timeline, or open Story to write prompts.');
+    this.inspector.append(this.inspectorTitle, this.clipPromptButton, this.emptyInspector, this.pages.box, this.pages.audio, this.pages.text);
+    this.focus = el('section', 'h3cx-focus');
+    this.focus.setAttribute('aria-label', 'Project focus');
+    this.focusTitle = el('h2', 'h3cx-title');
+    this.focusContext = el('span', 'h3cx-note');
+    const focusHead = el('div', 'h3cx-focus-head');
+    focusHead.append(this.focusTitle, this.focusContext);
+    this.focusBody = el('div', 'h3cx-focus-body');
+    this.focusBody.append(...FOCUS.map(name => this.pages[name]));
+    this.pages.project.append(el('h3', 'h3cx-title', 'Shared prompt · applies to every clip'));
+    this.projectPrompt = el('div', 'h3cx-project-prompt');
+    this.projectFiles = el('div', 'h3cx-project-files');
+    this.projectFileNote = el('p', 'h3cx-note');
+    this.pages.project.append(this.projectPrompt, this.projectFiles, this.projectFileNote,
+      el('p', 'h3cx-note', 'Each Clip is one generation box. Project JSON and backend messages keep the existing box names.'),
+      el('p', 'h3cx-note', 'API keys and provider settings are on the linked H3 Story node in the graph. Open its API keys group to Save or Forget keys; advanced inputs hold model, thinking, Vision and memory settings.'),
+      el('p', 'h3cx-note', 'Timeline name, width, height, context frames, carry audio and reference image size remain on the H3 Timeline node in the graph.'),
+      button('Back to graph', 'Close Studio to edit the node settings', () => this.close()));
+    this.focus.append(focusHead, this.focusBody);
+    const center = el('section', 'h3cx-center');
+    center.append(nav, player, this.focus);
+    const main = el('div', 'h3cx-main');
+    main.append(this.library, center, this.inspector);
+    this.mobileMore = el('section', 'h3cx-mobile-more');
+    this.mobileMore.setAttribute('aria-label', 'More Studio tools');
+    this.mobileMore.append(el('h2', 'h3cx-title', 'Studio tools'));
+    for (const page of FOCUS.filter(name => name !== 'project')) {
+      const label = page === 'refmods' ? 'RefMods' : page[0].toUpperCase() + page.slice(1);
+      this.mobileMore.append(button(label, `Open ${label}`, () => this.openFocus(page)));
+    }
+    main.append(this.mobileMore);
+    this.mobileNav = el('nav', 'h3cx-mobile-nav');
+    this.mobileNav.setAttribute('aria-label', 'Mobile Studio views');
+    this.mobileButtons = {};
+    for (const [page, label] of [['viewer','Viewer'],['clip','Clip'],['references','References'],['timeline','Timeline'],['more','More']]) {
+      const control = this.mobileButtons[page] = button(label, `Open ${label}`, () => {
+        if (page === 'viewer') this.backToViewer();
+        else if (page === 'clip') this.setPage('box');
+        else if (page === 'references') this.setReferencesVisible(true);
+        else this.setMobilePage(page);
+      });
+      this.mobileNav.append(control);
+    }
+    this.track = el('footer', 'h3cx-track');
+    this.track.setAttribute('aria-label', 'Timeline');
+    const toolbar = el('div', 'h3cx-track-toolbar');
+    toolbar.append(el('h2', 'h3cx-title', 'Timeline'), this.actionsSlot);
+    this.track.append(toolbar);
+    root.append(bar, activity, main, this.track, this.mobileNav);
+    this.setReferencesVisible(this.referencesVisible);
+    this.setInspectorVisible(this.inspectorVisible);
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => this.trackResized()).observe(this.track);
+    this.setLibrary('references');
+    this.setPage('box');
+  }
+
+  openNewProject() {
+    if (!this.host || this.newProjectDialog?.open) return;
+    const host = this.host;
+    const dialog = this.newProjectDialog = el('dialog', 'h3cx-new-project');
+    dialog.setAttribute('aria-labelledby', 'h3cx-new-project-title');
+    dialog.append(Object.assign(el('h2', 'h3cx-title', 'New project'), {id:'h3cx-new-project-title'}),
+      el('p', null, "Start a new project in this workflow with a short project name. Timeline clips, Cast, generated Story results and selected references are cleared. Uploaded pictures, connected images and audio, your idea, guide and other Story inputs stay available so you can write a new story immediately. Generated files are kept."),
+      el('p', null, 'Unapplied form drafts for the old Timeline are cleared.'));
+    const message = el('p', 'h3cx-note');
+    message.setAttribute('aria-live', 'polite');
+    const cancel = button('Cancel', 'Keep this project open', () => dialog.close());
+    const create = button('Create project', 'Reset this Timeline inside the current workflow', async () => {
+      create.disabled = true;
+      try {
+        await host.newProject();
+        dialog.close();
+      } catch (error) {
+        dialog.close();
+        dialog.remove();
+        this.newProjectDialog = null;
+        this.showProjectError(error);
+      }
+    });
+    const reason = host.newProjectBusy?.();
+    message.textContent = reason ?? '';
+    create.disabled = !!reason;
+    dialog.append(message, cancel, create);
+    dialog.addEventListener('close', () => { dialog.remove(); this.newProjectDialog = null; });
+    this.root.append(dialog);
+    dialog.showModal();
+    cancel.focus();
+  }
+
+  showProjectError(error) {
+    const dialog = this.projectErrorDialog = el('dialog', 'h3cx-new-project');
+    dialog.setAttribute('aria-labelledby', 'h3cx-project-error-title');
+    const message = el('p', null, error?.message ?? String(error));
+    message.setAttribute('role', 'alert');
+    dialog.append(Object.assign(el('h2', 'h3cx-title', 'New project failed'), {id:'h3cx-project-error-title'}), message);
+    dialog.append(button('Back to graph', 'Dismiss the error and return to ComfyUI’s workflow tabs', () => { this.close(); dialog.close(); }));
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      this.projectErrorDialog = null;
+      (this.root.hidden ? document.querySelector('canvas') : this.root)?.focus();
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.querySelector('button').focus();
+  }
+
+  // With `link: false` the Cast page leaves boxes without a cast unlinked, as when the Studio follows an Undo.
+  open(host, page, {link = true} = {}) {
+    this.openRevision = (this.openRevision ?? 0) + 1;
+    if (this.host && this.host !== host) this.close();
+    const opening = this.root.hidden;
+    const remembered = this.remembered?.host === host ? this.remembered.snapshot : null;
+    if (this.root.hidden) {
+      this.scrollBefore = [document.documentElement, document.body].map(node => ({node, overflow:node.style.overflow}));
+      for (const {node} of this.scrollBefore) node.style.overflow = 'hidden';
+      this.before = document.activeElement;
+      if (!this.root.isConnected) document.body.append(this.root);
+      this.root.hidden = false;
+    }
+    if (this.host !== host) {
+      this.giveBack();
+      this.host = host;
+      this.libraryPage = 'references';
+      this.focusPage = null;
+      this.mobilePage = 'viewer';
+      this.inspectorTarget = {kind:'clip', box:host.editor.box()?.id ?? null};
+      this.view = this.chosen = this.bridgeBox = this.resumeAt = null;
+      this.moving = false;
+      this.pinMenu.hidden = true;
+      this.pinNote.textContent = '';
+      this.pinNoteBox = null;
+      this.borrow();
+      if (remembered) this.restoreSnapshot(remembered, {link:false});
+    }
+    if (page != null || !remembered) this.setPage(page ?? 'box', {link});
+    if (opening && !remembered) this.setInspectorVisible(innerWidth >= 900);
+    if (!['box', 'cast'].includes(this.page)) this.host.editor.cast?.refresh({link:page == null && remembered ? false : link});
+    this.refresh();
+    this.root.focus();
+  }
+
+  snapshot() {
+    const editor = this.host?.editor;
+    const video = this.screen.querySelector('video:not(.h3cx-live)');
+    return {
+      libraryPage:this.libraryPage, focusPage:this.focusPage, inspectorTarget:{...this.inspectorTarget},
+      referencesVisible:this.referencesVisible,
+      inspectorVisible:this.inspectorVisible,
+      mobilePage:this.mobilePage,
+      tab:editor?.activeTab ?? 'prompt', selectedBoxId:editor?.box()?.id ?? null,
+      selectedIndex:editor?.selected ?? 0, view:this.view,
+      chosen:this.chosen ? {...this.chosen, video:{...this.chosen.video}} : null,
+      bridgeBox:this.bridgeBox, resumeAt:video ? video.currentTime : this.resumeAt?.time ?? null,
+    };
+  }
+
+  restoreSnapshot(snapshot, {link = false} = {}) {
+    if (!this.host || !snapshot) return;
+    const editor = this.host.editor, boxes = editor.state.boxes;
+    const byId = boxes.findIndex(box => box.id === snapshot.selectedBoxId);
+    const index = byId >= 0 ? byId : Math.max(0, Math.min(boxes.length - 1,
+      Number.isInteger(snapshot.selectedIndex) ? snapshot.selectedIndex : 0));
+    editor.select(index);
+    editor.setTab(snapshot.tab ?? 'prompt');
+    const box = editor.box(), fallback = {kind:'clip',box:box?.id ?? null};
+    const target = snapshot.inspectorTarget;
+    if (target?.kind === 'audio' && editor.audioLanes.clips.some(clip => clip.slot === target.slot)) {
+      editor.audioLanes.selectAudio(target.slot);
+      this.inspectorTarget = {...target};
+    } else if (target?.kind === 'text' && editor.state.timed_text) {
+      editor.audioLanes.selectText();
+      this.inspectorTarget = {kind:'text'};
+    } else this.inspectorTarget = fallback;
+    this.setLibrary(snapshot.libraryPage ?? 'references', {link});
+    const focus = snapshot.focusPage ?? (FOCUS.includes(snapshot.page) ? snapshot.page : null);
+    if (FOCUS.includes(focus)) this.openFocus(focus, {link});
+    else this.backToViewer();
+    this.setReferencesVisible(snapshot.referencesVisible ?? true);
+    this.setInspectorVisible(snapshot.inspectorVisible ?? innerWidth >= 900);
+    this.setMobilePage(snapshot.mobilePage ?? (focus ? 'focus' : 'viewer'));
+    const bridge = snapshot.bridgeBox;
+    this.bridgeBox = box?.id === bridge && editor.state.bridges?.some(item => item.before === bridge)
+      && (editor.status == null || editor.bridgeStatusOf(bridge)?.video) ? bridge : null;
+    const chosen = snapshot.chosen;
+    this.chosen = chosen?.box === box?.id && this.chosenAvailable(chosen) ? chosen : null;
+    this.view = ['full','take','chosen','bridge'].includes(snapshot.view) ? snapshot.view : null;
+    if ((this.view === 'chosen' && !this.chosen) || (this.view === 'bridge' && !this.bridgeBox)) this.view = 'take';
+    const mediaValid = this.view === snapshot.view && (this.view === 'full' ? !editor.fullLink.hidden : this.view === 'chosen' ? !!this.chosen
+      : this.view === 'bridge' ? !!this.bridgeBox : box?.id === snapshot.selectedBoxId && !!editor.statusOf(box)?.video);
+    this.resumeAt = mediaValid && Number.isFinite(snapshot.resumeAt) && snapshot.resumeAt >= 0
+      ? {time:snapshot.resumeAt,playing:false} : null;
+    editor.cast?.refresh({link});
+    this.refresh();
+  }
+
+  close() {
+    if (this.root.hidden) return;
+    this.trimmingPointer = null;
+    this.focusedField = null;
+    this.remembered = {host:this.host, snapshot:this.snapshot()};
+    this.giveBack();
+    this.root.hidden = true;
+    for (const {node, overflow} of this.scrollBefore ?? []) node.style.overflow = overflow;
+    this.scrollBefore = null;
+    // The editor's panel goes back to its node, so the Studio won't hear when a take that is moving lands.
+    this.moving = false;
+    const before = this.before;
+    this.before = null;
+    if (before?.isConnected && before !== document.body) before.focus();
+  }
+
+  setLibrary(page, {link = true} = {}) {
+    this.libraryPage = LIBRARY.includes(page) ? page : 'references';
+    if (this.libraryPage !== 'references') this.openFocus(this.libraryPage, {link});
+    else this.setReferencesVisible(true);
+  }
+
+  setReferencesVisible(visible) {
+    this.referencesVisible = !!visible;
+    this.library.hidden = !this.referencesVisible;
+    this.root.classList.toggle('h3cx-references-hidden', !this.referencesVisible);
+    this.root.classList.toggle('h3cx-library-open', this.referencesVisible);
+    this.libraryToggle.setAttribute('aria-expanded', String(this.referencesVisible));
+    if (visible && (innerWidth < 900 || this.mobileMedia.matches) && this.inspectorVisible) this.setInspectorVisible(false);
+    if (this.mobileMedia.matches && visible) this.setMobilePage('references');
+    else if (this.mobilePage === 'references' && !visible) this.setMobilePage('viewer');
+  }
+
+  setInspectorVisible(visible) {
+    this.inspectorVisible = !!visible;
+    this.root.classList.toggle('h3cx-inspector-open', this.inspectorVisible);
+    this.inspectorToggle.setAttribute('aria-expanded', String(this.inspectorVisible));
+    if (visible && (innerWidth < 900 || this.mobileMedia.matches) && this.referencesVisible) this.setReferencesVisible(false);
+    if (this.mobileMedia.matches && visible) this.setMobilePage('clip');
+    else if (this.mobilePage === 'clip' && !visible) this.setMobilePage('viewer');
+  }
+
+  setMobilePage(page) {
+    if (!['viewer','clip','references','timeline','more','focus'].includes(page)) return;
+    if (page !== this.mobilePage) this.focusedField = null;
+    this.mobilePage = page;
+    this.renderMobile();
+  }
+
+  layoutChanged() {
+    const field = this.focusedField ?? document.activeElement;
+    const enteringMobile = this.mobileMedia.matches && !this.mobileLayout;
+    this.mobileLayout = this.mobileMedia.matches;
+    if (this.narrowMedia.matches && this.referencesVisible && this.inspectorVisible) this.setReferencesVisible(false);
+    if (enteringMobile) {
+      const editing = field?.matches('input, textarea, select');
+      this.mobilePage = editing && this.inspector.contains(field) ? 'clip'
+        : editing && this.library.contains(field) ? 'references' : this.focusPage ? 'focus' : 'viewer';
+    }
+    this.renderMobile();
+    if (this.mobileMedia.matches && field?.isConnected && field.getClientRects().length && this.root.contains(field)
+      && field.matches('input, textarea, select')) {
+      field.focus({preventScroll:true});
+      this.resizeViewport();
+    }
+    this.trackResized();
+  }
+
+  renderMobile() {
+    if (!this.mobileNav) return;
+    const mobile = this.mobileMedia.matches;
+    this.root.dataset.mobilePage = this.mobilePage;
+    this.mobileMore.hidden = !mobile || this.mobilePage !== 'more';
+    this.activity.classList.toggle('h3cx-empty', !this.progressEl.textContent && !this.writerMessage.textContent && this.stopButton.hidden && !this.writerCancel.textContent);
+    const actionParent = mobile ? this.mobileMore : this.bar;
+    const feedbackParent = mobile ? this.mobileMore : this.activity;
+    if (this.projectActions.parentNode !== actionParent) actionParent.append(this.projectActions);
+    if (this.feedbackButton.parentNode !== feedbackParent) feedbackParent.append(this.feedbackButton);
+    for (const [page, control] of Object.entries(this.mobileButtons))
+      control.setAttribute('aria-pressed', String(page === (this.mobilePage === 'focus' ? 'more' : this.mobilePage)));
+    this.root.style.setProperty('--h3cx-track-width', `${Math.max(480, (this.host?.editor.state.boxes.length ?? 0) * 96)}px`);
+    this.host?.editor.renderHint();
+    this.resizeViewport();
+  }
+
+  resizeViewport() {
+    const viewport = window.visualViewport;
+    if (!viewport || !this.mobileMedia.matches) return;
+    this.root.style.setProperty('--h3cx-viewport-height', `${viewport.height}px`);
+    this.root.style.setProperty('--h3cx-viewport-top', `${viewport.offsetTop}px`);
+    const field = document.activeElement;
+    if (this.root.contains(field) && field.matches('input, textarea, select')) field.scrollIntoView({block:'nearest'});
+  }
+
+  openFocus(page, {link = true} = {}) {
+    if (!FOCUS.includes(page)) return;
+    this.focusPage = page;
+    this.libraryPage = page === 'project' ? 'references' : page;
+    this.page = page;
+    this.focusTitle.textContent = page === 'refmods' ? 'RefMods' : page === 'project' ? 'Project settings'
+      : page[0].toUpperCase() + page.slice(1);
+    if (page === 'story' && this.host) this.host.editor.feedbackEl.open = true;
+    if (page === 'pictures' && this.host) this.host.editor.pictures.root.open = true;
+    if (page === 'cast') this.host?.editor.cast?.refresh({link});
+    if (this.mobileMedia.matches) this.setMobilePage('focus');
+    this.renderNavigation();
+  }
+
+  backToViewer() {
+    this.focusPage = null;
+    this.page = 'box';
+    this.libraryPage = 'references';
+    if (this.mobileMedia.matches) this.setMobilePage('viewer');
+    this.renderNavigation();
+  }
+
+  inspect(target) {
+    if (!target || !['clip', 'audio', 'text'].includes(target.kind)) return;
+    this.inspectorTarget = target;
+    if (this.trimmingPointer == null) this.setInspectorVisible(true);
+    this.refresh();
+  }
+
+  setPage(page, {link = true} = {}) {
+    if (FOCUS.includes(page)) return this.openFocus(page, {link});
+    if (page === 'timeline') { this.backToViewer(); this.setLibrary('references'); return; }
+    this.backToViewer();
+    this.inspect({kind: 'clip', box: this.host?.editor.box()?.id ?? null});
+    this.host?.editor.cast?.refresh({link});
+  }
+
+  renderNavigation() {
+    const focused = !!this.focusPage;
+    this.focus.hidden = !focused;
+    this.player.hidden = focused;
+    this.inspector.hidden = false;
+    this.pages.timeline.hidden = false;
+    for (const [name, control] of Object.entries(this.pageButtons)) {
+      const selected = name === (this.focusPage ?? 'viewer');
+      control.setAttribute('aria-pressed', String(selected)); control.setAttribute('aria-selected', String(selected));
+      control.tabIndex = selected ? 0 : -1;
+    }
+    for (const name of FOCUS) this.pages[name].hidden = name !== this.focusPage;
+    const target = this.inspectorTarget.kind;
+    this.pages.box.hidden = target !== 'clip';
+    this.pages.audio.hidden = target !== 'audio';
+    this.pages.text.hidden = target !== 'text';
+    const editor = this.host?.editor;
+    this.clipPromptButton.hidden = target === 'clip' || !editor?.box();
+    this.emptyInspector.hidden = target !== 'clip' || !!editor?.box();
+    this.inspectorTitle.textContent = target === 'audio' ? `Audio @${this.inspectorTarget.slot}`
+      : target === 'text' ? 'Timed text' : editor?.box() ? `Clip ${editor.selected + 1}` : 'No clip selected';
+    this.focusContext.textContent = editor?.box() ? `Selected clip ${editor.selected + 1}` : 'No clip selected';
+    this.renderMobile();
+  }
+
+  insertReference(text) {
+    const editor = this.host?.editor;
+    this.inspect({kind: 'clip', box: editor?.box()?.id ?? null});
+    if (editor?.focusClipPrompt()) editor.insert(text);
+  }
+
+  setView(view) {
+    this.view = view;
+    if (this.mobileMedia.matches) this.backToViewer();
+    this.refresh();
+  }
+
+  openFeedback() {
+    if (!this.host) return;
+    this.setPage('story');
+    this.host.editor.feedbackInput.focus();
+  }
+
+  refresh() {
+    if (this.root.hidden || !this.host) return;
+    const host = this.host;
+    if (this.inspectorTarget.kind === 'clip')
+      this.inspectorTarget = {kind: 'clip', box: host.editor.box()?.id ?? null};
+    const watch = host.watch();
+    this.showStory(host.story?.() ?? null);
+    this.nameEl.textContent = host.title();
+    this.nameEl.title = host.sequenceName?.() ?? '';
+    this.progressEl.textContent = progressText(watch, host.runningBox(), (id) => host.titleOf(id));
+    this.stopButton.hidden = host.editor.host.projectAttached === true || !(watch.running && !watch.turn);
+    this.feedbackButton.hidden = host.editor.feedbackEl.hidden;
+    this.renderNavigation();
+    const full = host.editor.fullLink.hidden ? null : host.editor.fullLink.getAttribute('href');
+    this.downloadVideo.disabled = !full;
+    this.downloadVideo.title = full ? 'Download the existing assembled full video' : 'No assembled full video is available yet.';
+    this.downloadVideo.dataset.file = full ? host.editor.fullDownloadLink.download : '';
+    const cancel = this.story?.panel?.cancelButton;
+    if (cancel) {
+      this.placeCancel(cancel, !!watch.turn || !cancel.hidden);
+      if (!cancel.hidden) this.stopButton.hidden = true;
+    }
+    this.refreshPlayer(watch);
+  }
+
+  placeCancel(cancel, held) {
+    if (held && !this.cancelBorrowed) {
+      this.cancelBorrowed = [];
+      this.place(cancel, this.writerCancel, this.cancelBorrowed);
+    } else if (!held && this.cancelBorrowed) {
+      this.restore(this.cancelBorrowed);
+      this.cancelBorrowed = null;
+    }
+  }
+
+  // Borrowing
+
+  place(node, parent, borrowed = this.borrowed) {
+    if (!node) return;
+    // Pictures opens as a dedicated page; keep the graph's original disclosure state.
+    borrowed.push({node, parent: node.parentNode, next: node.nextSibling, open: node === this.host?.editor.pictures?.root ? node.open : undefined});
+    parent.append(node);
+  }
+
+  // Each part goes back in the reverse order it left, so every recorded next sibling is in place again.
+  restore(borrowed) {
+    for (const {node, parent, next, open} of [...borrowed].reverse()) {
+      if (open !== undefined) node.open = open;
+      if (!parent) node.remove();
+      else parent.insertBefore(node, next?.parentNode === parent ? next : null);
+    }
+  }
+
+  borrow() {
+    const regions = this.host.editor.regions();
+    this.place(regions.summary, this.summarySlot);
+    this.place(this.host.savedBar, this.savedSlot);
+    for (const name of ['add', 'next', 'all']) this.place(regions[name], this.actionsSlot);
+    this.place(regions.open, this.fullLinks);
+    this.place(regions.download, this.fullLinks);
+    this.place(regions.panel, this.pages.box);
+    this.place(regions.cast, this.pages.cast);
+    this.place(regions.feedback, this.pages.story);
+    this.place(regions.references, this.pages.timeline);
+    this.place(regions.pictures, this.pages.pictures);
+    this.place(regions.refmods, this.pages.refmods);
+    this.place(regions.sharedPrompt, this.projectPrompt);
+    this.place(regions.stillPrompts, this.track);
+    this.place(regions.lane, this.track);
+    this.place(regions.hint, this.track);
+    this.place(regions.audioSettings, this.pages.audio);
+    this.place(regions.timedTextSettings, this.pages.text);
+    regions.references.open = true;
+    regions.refmods.open = true;
+    this.setLibrary('references');
+    this.trackWidth = this.track.clientWidth;
+    this.host.editor.renderTrack();
+  }
+
+  giveBack() {
+    this.returnStory();
+    this.restore(this.borrowed);
+    this.borrowed = [];
+    this.endLive();
+    this.setScreen();
+    const editor = this.host?.editor;
+    this.host = null;
+    this.trackWidth = 0;
+    editor?.renderTrack();
+    editor?.renderHint();
+  }
+
+  trackResized() {
+    const width = this.track.clientWidth;
+    if (!this.host || !width || width === this.trackWidth) return;
+    this.trackWidth = width;
+    this.host.editor.renderTrack();
+  }
+
+  // Story
+
+  showStory(story) {
+    if (story === this.story) return;
+    this.returnStory();
+    this.story = story;
+    if (!story) {
+      this.projectFileNote.textContent = 'Save or open this project using ComfyUI’s native workflow Save/Open controls. Project JSON export requires a linked H3 Story.';
+      this.storyEl.replaceChildren(this.writeOff);
+      this.storyPage.replaceChildren(el('p', 'h3cx-note', NO_STORY));
+      return;
+    }
+    this.place(story.panel.actionsEl, this.storyEl, this.storyBorrowed);
+    this.place(story.panel.messageEl, this.writerMessage, this.storyBorrowed);
+    this.storyPage.replaceChildren(this.inputsOf(story));
+    if(story.panel.libraryEl){this.place(story.panel.libraryEl,this.storyPage,this.storyBorrowed);this.storyPage.prepend(story.panel.libraryEl);}
+    this.place(story.panel.storyEl, this.pages.story, this.storyBorrowed);
+    this.place(story.panel.filesEl, this.projectFiles, this.storyBorrowed);
+    this.projectFileNote.textContent = 'Project JSON includes workflow wiring. Media and RefMods remain file references.';
+  }
+
+  returnStory() {
+    if (this.cancelBorrowed) { this.restore(this.cancelBorrowed); this.cancelBorrowed = null; }
+    this.restore(this.storyBorrowed);
+    this.storyBorrowed = [];
+    this.storyEl.replaceChildren();
+    this.storyPage.replaceChildren();
+    this.story = undefined;
+  }
+
+  inputsOf(story) {
+    const form = el('div', 'h3cx-inputs');
+    const advanced = el('details', 'h3cx-story-advanced');
+    const advancedInputs = el('div', 'h3cx-inputs');
+    advanced.append(el('summary', null, 'Advanced'), advancedInputs);
+    story.panel.refreshSettings?.();
+    for (const input of story.inputs()) {
+      const parent = input.advanced ? advancedInputs : form;
+      const shared = story.panel.settingField?.(input.name);
+      if (shared) { this.place(shared, parent, this.storyBorrowed); continue; }
+      const label = el('span', 'h3cx-label', input.label);
+      if (input.linked != null) {
+        const field = el('div', 'h3cx-field');
+        field.title = input.tooltip ?? '';
+        field.append(label, el('p', 'h3cx-linked', `Linked from ${input.linked}`));
+        parent.append(field);
+        continue;
+      }
+      const check = input.kind === 'boolean';
+      const field = el(['template', 'images'].includes(input.kind) ? 'div' : 'label', check ? 'h3cx-field h3cx-check' : 'h3cx-field');
+      const control = this.control(input, (value) => story.setInput(input.name, value));
+      field.title = control.title = input.tooltip ?? '';
+      control.setAttribute('aria-label', input.label);
+      field.append(...(check ? [control, label] : [label, control]));
+      parent.append(field);
+    }
+    if (advancedInputs.childElementCount) form.append(advanced);
+    return form;
+  }
+
+  control(input, set) {
+    if (input.kind === 'images') return ideaImagesRow(input, set);
+    if (input.kind === 'template') return templateRow(input, set);
+    if (input.kind === 'string') {
+      const node = Object.assign(el('input'), {type: 'text', value: input.value ?? ''});
+      node.addEventListener('input', () => set(node.value));
+      return node;
+    }
+    if (input.kind === 'text') {
+      const node = el('textarea');
+      node.rows = 4;
+      node.value = input.value ?? '';
+      node.addEventListener('input', () => set(node.value));
+      return node;
+    }
+    if (input.kind === 'number') {
+      const node = Object.assign(el('input'), {type: 'number', min: input.min, max: input.max, step: 1, value: input.value ?? 0});
+      node.addEventListener('change', () => {
+        const value = Math.round(Number(node.value));
+        if (!Number.isFinite(value)) return;
+        node.value = Math.min(input.max, Math.max(input.min, value));
+        set(Number(node.value));
+      });
+      return node;
+    }
+    if (input.kind === 'combo') {
+      const node = el('select');
+      const options = input.value == null || input.options.includes(input.value) ? input.options : [input.value, ...input.options];
+      node.append(...options.map((option) => Object.assign(el('option', null, option), {value: option})));
+      node.value = input.value;
+      node.addEventListener('change', () => set(node.value));
+      return node;
+    }
+    const node = Object.assign(el('input'), {type: 'checkbox', checked: input.value !== false});
+    node.addEventListener('change', () => set(node.checked));
+    return node;
+  }
+
+  // Keys: Esc leaves a field first, then a mention card, then the Studio. Plain keys stay inside the Studio,
+  // so ComfyUI's canvas shortcuts (Delete, Backspace and the rest) do not act on the graph behind it.
+  key(event) {
+    if (this.newProjectDialog?.open) {
+      event.stopPropagation();
+      if (event.key === 'Escape') { event.preventDefault(); this.newProjectDialog.close(); }
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      const field = event.target.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
+      if (!this.pinMenu.hidden) this.pinMenu.hidden = true;
+      else if (this.host?.editor.card.root.isConnected) this.host.editor.card.hide();
+      else if (this.host?.editor.clipActions?.open) this.host.editor.clipActions.open = false;
+      else if (field) {
+        field.blur();
+        this.root.focus();
+      } else if (this.focusPage) this.backToViewer();
+      else if (this.mobileMedia.matches && this.mobilePage !== 'viewer') this.backToViewer();
+      else this.close();
+      return;
+    }
+    // ComfyUI ignores keys while a modal dialog such as the Studio is open, so the Studio hands it Undo and Redo. Text
+    // fields keep their own undo.
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.repeat && /^[yz]$/i.test(event.key)
+      && !event.target.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"])')) this.host?.undoKey?.(event);
+    if (!event.ctrlKey && !event.metaKey && !event.altKey) event.stopPropagation();
+  }
+
+  // Player
+
+  // A take may reopen before its list arrives. Retain that provisional descriptor,
+  // then reconcile only a successful, idle list for its owner. Failed/busy or
+  // another clip's results do not establish that a file has been deleted.
+  chosenAvailable(chosen) {
+    const editor = this.host.editor;
+    if (!chosen?.video?.filename || !editor.state.boxes.some(box => box.id === chosen.box)
+      || (chosen.bridge && !editor.state.bridges?.some(bridge => bridge.before === chosen.box))) return false;
+    const list = editor.takes.list;
+    if (list?.box !== chosen.box || !list.found || list.found.ok === false || list.found.busy) return true;
+    const section = list.found[chosen.bridge ? 'bridge' : 'box'];
+    if (list.found.ok !== true && !Array.isArray(section?.takes)) return true;
+    return (section?.takes ?? []).some(take => take.video?.filename === chosen.video.filename
+      && take.video?.subfolder === chosen.video.subfolder && take.video?.type === chosen.video.type);
+  }
+
+  refreshPlayer(watch) {
+    const {editor} = this.host;
+    const box = editor.box();
+    if (this.chosen && !this.chosenAvailable(this.chosen)) {
+      this.chosen = this.resumeAt = null;
+      if (this.view === 'chosen') {
+        this.view = 'take';
+        this.setScreen();
+      }
+    }
+    // The bridge view plays the take of the selected box's bridge; while the status is fetched again it keeps it.
+    if (this.view === 'bridge' && (box?.id !== this.bridgeBox
+      || (editor.status != null && !editor.bridgeStatusOf(this.bridgeBox)?.video))) this.view = 'take';
+    // A chosen take plays only while its box is selected.
+    const chosen = box && this.chosen?.box === box.id ? this.chosen : null;
+    if (this.view === 'chosen' && !chosen) this.view = 'take';
+    const entry = this.view === 'bridge' ? editor.bridgeStatusOf(this.bridgeBox) : box ? editor.statusOf(box) : null;
+    const take = this.view === 'chosen' ? chosen.video : entry?.video?.file ?? null;
+    const takeUrl = take ? this.host.viewUrl(take) : null;
+    const fullUrl = editor.fullLink.hidden ? null : editor.fullLink.getAttribute('href');
+    const view = this.view ?? (fullUrl ? 'full' : 'take');
+    this.fullButton.setAttribute('aria-pressed', String(view === 'full'));
+    this.takeButton.setAttribute('aria-pressed', String(view === 'take'));
+    this.takeButton.textContent = box ? `Clip ${editor.selected + 1} · active take` : 'Clip take';
+    this.fullButton.disabled = !fullUrl;
+    this.fullButton.title = fullUrl ? 'Play the whole Timeline' : 'No assembled full video is available yet.';
+    this.takeButton.disabled = !box;
+    const inUse = chosen?.bridge ? editor.bridgeStatusOf(chosen.box) : chosen ? editor.statusOf(box) : null;
+    this.switchButton.hidden = !inUse?.video || !['chosen', chosen.bridge ? 'bridge' : 'take'].includes(view);
+    this.switchButton.textContent = view === 'chosen' ? 'Compare with active take' : 'Back to selected take';
+    this.switchButton.title = view === 'chosen' ? 'Play the take in use from the same moment'
+      : 'Play the chosen take from the same moment';
+    this.fullLinks.hidden = view !== 'full';
+    this.takeLinks.hidden = view === 'full' || !takeUrl;
+    for (const node of [this.takeOpen, this.takeDownload]) {
+      if (takeUrl) node.href = takeUrl;
+      else node.removeAttribute('href');
+    }
+    if (takeUrl) this.takeDownload.download = take.filename;
+    else this.takeDownload.removeAttribute('download');
+
+    const preview = watch.running ? watch.preview : null;
+    const pinnable = view === 'take' && !!takeUrl && entry.status === 'done' && !preview
+      && editor.cast.pinTargets(editor.selected).length > 0;
+    this.pinButton.hidden = !pinnable;
+    if (!pinnable || this.pinMenu.dataset.box !== box.id) this.pinMenu.hidden = true;
+    if (this.pinNoteBox !== box?.id) [this.pinNoteBox, this.pinNote.textContent] = [null, ''];
+    this.pinNote.hidden = !this.pinNote.textContent;
+    this.soundtrackNote.textContent = view === 'full' ? soundtrackLine(soundtrackSlots(editor.state)) : '';
+    this.soundtrackNote.hidden = !this.soundtrackNote.textContent;
+    this.hint.hidden = preview?.source !== 'core';
+    if (preview) {
+      this.showLive(preview);
+      this.badge.textContent = liveBadge(watch, this.host.runningBox());
+    } else if (this.moving) {
+      this.endLive();
+      this.showMessage(MOVING);
+      this.badge.textContent = '';
+    } else {
+      this.endLive();
+      // While the status is being fetched again after an edit, the playing video stays as it is.
+      if (editor.status == null && this.screen.querySelector('video:not(.h3cx-live)')) return;
+      const src = view === 'full' ? fullUrl : takeUrl;
+      if (src) this.showVideo(src);
+      else this.showMessage(view === 'full' ? 'No assembled full video is available yet.' : 'Not rendered yet');
+      this.badge.textContent = view === 'chosen' ? this.chosenLabel(chosen) : view === 'bridge'
+        ? `Bridge before clip ${editor.selected + 1}${!entry || entry.status === 'done' ? '' : ' · older take'}`
+        : view === 'take' && takeUrl && entry.status !== 'done' ? OLDER_TAKE : '';
+    }
+    this.badge.hidden = !this.badge.textContent;
+  }
+
+  chosenLabel(chosen) {
+    const editor = this.host.editor;
+    const prefix = chosen.bridge ? `Bridge before clip ${editor.selected + 1}` : `Clip ${editor.selected + 1}`;
+    const list = editor.takes.list;
+    const section = list?.box === chosen.box ? list.found?.[chosen.bridge ? 'bridge' : 'box'] : null;
+    const sameFile = file => file?.filename === chosen.video.filename && file?.subfolder === chosen.video.subfolder
+      && file?.type === chosen.video.type;
+    const number = (section?.takes ?? []).findIndex(take => sameFile(take.video)) + 1;
+    // A retained event can outlive a refreshed list; keep its descriptive label without inventing a take number.
+    return number ? `${prefix} · take ${number}` : `${prefix} · ${chosen.label.replace(/^.*?take /i, 'take ')}`;
+  }
+
+  // Switch keeps the moment: the other take starts where this one is, playing if this one was.
+  switchTake() {
+    const video = this.screen.querySelector('video:not(.h3cx-live)');
+    this.resumeAt = video ? {time: video.currentTime, playing: !video.paused} : null;
+    if (this.view !== 'chosen') return this.setView('chosen');
+    if (this.chosen.bridge) this.bridgeBox = this.chosen.box;
+    this.setView(this.chosen.bridge ? 'bridge' : 'take');
+  }
+
+  // Before a take's files move, the player lets go of its video, which Windows would otherwise keep from moving.
+  letGo() {
+    this.moving = true;
+    this.setScreen();
+    this.refresh();
+  }
+
+  // A take's video taken off the screen stops loading first, so the server lets go of its file and the take can move.
+  setScreen(...nodes) {
+    for (const video of this.screen.querySelectorAll('video:not(.h3cx-live)')) {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    }
+    this.screen.replaceChildren(...nodes);
+  }
+
+  togglePins() {
+    const {editor} = this.host;
+    const box = editor.box();
+    this.pinMenu.hidden = !this.pinMenu.hidden;
+    if (this.pinMenu.hidden) return;
+    this.pinMenu.dataset.box = box.id;
+    this.pinMenu.replaceChildren(...editor.cast.pinTargets(editor.selected).map(({id, name}) =>
+      button(name, `Pin this moment for ${name}`, () => this.pinFor(id, box.id))));
+  }
+
+  // The pin's frame is the paused time of the take, which holds only the box's own frames.
+  async pinFor(entityId, boxId) {
+    const {editor} = this.host;
+    const video = this.screen.querySelector('video:not(.h3cx-live)');
+    this.pinMenu.hidden = true;
+    await editor.cast.pin(entityId, boxId, video?.currentTime ?? 0);
+    [this.pinNoteBox, this.pinNote.textContent] = [boxId, editor.cast.note];
+    this.refresh();
+  }
+
+  showVideo(src) {
+    const current = this.screen.firstElementChild;
+    const resume = this.resumeAt;
+    this.resumeAt = null;
+    if (current?.matches('video:not(.h3cx-live)') && current.getAttribute('src') === src) return;
+    const video = el('video');
+    video.controls = true;
+    video.preload = 'metadata';
+    video.src = src;
+    if (resume) [video.currentTime, video.autoplay] = [resume.time, resume.playing];
+    this.setScreen(video);
+  }
+
+  showMessage(text) {
+    const current = this.screen.firstElementChild;
+    if (current?.matches('.h3cx-message') && current.textContent === text) return;
+    this.setScreen(el('span', 'h3cx-message', text));
+  }
+
+  showLive(preview) {
+    const moving = preview.mime === 'video/mp4';
+    if (preview.source === 'kj') this.dropObjectUrl();
+    const src = preview.source === 'kj' ? `data:${preview.mime};base64,${preview.data}` : this.objectUrl(preview.blob);
+    let node = this.screen.firstElementChild;
+    if (!node?.matches(moving ? 'video.h3cx-live' : 'img.h3cx-live')) {
+      node = el(moving ? 'video' : 'img', 'h3cx-live');
+      if (moving) Object.assign(node, {autoplay: true, loop: true, muted: true, playsInline: true});
+      else node.alt = 'Live preview';
+      this.setScreen(node);
+    }
+    if (node.getAttribute('src') !== src) node.src = src;
+  }
+
+  endLive() {
+    if (this.screen.querySelector('.h3cx-live')) this.setScreen();
+    this.dropObjectUrl();
+  }
+
+  objectUrl(blob) {
+    if (this.blob !== blob) {
+      this.dropObjectUrl();
+      this.blob = blob;
+      this.blobSrc = URL.createObjectURL(blob);
+    }
+    return this.blobSrc;
+  }
+
+  dropObjectUrl() {
+    if (this.blobSrc) URL.revokeObjectURL(this.blobSrc);
+    this.blob = null;
+    this.blobSrc = null;
+  }
+}
+
+let instance = null;
+
+export function studio() {
+  instance ??= new Studio();
+  return instance;
+}

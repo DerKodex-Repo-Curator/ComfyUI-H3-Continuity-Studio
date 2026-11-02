@@ -1,0 +1,1137 @@
+import {ReferenceClient,applyReferenceApproval,requiredAssets,preparationOf} from './h3c_reference_preparation.mjs?v=20261014-reference-thumbnails-1';
+import {generationControl,setGenerationControl} from './h3c_generation_archive.mjs?v=20261014-reference-thumbnails-1';
+// Mounts the H3 Timeline face on H3C_Timeline nodes, edits the Timeline in the Studio, and keeps its status in sync
+// with the server. ComfyUI permits caching .mjs helpers. Bump their ?v= revision together across web/ when they change.
+import { freshProject } from './h3c_new_project.mjs?v=20261007-new-project-in-place-1';
+import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261019-story-load-in-place-1';
+import { app } from '../../scripts/app.js';
+import {syncImageOutputs,compileImageOutputs} from './h3c_timeline_images.mjs?v=20261012-picture-outputs-1';
+import { api } from '../../scripts/api.js';
+import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
+import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
+import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261004-studio-1';
+import { studio } from './h3c_studio.mjs?v=20261025-story-models-1';
+import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261026-prompt-history-1';
+import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
+import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
+import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
+import { voiceRefs } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
+import {captureRecipe,captureTimelineId,captureStillBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=20261022-recipe-switch-1';
+import {boundarySnapshot} from './h3c_frame_images.mjs?v=20261022-still-controls-1';
+import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
+import { TakesClient } from './h3c_takes.mjs?v=20261013-node-settings-1';
+import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
+
+const NODE_TYPE = 'H3C_Timeline';
+const STATUS_URL = '/h3c/timeline/status';
+const BIBLE_URL = '/h3c/timeline/bible';
+const SETTINGS = ['width', 'height', 'context_frames', 'carry_audio', 'ref_image_size', 'audio_context_frames'];
+const MUTED = 2;
+const BYPASSED = 4;
+const RUN_ENDS = new Set(['execution_success', 'execution_error', 'execution_interrupted']);
+const mounted = new Set();
+const projectSessions = new Map();
+// ComfyUI's render progress for the whole page; every Timeline face and the Studio read it.
+let watch = idleWatch();
+
+function findWidget(node, name) {
+  return node.widgets?.find((widget) => widget.name === name);
+}
+
+function isLinked(node, name) {
+  const input = node.inputs?.find((slot) => slot.name === name || slot.widget?.name === name);
+  return input?.link != null;
+}
+
+function widgetValue(node, name) {
+  return isLinked(node, name) ? null : (findWidget(node, name)?.value ?? null);
+}
+
+function hide(widget) {
+  widget.hidden = true;
+  widget.computeSize = () => [0, -4];
+  widget.computeLayoutSize = () => ({ minHeight: 0, maxHeight: 0, minWidth: 0 });
+  widget.options = widget.options || {};
+  widget.options.hidden = true;
+}
+
+function linkOf(graph, id) {
+  const links = graph?.links;
+  return links?.get?.(id) ?? links?.[id];
+}
+
+function nodePreview(node) {
+  const image = node?.imgs?.[0] ?? node?.img;
+  if (typeof image === 'string') return image;
+  return image?.src ?? image?.url ?? null;
+}
+
+// Whether `link` delivers a value when the prompt runs: muted nodes send nothing, and a bypassed node only
+// passes on a linked input of the same type.
+function delivers(graph, link, depth = 0) {
+  const origin = graph?.getNodeById?.(link.origin_id);
+  if (!origin || depth > 16) return Boolean(origin);
+  if (origin.mode === MUTED) return false;
+  if (origin.mode !== BYPASSED) return true;
+  const type = origin.outputs?.[link.origin_slot]?.type;
+  const input = origin.inputs?.find((slot) => slot.link != null && slot.type === type);
+  const next = input ? linkOf(graph, input.link) : null;
+  return next ? delivers(graph, next, depth + 1) : false;
+}
+
+function connectedRefs(node) {
+  const refs = { images: [], audios: [], videos: [], video_audios: [] };
+  for (const input of node.inputs || []) {
+    const match = /(?:^|\.)(image|audio|video_audio|video)(\d+)$/.exec(input.name || '');
+    if (!match || input.link == null) continue;
+    const link = linkOf(node.graph, input.link);
+    if (!link || !delivers(node.graph, link)) continue;
+    const origin = node.graph?.getNodeById?.(link.origin_id);
+    const source = referenceSource(origin, node.graph);
+    const image = match[1] === 'image';
+    const file = image ? referenceImageFile(origin, node.graph, link.origin_slot) : referenceFile(source);
+    refs[{image: 'images', audio: 'audios', video: 'videos', video_audio: 'video_audios'}[match[1]]].push({ name: `${match[1]}${Number(match[2])}`, title: source?.title || origin?.title || '',
+      file: file?.path ?? null, mediaFile: file, preview: image ? file ? viewUrl(file) : nodePreview(source) : null });
+  }
+  const byNumber = (a, b) => Number(a.name.replace(/\D/g, '')) - Number(b.name.replace(/\D/g, ''));
+  for (const pool of Object.values(refs)) pool.sort(byNumber);
+  return refs;
+}
+
+function viewUrl(file) {
+  if (file.download_url) return api.apiURL(file.download_url);
+  const query = new URLSearchParams({ filename: file.filename, subfolder: file.subfolder, type: file.type, v: file.v ?? '' });
+  return api.apiURL(`/view?${query}`);
+}
+
+function undoHistory() {
+  return app.extensionManager?.workflow?.activeWorkflow?.changeTracker;
+}
+
+function recordStep() {
+  const tracker = undoHistory();
+  (tracker?.captureCanvasState ?? tracker?.checkState)?.call(tracker);
+}
+
+class TimelineHost {
+  constructor(node) {
+    this.node = node;
+    this.timer = null;
+    this.request = 0;
+    this.widget = findWidget(node, 'timeline');
+    hide(this.widget);
+    this.takesClient = new TakesClient(async (url, body) => {
+      if (this.project) {
+        const action = url.endsWith('/use') ? 'use' : url.endsWith('/delete') ? 'delete' : 'list';
+        const found = await this.project.takes(action, body);
+        if (action === 'list') {
+          for (const kind of ['box', 'bridge']) for (const take of found[kind]?.takes ?? []) take.folder = take.id;
+          return {ok: true, ...found};
+        }
+        return found;
+      }
+      const response = await api.fetchApi(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({...this.requestBody(), ...body})});
+      if (response.status === 404) throw new Error('Restart ComfyUI, then refresh this page.');
+      return response.json();
+    });
+    const editor = new TimelineEditor({
+      read: () => this.widget.value,
+      write: (text) => {
+        this.writeTimeline(text);
+        node.setDirtyCanvas?.(true, true);
+      },
+      context: () => Number.parseInt(widgetValue(node, 'context_frames') ?? '39', 10) || 39,
+      connected: () => this.connected(),
+      referenceSources: () => this.referenceSources(true),
+      uploadReference: (file,kind) => this.uploadReference(file,kind),
+      describeImage: (action,ref,text) => this.describeImage(action,ref,text),
+      refmodChoices: () => this.refmodChoices ?? [],
+      refreshRefmods: () => this.loadRefmods(),
+      uploadAudio: (file) => this.uploadAudio(file),
+      uploadPicture: (file) => this.uploadPicture(file),
+      importGuide: file => this.importGuide(file),
+      pinGuide: async file => {const result=await this.stillRequest('/h3c/stills/pin',{file});if(!result.ok)throw Error(result.error??'Cannot verify guide.');return result;},
+      referenceState:()=>this.referenceState(),referenceContext:()=>this.referenceContext(),
+      referenceCatalog:()=>this.referenceCatalog(),referenceBusy:()=>this.referenceClient?.busy,
+      referenceBatch:()=>this.referenceClient?.batch,
+      generateReference:key=>this.generateReference(key),
+      generateSelectedReferences:keys=>this.referenceClient.generateSelected(keys),
+      stopReferencePreparation:()=>this.referenceClient.stopAfterCurrent(),
+      approveReference:request=>this.approveReference(request),reuseReferenceScene:(key,source)=>this.reuseReferenceScene(key,source),
+      referenceReadiness:boxId=>this.referenceReadiness(boxId),
+      openReferencePreparation:keys=>this.editor.cast.preparation.open(keys),
+      stillSources: request => this.stillSources(request),
+      prepareStill: request => this.prepareStill(request),
+      stillControls: () => this.stillControls(),
+      prepareStillPrompts: (instructions,onProgress) => this.prepareStillPrompts(instructions,onProgress),
+      stillPromptInstructions: () => this.stillPromptInstructions(),
+      stillPromptJob: () => this.stillPromptJob,
+      cancelStillPrompts: () => this.cancelStillPrompts(),
+      generateStill: request => this.generateStill(request),
+      openStillGenerator: () => this.openStillGenerator(),
+      hasVideo: () => this.hasVideoOutput(),
+      readBoundary: boxId => this.readBoundary(boxId),
+      uploadWhisper: (file, hash) => this.project ? this.uploadProjectAsset(file, 'whisper', hash) : Promise.resolve(),
+      audioInfo: (file) => this.audioInfo(file),
+      queue: (count, box, bridge) => this.queue(count, box, bridge),
+      refresh: () => this.refresh(),
+      takes: (action, body) => this.takesClient.send(action, body),
+      viewUrl,
+      changed: () => this.changed(),
+      story: () => this.story(),
+      bible: async (body) => (await api.fetchApi(BIBLE_URL, {method: 'POST',
+        headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})).json(),
+      storyPlan: () => {
+        const state = this.story()?.state?.();
+        return state && String(state.timeline) === String(this.node.id) ? state.plan ?? null : null;
+      },
+      // ComfyUI's Undo history records the graph on clicks and keys, and a Cast edit lands after its click. Unless the
+      // edit is recorded when it lands, an Undo right after it also undoes the change before, and Redo loses the edit.
+      undoStep: recordStep,
+      editStory: async (edit) => {
+        const controller = this.story();
+        if (!controller) throw new Error('Connect an H3 Story node to revise this story.');
+        const started = await controller.write(false, false, edit);
+        if (!started) throw new Error(controller.panel.messageEl.textContent || 'Story could not start.');
+      },
+      check: async (boxes) => {
+        const controller = this.story();
+        if (!controller) throw new Error('Link an H3 Story node to check boxes.');
+        const started = await controller.checkBoxes(boxes);
+        if (!started) throw new Error(controller.panel.messageEl.textContent || 'The check could not start.');
+      },
+      rendered: () => this.showProgress(),
+    });
+    this.editor = editor;
+    this.stillClient=new StillClient({context:()=>stringifyJSON([this.node.graph?.id,findWidget(this.node,'name')?.value,this.project?.project?.sequence,!!this.removed]),capture:request=>this.prepareStill(request),read:()=>parseState(this.widget.value),
+      write:state=>this.writeStillState(state),request:(url,body)=>this.stillRequest(url,body)});
+    this.referenceHost={referenceState:()=>this.referenceState(),referenceContext:()=>this.referenceContext(),
+      writeReferenceState:state=>this.writeStillState(state),referenceCatalog:()=>this.referenceCatalog(),
+      prepareReference:request=>this.prepareReference(request),request:async(url,body)=>this.stillRequest(url,url==='/h3c/reference-assets/approve'?{...await this.referenceSnapshot(body.timeline),...body}:body),
+      referenceChanged:()=>this.editor.cast.preparation?.refresh(),undoStep:recordStep,
+      referenceReady:async()=>{await this.saved.ready;if(this.project?.conflict)throw Error('Resolve project edits before approving a reference.');}};
+    this.referenceClient=new ReferenceClient(this.referenceHost);
+    const loadRefmods = () => this.loadRefmods().catch(error => { editor.refmodMessage.textContent = error.message; });
+    editor.refmodsEl.addEventListener('toggle', () => {
+      if (editor.refmodsEl.open && !this.refmodChoices) loadRefmods();
+    });
+    if (editor.state.refmods?.length) loadRefmods();
+    const face = this.face = new TimelineFace({
+      editor,
+      open: () => this.openStudio(),
+      renderNext: () => editor.queueNext(),
+      renderAll: () => editor.queue(),
+    });
+    this.saved = mountSavedState(node, face.root, { app, api, loaded: () => {
+      editor.load(); this.schedule(0);
+    } });
+    this.configureProject();
+    node.h3cTimeline = this;
+    const dom = node.addDOMWidget('h3c_timeline_editor', 'custom', face.root, {
+      serialize: false,
+      hideOnZoom: false,
+      getMinHeight: () => face.height(),
+      getMaxHeight: () => face.height(),
+    });
+    dom.serialize = false;
+    if (dom.options) dom.options.serialize = false;
+    dom.computeSize = (width) => [width ?? node.size?.[0] ?? 420, face.height()];
+    dom.computeLayoutSize = () => ({ minHeight: face.height(), maxHeight: face.height(), minWidth: 0 });
+    face.mountWidgets(node);
+    for (const name of ['name', ...SETTINGS]) this.chain(findWidget(node, name), () => this.settingChanged(name));
+    this.hook('onConfigure', () => {
+      this.configureProject();
+      hide(this.widget);
+      editor.load();
+      this.schedule(0);
+      this.fit();
+      setTimeout(() => showOwnElement(node, face.root, '.h3ct-face', app.canvas?.graph), 0);
+    });
+    this.hook('onConnectionsChange', () => {
+      editor.render();
+      this.changed();
+    });
+    this.hook('onExecuted', (message) => {
+      const status = message?.h3c_timeline?.[0];
+      if (status) this.schedule(0);
+    });
+    this.hook('onRemoved', () => {
+      mounted.delete(this);
+      clearTimeout(this.timer);
+      clearTimeout(this.stillTimer);
+      clearTimeout(this.referenceTimer);
+      this.referenceClient.stopAfterCurrent();
+      this.removed = true;
+      if (studio().host === this) this.handOver();
+      this.saved.destroy();
+      this.observer?.disconnect();
+      editor.destroy();
+    });
+    if (typeof ResizeObserver === 'function') {
+      this.observer = new ResizeObserver(() => this.relayout());
+      this.observer.observe(face.root);
+    }
+    mounted.add(this);
+    this.showProgress();
+  }
+
+  // The Studio's view of this Timeline.
+
+  sequenceName() {
+    return widgetValue(this.node, 'name');
+  }
+
+  title() {
+    if (this.project?.project) return this.project.project.name;
+    const name = this.sequenceName();
+    return name || this.node.title || 'Timeline';
+  }
+
+  get savedBar() {
+    return this.saved.bar;
+  }
+
+  watch() {
+    return watch;
+  }
+
+  runningBox() {
+    if (this.requestedBridge != null) return null;
+    return this.requested ?? this.editor.nextBox();
+  }
+
+  titleOf(id) {
+    return (app.rootGraph ?? app.graph)?.getNodeById?.(id)?.title ?? '';
+  }
+
+  newProjectBusy() {
+    const graph = app.rootGraph ?? app.graph;
+    const busy = this.project?.busy || this.project?.project?.active_job || this.project?.project?.active_operation
+      || watch.running || watch.turn || watch.remaining > 0
+      || (graph?._nodes ?? []).some(node => (node.h3cStory?.job || node.h3cStory?.starting || node.h3cStory?.forkingLibrary) || node.h3cTimeline?.editor.queuing
+        || node.h3cTimeline?.editor.queueBatch || node.h3cTimeline?.submitting
+        || node.h3cTimeline?.referenceClient?.busy || node.h3cTimeline?.stillClient?.active.size || node.h3cTimeline?.stillClient?.recovering || node.h3cTimeline?.editor.frameImages.generating
+        || node.h3cTimeline?.editor.pictures.busy || node.h3cTimeline?.editor.cast.busy);
+    return busy ? 'Finish or cancel Story writing/checking, or use Stop & clear queue, before creating a project.' : null;
+  }
+
+  async newProject() {
+    if (this.projectLoading) throw new Error('A project is already being reset.');
+    const graph = app.rootGraph ?? app.graph;
+    if (this.node.graph !== graph) throw new Error('Open a root H3 workflow to start a project.');
+    const check = () => {
+      const reason = this.newProjectBusy();
+      if (reason) throw new Error(reason);
+      if ((app.rootGraph ?? app.graph) !== graph || this.removed) throw new Error('The open workflow changed. Open its Studio and try again.');
+    };
+    check();
+    freshProject(this.widget.value); // Validate before flushing or changing this Timeline.
+    this.projectLoading = true;
+    try {
+      const story = this.story();
+      await story?.graphDeleted?.();
+      if(!story||story.libraryDeleted!==story.graphId()) {
+        await saveBeforeNewProject(story,this.saved);
+      }
+      check();
+      const fresh = freshProject(this.widget.value);
+      recordStep();
+      // Keep the native workflow/tab in place, with an independent server autosave identity for each story.
+      if(story?.library) {
+        graph.extra??={};graph.extra.h3c_story_id=crypto.randomUUID();
+        story.libraryId=story.librarySignature=story.libraryDeleted=story.finishedJob=null;
+        story.libraryRevision=undefined;
+        if(story.node.properties)delete story.node.properties.h3c_library_revision;
+      }
+      // Only stored project content/identity may override this reset; source wiring remains connected.
+      for (const [node, names] of [[this.node, ['name','timeline']], [story?.node, ['state']]]) {
+        for (const [index, input] of (node?.inputs ?? []).entries()) {
+          if (names.includes(input.widget?.name ?? input.name) && input.link != null) node.disconnectInput(index);
+        }
+      }
+      const properties = this.node.properties ??= {};
+      if (this.project || properties.h3c_fork_sequence) properties.h3c_fork_sequence = fresh.name;
+      delete properties.h3c_project;
+      delete properties.h3c_asset_bindings;
+      findWidget(this.node, 'name').value = fresh.name;
+      this.widget.value = fresh.timeline;
+      if (story) {
+        story.widget.value = '';
+        story.showState();
+        story.panel.say('');
+        story.saved.changed();
+      }
+      this.configureProject();
+      this.editor.feedbackInput.value = '';
+      this.editor.load();
+      this.changed(); // Invalidates any status response from the previous sequence.
+      const shown = studio();
+      shown.close();
+      shown.remembered = null;
+      this.openStudio('box', {link:false});
+      this.node.setDirtyCanvas?.(true, true);
+      recordStep();
+      try { await this.saved.flush(); }
+      catch (error) { throw new Error(`The Timeline was reset, but is not saved yet: ${error?.message ?? error}`); }
+    } finally { this.projectLoading = false; }
+  }
+
+  // Clearing the queue first means the next pending run can't start between the two calls.
+  async stop() {
+    if (this.project) throw new Error('API jobs retain their queue receipts. Follow this job in the project status.');
+    await api.clearItems('queue');
+    await api.interrupt();
+  }
+
+  viewUrl(file) {
+    return viewUrl(file);
+  }
+
+  openStudio(page, options) {
+    studio().open(this, page, options);
+    this.editor.frameImages.refreshControls();
+  }
+
+  // While the Studio is open, ComfyUI records the graph only on clicks, and a button's edit lands after its click, so an
+  // edit not yet recorded is recorded first, or the Undo would skip it and lose it. What the reload after an undo
+  // changes isn't an edit, such as a node settling to a new size or ComfyUI moving a picture input, and recording it at
+  // the next click or key would end the Redo history. So sizes are left out here, and ComfyUI joins the rest to the
+  // state undone to, as it does after the steps it records.
+  undoKey(event) {
+    const tracker = undoHistory();
+    const sizeless = (state) => JSON.parse(JSON.stringify(state ?? null, (key, value) => (key === 'size' ? undefined : value)));
+    const graph = app.rootGraph ?? app.graph;
+    if (!tracker?.constructor.graphEqual?.(sizeless(tracker.activeState), sizeless(graph?.serialize?.()))) recordStep();
+    tracker?.undoRedo?.(event)?.then?.((handled) => {
+      if (handled) tracker.squashState?.();
+    });
+  }
+
+  showProgress() {
+    syncImageOutputs(this.node, this.editor?.state);
+    if (!this.face) return;
+    const editor = this.editor;
+    this.face.update({
+      summary: editor.summaryEl.textContent,
+      progress: progressText(watch, this.runningBox(), (id) => this.titleOf(id)),
+      allLabel: editor.renderButton.textContent,
+      canRender: !editor.renderButton.disabled,
+    });
+    const shown = studio();
+    if (shown.host === this) shown.refresh();
+  }
+
+  // An undo or redo replaces this node with a new one of the same id. The Studio closes, then moves to the new node
+  // if it appears within a second, keeping the page, the selected box and its tab. It doesn't link boxes without a
+  // cast, or Undo could never get past a link.
+  handOver() {
+    const shown = studio();
+    const snapshot = shown.snapshot();
+    const id = this.node.id;
+    shown.close();
+    const revision = shown.openRevision;
+    const started = Date.now();
+    const look = () => {
+      if (!shown.root.hidden || shown.openRevision !== revision || Date.now() - started >= 1000) return;
+      const next = (app.rootGraph ?? app.graph)?.getNodeById?.(id)?.h3cTimeline;
+      if (next && next !== this && !next.removed) {
+        next.openStudio('box', {link:false});
+        shown.restoreSnapshot(snapshot, {link:false});
+      } else if (Date.now() - started < 1000) setTimeout(look, 50);
+    };
+    setTimeout(look, 50);
+  }
+
+  story() {
+    const input = this.node.inputs?.find(input => input.name === 'story');
+    const link = linkOf(this.node.graph, input?.link);
+    if (!link || !delivers(this.node.graph, link)) return null;
+    return this.node.graph?.getNodeById?.(link.origin_id)?.h3cStory ?? null;
+  }
+
+  connected() {
+    const state=this.editor?.state??parseJSON(this.widget.value);
+    return referencePools(state,this.referenceSources(),viewUrl);
+  }
+
+  referenceSources(includeInactive = false, stateOverride) {
+    const connected = connectedRefs(this.node);
+    let state = stateOverride ?? this.editor?.state;
+    if (!state) { try { state = JSON.parse(this.widget.value); } catch { state = {}; } }
+    for (const clip of state.audio_clips ?? []) {
+      if (!clip.file) continue;
+      connected.audios.push({name: clip.slot, title: clip.title || clip.file.filename,
+        file: clip.file.filename, mediaFile: clip.file, conflict: connected.audios.some(ref => ref.name === clip.slot)});
+    }
+    connected.audios.push(...voiceRefs(state));
+    connected.images.push(...pictureRefs(state, viewUrl));
+    for (const ref of state.refmods ?? []) {
+      if (!includeInactive && (ref.strength ?? 1) <= 0) continue;
+      const choice = this.refmodChoices?.find(item => item.name === ref.name && item.member === (ref.member ?? -1));
+      const pool = ref.kind === 'audio' ? connected.audios : connected.images;
+      const conflict = pool.some(item => item.name === ref.slot);
+      pool.push({name: ref.slot, title: choice?.title || ref.name, refmod: true, conflict,
+        preview: choice?.thumbnail ? api.apiURL(`/h3c/refmods/thumbnail?${new URLSearchParams({name: ref.name})}`) : null});
+    }
+    return connected;
+  }
+
+  async audioInfo(file) {
+    const response = await api.fetchApi('/h3c/audio/info', {method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({file})});
+    if (response.status === 404) throw new Error('Restart ComfyUI to enable Timeline audio, then refresh this page.');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not read this audio file.');
+    return result;
+  }
+
+  async uploadAudio(file) {
+    if (this.project) return this.uploadProjectAsset(file, 'audio');
+    const body = new FormData();
+    body.append('image', file);
+    body.append('type', 'input');
+    body.append('subfolder', 'h3_audio');
+    const response = await api.fetchApi('/upload/image', {method: 'POST', body});
+    if (!response.ok) throw new Error(`Could not upload audio (HTTP ${response.status}).`);
+    const result = await response.json();
+    const mediaFile = {filename: result.name, subfolder: result.subfolder, type: result.type};
+    return {file: mediaFile, title: file.name, ...await this.audioInfo(mediaFile)};
+  }
+
+  async stillRequest(url,body) {
+    const response=await api.fetchApi(url,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:stringifyJSON(url==='/prompt'?{...body,client_id:api.clientId}:body)});
+    return parseJSON(await response.text());
+  }
+
+  writeTimeline(text) {
+    setGenerationControl(generationControl(this.node,'timeline'),text);
+    this.widget.value=text;
+  }
+
+  async writeStillState(state) {
+    this.writeTimeline(serialize(state));this.node.setDirtyCanvas?.(true,true);
+    this.editor.load();this.saved.changed();
+    await this.saved.flush();
+  }
+
+  hasVideoOutput() {
+    const pending=[this.node],seen=new Set();let direct=false;
+    while(pending.length) {
+      const node=pending.pop();if(!node||seen.has(node)||node.mode===2)continue;seen.add(node);
+      if(['H3C_SaveSegment','SaveVideo','VHS_VideoCombine'].includes(node.type)){direct=true;break;}
+      for(const port of node.outputs??[])for(const id of port.links??[]) {
+        const link=node.graph?.links?.get?.(id)??node.graph?.links?.[id];
+        if(link)pending.push(node.graph.getNodeById(link.target_id));
+      }
+    }
+    const graph=app.rootGraph??app.graph,workflow=graph?.serialize?.();
+    const definitions=workflow?.definitions?.subgraphs??[],groups=new Set(definitions.map(group=>group.id));
+    if(!workflow||!(workflow.nodes??[]).some(node=>groups.has(node.type)))return direct;
+    const ports=node=>[node.id,node.type,node.mode,node.inputs?.map(port=>port.link),node.outputs?.map(port=>port.links)];
+    const signature=JSON.stringify([workflow.id,workflow.nodes.map(ports),workflow.links,definitions.map(group=>[group.id,group.nodes.map(ports),group.links])]);
+    if(signature!==this.videoCapabilityKey&&!this.videoCapabilityPreparing) {
+      this.videoCapabilityKey=signature;this.videoCapabilityPreparing=true;
+      app.graphToPrompt().then(snapshot=>{
+        if(this.removed)return;
+        const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===graph});
+        this.videoCapability=compiledVideoOutput(snapshot,id);
+      }).catch(()=>{this.videoCapability=false;}).finally(()=>{this.videoCapabilityPreparing=false;if(!this.removed)this.editor.render();});
+    }
+    return signature===this.videoCapabilityKey&&this.videoCapability!=null?this.videoCapability:direct;
+  }
+
+  referenceContext() {return stringifyJSON([this.node.graph?.id,findWidget(this.node,'name')?.value,this.project?.project?.sequence,!!this.removed]);}
+  referenceState() {return parseState(this.widget.value);}
+  async referenceSnapshot(timeline=this.widget.value) {
+    const snapshot=await app.graphToPrompt();
+    const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+    const body=captureStillBody(snapshot,id,{});body.timeline=timeline;body.workflow.api[id].inputs.timeline=timeline;return body;
+  }
+  async referenceCatalog() {
+    const result=await this.stillRequest('/h3c/reference-assets/catalog',await this.referenceSnapshot());
+    if(!result.ok)throw Error(result.error??'Could not read reference assets.');return result.assets;
+  }
+  async referenceReadiness(boxId) {return requiredAssets(this.referenceState(),boxId,await this.referenceCatalog());}
+  async prepareReference(request) {
+    const snapshot=await app.graphToPrompt();
+    const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+    const recipe=captureRecipe(snapshot,id);if(!recipe)throw Error('Connect an image recipe before generating references.');
+    const body=captureStillBody(snapshot,id,{...request,request_id:request.request_id??crypto.randomUUID(),recipe});
+    if(this.project?.project){body.name=this.project.project.sequence;body.workflow.api[id].inputs.name=body.name;}
+    const result=await this.stillRequest('/h3c/reference-assets/prepare',body);
+    if(!result.ok)throw Error(result.error??'Could not prepare the reference.');return {...result,request:body};
+  }
+
+  async stillPromptInstructions() {
+    const answer=await this.stillRequest('/h3c/still-prompts/instructions',{});
+    if(!answer.ok)throw Error(answer.error??'Could not read still prompt instructions.');
+    return answer.instructions;
+  }
+
+  async prepareStillPrompts(instructions,onProgress) {
+    if(this.stillPromptPolling||this.stillPromptJob?.starting)throw Error('Still prompt preparation is already running.');
+    await this.saved.ready;await this.saved.flush();
+    if(this.project?.conflict)throw Error('Resolve project edits before preparing prompts.');
+    const controller=this.story();if(!controller)throw Error('Connect a Story node to prepare still prompts.');
+    const context=this.referenceContext(),line=this.widget.value;
+    const frames=this.editor.host.context(),references=this.connected().images;
+    const captured=stillPromptSource(parseState(line),instructions,frames,references);
+    const check=()=>{
+      if(this.removed||context!==this.referenceContext()||!sameStillPromptSource(captured,stillPromptSource(parseState(this.widget.value),instructions,this.editor.host.context(),this.connected().images)))
+        throw Error('The Timeline changed during prompt preparation; current edits were preserved.');
+    };
+    const snapshot=await app.graphToPrompt();check();
+    const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+    const story=snapshot.output[id]?.inputs?.story?.[0];
+    if(!story||snapshot.output[story]?.class_type!=='H3C_Story')throw Error('Connect the Story writer to this Timeline.');
+    snapshot.output[id].inputs.timeline=serialize(parseState(line));
+    this.stillPromptPolling=true;let terminal=false;
+    try {
+      const identity={graph:controller.graphId(),story};
+      if(!this.stillPromptJob?.id) {
+        const query=new URLSearchParams({...identity,client:controller.clientId()});
+        const current=await api.fetchApi('/h3c/story/current?'+query).then(response=>response.json());
+        if(current.kind==='still_prompts'&&current.job&&String(current.timeline)===String(id))this.stillPromptJob={id:current.job};
+      }
+      if(!this.stillPromptJob?.id) {
+        check();this.stillPromptJob={starting:true};
+        const started=await this.stillRequest('/h3c/still-prompts/prepare',{prompt:snapshot.output,story,
+          graph:controller.graphId(),client:controller.clientId(),instructions,context:frames,references,source:captured});
+        if(!started.ok){this.stillPromptJob=null;throw Error(started.error??'Could not start still prompt preparation.');}
+        this.stillPromptJob={id:started.job};
+      }
+      let missed=0;
+      while(true) {
+        const query=new URLSearchParams({id:this.stillPromptJob.id,...identity});let view;
+        try {
+          const response=await api.fetchApi('/h3c/story/job?'+query);view=await response.json();missed=0;
+        } catch(error) {
+          if(++missed>=3)throw Error('ComfyUI is not answering. Resume this preparation to recover its result; no new batch was submitted.');
+          onProgress?.('Reconnecting to the existing preparation…');await new Promise(resolve=>setTimeout(resolve,900));continue;
+        }
+        if(view.source&&!sameStillPromptSource(view.source,captured)) {
+          terminal=view.state!=='running';
+          if(!terminal)await this.cancelStillPrompts();
+          throw Error('The earlier preparation used a different Timeline. Its result was preserved; prepare the current prompts again.');
+        }
+        if(view.state==='running') {
+          if(!this.removed&&context===this.referenceContext())onProgress?.(view.progress??'Preparing still prompts…');
+          await new Promise(resolve=>setTimeout(resolve,900));continue;
+        }
+        terminal=['done','failed','cancelled','interrupted','partial','unknown'].includes(view.state);
+        if(view.state!=='done'||!view.result)throw Error(view.error??view.progress??'Still prompt preparation was interrupted.');
+        check();
+        if(!sameStillPromptSource(view.result.source,captured))throw Error('Prepared prompts do not match the captured Timeline.');
+        return view.result;
+      }
+    } finally {
+      const job=this.stillPromptJob?.id;this.stillPromptPolling=false;
+      if(terminal){this.stillPromptJob=null;if(job)await this.stillRequest('/h3c/story/taken',{job}).catch(()=>{});}
+      else if(this.stillPromptJob?.starting)this.stillPromptJob=null;
+    }
+  }
+
+  async cancelStillPrompts() {
+    const job=this.stillPromptJob?.id;
+    if(job)await this.stillRequest('/h3c/story/cancel',{job});
+  }
+  async generateReference(key) {
+    const result=await this.referenceClient.generateAsset(key);this.recoverReferences();return result;
+  }
+  async approveReference(request) {return applyReferenceApproval(this.referenceHost,request);}
+  recoverImageResult(promptId) {
+    if(this.removed||!promptId)return;
+    const state=this.referenceState();
+    const pending=receipt=>receipt.prompt_id===promptId&&!receipt.historical&&!['complete','failed','cancelled'].includes(receipt.state);
+    if(preparationOf(state).requests.some(pending))this.recoverReferences();
+    if((state.still_requests??[]).some(pending))this.recoverStills();
+  }
+  async recoverReferences() {
+    clearTimeout(this.referenceTimer);
+    try{await this.referenceClient.recover();}catch(error){const panel=this.editor.cast.preparation;if(panel){panel.message=error.message;panel.render();}}
+    if(!this.removed&&preparationOf(this.referenceState()).requests.some(r=>!r.historical&&!['complete','failed','cancelled'].includes(r.state)))
+      this.referenceTimer=setTimeout(()=>this.recoverReferences(),3000);
+  }
+  async reuseReferenceScene(key,source) {
+    const before=this.widget.value,context=this.referenceContext(),rows=await this.referenceCatalog();
+    if(before!==this.widget.value||context!==this.referenceContext())throw Error('The scene changed before reference reuse.');
+    const target=rows.find(r=>r.key===key),origin=rows.find(r=>r.key===source);
+    const candidate=origin?.candidates.find(c=>c.id===origin.approved?.candidate_id);
+    if(!target||target.role!=='scene_layout'||origin?.status!=='approved'||!candidate)throw Error('Select an approved composed scene.');
+    const state=this.referenceState(),preparation=state.reference_preparation??=preparationOf(state);
+    let row=preparation.assets.find(r=>r.key===key);if(!row)preparation.assets.push(row=structuredClone(target));
+    const copy={...structuredClone(candidate),id:'reuse:'+crypto.randomUUID(),input_fingerprint:target.input_fingerprint,
+      provenance:{...candidate.provenance,reused_asset:source,reused_revision:origin.approved.revision}};
+    row.candidates.push(copy);await this.writeStillState(state);
+    return this.approveReference({asset_key:key,candidate_id:copy.id,expected_revision:row.approved?.revision??0});
+  }
+
+  async openStillGenerator() {
+    const snapshot=await app.graphToPrompt();
+    const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+    const recipe=captureRecipe(snapshot,id);if(!recipe)throw Error('Connect a Still Recipe first.');
+    const root=app.rootGraph??app.graph,rootId=recipe.output[0].split(':')[0];
+    const node=root.getNodeById(rootId);if(!node)throw Error('The connected generator is missing.');
+    studio().close();if(app.canvas.graph!==root)app.canvas.setGraph(root);
+    app.canvas.deselectAllNodes();app.canvas.selectNode(node);app.canvas.centerOnNode(node);
+  }
+
+  async stillControls() {
+    const snapshot=await app.graphToPrompt();
+    const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+    const recipe=captureRecipe(snapshot,id);
+    return recipe?{...recipeControls(snapshot,recipe),seedScope:recipe.adapter==='pixels'&&!compiledVideoOutput(snapshot,id)?'box':'native'}:null;
+  }
+
+  async generateStill(request) {
+    const receipt=await this.stillClient.generate(request);
+    this.recoverStills();return receipt;
+  }
+
+  async recoverStills() {
+    clearTimeout(this.stillTimer);
+    try {await this.stillClient.recover();} catch(error) {this.editor.frameImages.note(error.message);}
+    if(!this.removed && parseState(this.widget.value).still_requests?.some(item=>!['complete','failed','cancelled'].includes(item.state)))
+      this.stillTimer=setTimeout(()=>this.recoverStills(),3000);
+  }
+
+  async stillSources(request) {
+    const snapshot=await app.graphToPrompt();
+    const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+    const body=captureStillBody(snapshot,id,request);
+    if(this.project?.project) body.name=this.project.project.sequence;
+    delete body.workflow;
+    return this.stillRequest('/h3c/stills/sources',body);
+  }
+
+  async prepareStill(request) {
+    const snapshot=await app.graphToPrompt();
+    const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+    const recipe=captureRecipe(snapshot,id);
+    if (!recipe) throw new Error('Connect an H3 Still Recipe to this Timeline.');
+    const body=captureStillBody(snapshot,id,{...request,request_id:request.request_id ?? crypto.randomUUID(),recipe});
+    if(this.project?.project) {
+      body.name=this.project.project.sequence;
+      body.workflow.api[id].inputs.name=body.name;
+    }
+    const result=await this.stillRequest('/h3c/stills/prepare',body);
+    if (!result.ok) throw new Error(result.error ?? 'Could not prepare the still recipe.');
+    return {...result,request:body};
+  }
+
+  async importGuide(file) {
+    const body = new FormData();body.append('image',file);
+    const response = await api.fetchApi('/h3c/stills/import',{method:'POST',body});
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error ?? 'Could not import the guide.');
+    this.node.properties??={};
+    const guides=this.node.properties.h3c_manual_guides??=[];
+    if(!guides.some(guide=>JSON.stringify(guide)===JSON.stringify(result.file)))guides.push(structuredClone(result.file));
+    return result.file;
+  }
+
+  async readBoundary(boxId) {
+    for (let attempt=0;attempt<3;attempt++) {
+      const body=this.requestBody(), snapshot=JSON.stringify(body), revision=this.project?.project?.revision;
+      const state=parseJSON(body.timeline), index=state.boxes?.findIndex(box=>box.id===boxId);
+      if (index==null || index<0) throw new Error('The target clip was removed.');
+      const ids=[state.boxes[index-1]?.id,boxId].filter(Boolean);
+      let status;
+      if (this.project) {
+        const current=await this.project.refresh();
+        if (this.project.conflict) throw new Error('The attached project changed. Resolve its edits before accepting a guide.');
+        status=current.status;
+      } else {
+        const response=await api.fetchApi(STATUS_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...body,follow:false})});
+        status=await response.json();
+      }
+      if (!status?.ok) throw new Error(status?.error ?? 'Could not read saved boundary takes.');
+      const found=await Promise.all(ids.map(async id=>[id,await this.takesClient.send('list',{box:id})]));
+      if (snapshot!==JSON.stringify(this.requestBody()) || revision!==this.project?.project?.revision) continue;
+      const failed=found.find(([,list])=>!list.ok);
+      if (failed) throw new Error(failed[1].error ?? 'Could not read archived boundary takes.');
+      return boundarySnapshot(state,boxId,status,Object.fromEntries(found.map(([id,list])=>[id,list.box])));
+    }
+    throw new Error('The Timeline changed while reading saved takes. Try accepting the guide again.');
+  }
+
+  async uploadPicture(file) {
+    if (this.project) return this.uploadProjectAsset(file, 'picture');
+    const body = new FormData();
+    body.append('image', file);
+    body.append('type', 'input');
+    body.append('subfolder', 'h3_pictures');
+    const response = await api.fetchApi('/upload/image', {method: 'POST', body});
+    if (!response.ok) throw new Error(`Could not upload the picture (HTTP ${response.status}).`);
+    const result = await response.json();
+    return {file: {filename: result.name, subfolder: result.subfolder, type: result.type}};
+  }
+
+  async uploadReference(file,kind) {
+    if(kind==='image')return this.uploadPicture(file);
+    if(kind==='audio'||kind==='video_audio')return this.uploadAudio(file);
+    if(kind!=='video')throw new Error('Choose an image, video or audio reference.');
+    if(this.project)return this.uploadProjectAsset(file,'video');
+    const body=new FormData();body.append('image',file);body.append('type','input');body.append('subfolder','h3_references');
+    const response=await api.fetchApi('/upload/image',{method:'POST',body});
+    if(!response.ok)throw new Error(`Could not upload the video (HTTP ${response.status}).`);
+    const result=await response.json();
+    return {file:{filename:result.name,subfolder:result.subfolder,type:result.type}};
+  }
+
+  async describeImage(action,ref,text) {
+    const body={action,text};
+    const source=ref=> {
+      if(ref?.mediaFile) {
+        const file=ref.mediaFile;
+        return {file:{filename:file.filename,subfolder:file.subfolder??'',type:file.type??'input'}};
+      }
+      if(ref?.refmod) {
+        const mod=effectiveRefmods(this.editor.state,{includeDisabled:true}).find(item=>item.slot===ref.name);
+        if(mod)return {refmod:{name:mod.name,member:mod.member??-1,description:mod.description}};
+      }
+      return {};
+    };
+    Object.assign(body,source(ref));
+    if(action==='clear_all')body.images=this.editor.referenceOptions().filter(ref=>ref.name.startsWith('image'))
+      .map(ref=>({slot:ref.name,...source(ref)}));
+    if(['resolve','regenerate'].includes(action)) {
+      const controller=this.story();
+      if(controller) {
+        const {output}=await app.graphToPrompt();
+        body.prompt=output;body.story=String(controller.node.id);
+      }
+    }
+    const response=await api.fetchApi('/h3c/images/description',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(response.status===404)throw new Error('Restart ComfyUI, then refresh this page to enable image descriptions.');
+    const result=await response.json();
+    if(!response.ok||!result.ok)throw new Error(result.error??'Could not update the image description.');
+    return result;
+  }
+
+  async loadRefmods() {
+    const response = await api.fetchApi('/h3c/refmods');
+    if (response.status === 404) throw new Error('The RefMod route is unavailable. Restart ComfyUI, then refresh the library.');
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.error || `Could not read the RefMod library (HTTP ${response.status}).`);
+    if (!Array.isArray(result?.entries)) throw new Error('ComfyUI returned an invalid RefMod library.');
+    this.refmodChoices = result.entries;
+    this.editor.renderRefmods();
+    this.editor.render();
+  }
+
+  chain(widget, extra) {
+    if (!widget) return;
+    const previous = widget.callback;
+    widget.callback = function (...args) {
+      const result = previous?.apply(this, args);
+      extra();
+      return result;
+    };
+  }
+
+  hook(name, extra) {
+    const previous = this.node[name];
+    this.node[name] = function (...args) {
+      const result = previous?.apply(this, args);
+      extra(...args);
+      return result;
+    };
+  }
+
+  relayout() {
+    const node = this.node;
+    if (!node.size || typeof node.computeSize !== 'function') return;
+    const needed = Number(node.computeSize()?.[1]) || 0;
+    if (needed > node.size[1] + 1) node.setSize?.([node.size[0], needed]);
+    node.setDirtyCanvas?.(true, true);
+  }
+
+  // Nodes saved with the full editor on them shrink to the face; the width stays.
+  fit() {
+    const node = this.node;
+    if (!node.size || typeof node.computeSize !== 'function') return;
+    const needed = Number(node.computeSize()?.[1]) || 0;
+    if (needed && node.size[1] > needed) node.setSize?.([node.size[0], needed]);
+  }
+
+  replaceTimeline(text) {
+    this.widget.value = text;
+    this.editor.load();
+    this.saved.changed();
+    this.schedule(0);
+    this.node.setDirtyCanvas?.(true, true);
+  }
+
+  async queue(count, box, bridge) {
+    this.submitting = true;
+    this.requested = box ?? null;
+    this.requestedBridge = bridge ?? null;
+    const one = bridge != null ? 'one bridge' : 'one box';
+    try {
+      if (this.project) return await this.project.render({count: box == null && bridge == null ? 1 : count,
+        boxId: box != null ? this.editor.state.boxes[box - 1]?.id : undefined, bridgeId: bridge});
+      const definitions=await (await api.fetchApi('/object_info')).json();
+      for(let run=0;run<count;run++) {
+        const snapshot=await app.graphToPrompt();
+        const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+        const outputs=videoOutputs(snapshot,id,definitions),prompt=isolateVideoPrompt(snapshot,id,outputs);
+        const target=prompt.output[id];
+        if(box!=null || bridge!=null) {
+          if(typeof target.inputs.timeline!=='string') throw new Error(`The Timeline boxes must be editable here to render ${one}.`);
+          const request=bridge!=null?{render_bridge:bridge}:{render_box:box};
+          target.inputs.timeline=stringifyJSON({...parseJSON(target.inputs.timeline),...request});
+        }
+        const queued=await this.stillRequest('/prompt',{prompt_id:crypto.randomUUID(),prompt:prompt.output,
+          partial_execution_targets:outputs,extra_data:{extra_pnginfo:{workflow:prompt.workflow}}});
+        if(queued.error) throw new Error(queued.error.message??String(queued.error));
+      }
+    } catch (error) {
+      this.requested = null;
+      this.requestedBridge = null;
+      throw error;
+    } finally { this.submitting = false; }
+  }
+
+  settingChanged(name) {
+    if (name === 'context_frames') this.editor.contextChanged();
+    this.changed();
+  }
+
+  changed() {
+    this.editor.setStatus(null);
+    this.saved.changed();
+    this.schedule();
+    this.showProgress();
+  }
+
+  schedule(delay = 300) {
+    ++this.request;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.refresh(), delay);
+  }
+
+  // The Timeline's name, text and render settings, as every status and takes request sends them.
+  requestBody() {
+    return { name: this.project?.project?.sequence ?? widgetValue(this.node, 'name'), timeline: this.widget.value ?? '',
+      settings: Object.fromEntries(SETTINGS.map((key) => [key, widgetValue(this.node, key)])) };
+  }
+
+  async refresh() {
+    await this.saved.ready;
+    this.recoverStills();this.recoverReferences();
+    if (this.project) {
+      try {
+        await this.saved.ready;
+        if (!this.project.busy) await this.project.refresh();
+        const status = this.project.project?.status;
+        if (status && !this.project.conflict) this.editor.setStatus(status);
+      } catch (error) {this.editor.setStatus({ok: false, error: error.message});}
+      return;
+    }
+    const name = widgetValue(this.node, 'name');
+    const request = ++this.request;
+    if (!name) {
+      this.editor.setStatus(null);
+      return;
+    }
+    const input = () => JSON.stringify(this.requestBody());
+    const body = input();
+    try {
+      const status = await this.takesClient.watch(api.fetchApi(STATUS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: this.takesClient.statusBody(body),
+      }).then((response) => response.json()));
+      if (request === this.request && !this.removed) this.editor.setStatus(body === input() ? status : null);
+    } catch (error) {
+      if (request === this.request && !this.removed) this.editor.setStatus(body === input()
+        ? { ok: false, error: `Status unavailable: ${error?.message ?? error}` } : null);
+    }
+  }
+
+  configureProject() {
+    const node = this.node;
+    forkProject(node);
+    const metadata = node.properties?.h3c_project;
+    if (metadata?.mode !== 'attached' && !this.project) return;
+    if (metadata?.mode === 'attached' && this.project?.metadata === metadata) return;
+    const shown = studio(), page = shown.page, reopen = shown.host === this && !shown.root.hidden;
+    if (reopen) shown.close();
+    if (metadata?.mode !== 'attached') {
+      this.saved.destroy(); this.project = null; this.editor.host.projectAttached = false;
+      // Detaching the same node must also leave the reserved native sequence.
+      if (!node.properties.h3c_fork_sequence) {
+        node.properties.h3c_project = {mode: 'fork'}; forkProject(node);
+      }
+      this.saved = mountSavedState(node, this.face.root, {app, api, loaded: () => {
+        this.editor.load(); this.schedule(0);
+      }});
+      if (reopen) this.openStudio(page, {link: false});
+      return;
+    }
+    this.saved?.destroy(); this.project?.destroy();
+    const bar = document.createElement('div'), label = document.createElement('span'), choices = document.createElement('span');
+    bar.style.cssText = 'font-size:11px;padding:4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap';
+    bar.append(label, choices); this.face.root.append(bar);
+    const key = `${node.graph?.id ?? ''}/${node.id}/${metadata.id}`;
+    if (!projectSessions.has(key)) projectSessions.set(key, {});
+    const project = this.project = new ProjectSession({metadata, session: projectSessions.get(key),
+      read: () => ({timeline: this.widget.value, settings: this.requestBody().settings,
+        assets: node.properties.h3c_asset_bindings ?? []}),
+      apply: value => {
+        this.widget.value = stringifyJSON(value.timeline);
+        for (const name of SETTINGS) if (findWidget(node, name) && value.settings?.[name] != null)
+          findWidget(node, name).value = value.settings[name];
+        if (value.sequence) findWidget(node, 'name').value = value.sequence;
+        node.properties.h3c_asset_bindings = structuredClone(value.assets ?? []);
+        this.editor.load(); node.setDirtyCanvas?.(true, true);
+      },
+      status: (message, conflict = false) => {label.textContent = message; choices.hidden = !conflict;},
+      request: async (path, options = {}) => {
+        if (options.method === 'PUT') await this.registerProjectFiles(options.body);
+        const response = await api.fetchApi(path, {...options,
+          headers: {'Content-Type': 'application/json', ...options.headers},
+          ...(options.body ? {body: stringifyJSON(options.body)} : {})});
+        const result = parseJSON(await response.text());
+        if (!response.ok) {const error = new Error(result.error?.message ?? `Project HTTP ${response.status}`);
+          Object.assign(error, {status: response.status, code: result.error?.code}); throw error;}
+        return result;
+      }});
+    this.editor.host.projectAttached = true;
+    for (const [text, saved] of [['Load project edits', true], ['Keep my edits', false]]) {
+      const button = document.createElement('button'); button.textContent = text;
+      button.onclick = () => project.resolve(saved).catch(error => {label.textContent = error.message;}); choices.append(button);
+    }
+    choices.hidden = true;
+    const ready = project.load(); ready.catch(error => {label.textContent = error.message;});
+    let timer;
+    this.saved = {bar, ready,
+      flush: async () => {await ready; await project.save();},
+      changed: () => {clearTimeout(timer); timer = setTimeout(() => project.save().catch(() => {}), 250);},
+      destroy: () => {clearTimeout(timer); project.destroy(); bar.remove();}};
+    if (reopen) this.openStudio(page, {link: false});
+  }
+
+  async uploadProjectAsset(file, kind, expectedHash) {
+    const body = new FormData(); body.append('kind', kind); body.append('file', file);
+    if (expectedHash) body.append('expected_sha256', expectedHash);
+    const response = await api.fetchApi('/h3c/api/v1/assets', {method: 'POST', body});
+    const asset = parseJSON(await response.text());
+    if (!response.ok) throw new Error(asset.error?.message ?? 'Could not upload project source.');
+    const uploaded = this.node.properties.h3c_uploaded_assets ??= [];
+    const sourceFile = asset.files[kind]; uploaded.push({asset_id: asset.id, file: sourceFile});
+    return {file: sourceFile, title: file.name ?? sourceFile.filename,
+      ...(kind === 'audio' ? await this.audioInfo(sourceFile) : {})};
+  }
+
+  async registerProjectFiles(body) {
+    const line = body.timeline;
+    const old = this.project.project?.inspection?.timeline ?? this.project.project?.timeline ?? {};
+    const fileKey = file => stringifyJSON([file?.type, file?.subfolder ?? '', file?.filename]);
+    const targets = value => [
+      ...Object.entries(value.reference_replacements??{}).map(([slot,item])=>({file:item.file,binding:{kind:'reference_replacement',slot}})),
+      ...(value.pictures ?? []).map(item => ({file: item.file, binding: {kind: 'picture', slot: item.slot, ...(item.title ? {title: item.title} : {})}})),
+      ...(value.audio_clips ?? []).map(item => ({file: item.file, binding: {kind: 'audio_clip', slot: item.slot}})),
+      ...(value.voice_clips ?? []).map(item => ({file: item.file, binding: {kind: 'voice_clip', slot: item.slot}})),
+      ...(value.plates ?? []).map(item => ({file: item.image, binding: {kind: 'plate', id: item.id}})),
+      ...(value.boxes ?? []).flatMap(box => (box.previews ?? []).map(item => ({file: item.guide,
+        binding: {kind: 'guide', box: box.id, ...(item.target ? {target: item.target} : {shot: item.shot})}}))),
+      ...[...(value.boxes ?? []).flatMap(box=>(box.previews ?? []).flatMap(item=>item.images ?? [])),
+          ...(value.still_requests ?? []).flatMap(item=>item.images ?? []),
+          ...(value.reference_preparation?.assets??[]).flatMap(item=>item.candidates??[])].map(image=>({file: image.file,
+        binding:{kind:'candidate',request_id:image.request_id,prompt_id:image.prompt_id,batch_index:image.batch_index}}))
+    ].filter(item => item.file);
+    const identity = binding => stringifyJSON([binding.kind, binding.slot, binding.id, binding.box,
+      binding.kind==='guide' ? binding.target ?? (binding.shot===1?{kind:'first'}:{kind:'shot',shot:binding.shot}) : null,
+      binding.request_id,binding.prompt_id,binding.batch_index]);
+    const desired = [...new Map(targets(line).map(item=>[identity(item.binding),item])).values()], prior = targets(old);
+    let bindings = structuredClone(body.assets ?? []);
+    for (const target of desired) {
+      const was = prior.find(item => identity(item.binding) === identity(target.binding));
+      const registered = bindings.some(asset => asset.bindings.some(binding => identity(binding) === identity(target.binding)));
+      if (registered && was && fileKey(was.file) === fileKey(target.file)) {
+        if (target.binding.kind === 'picture') for (const asset of bindings) for (const binding of asset.bindings) {
+          if (identity(binding) !== identity(target.binding)) continue;
+          if (target.binding.title) binding.title = target.binding.title; else delete binding.title;
+        }
+        continue;
+      }
+      let upload = this.node.properties.h3c_uploaded_assets?.find(item => fileKey(item.file) === fileKey(target.file));
+      if (!upload) {
+        const response = await api.fetchApi(`/view?${new URLSearchParams(target.file)}`);
+        if (!response.ok) throw new Error('Could not read the selected source for this project.');
+        const role = target.binding.kind==='reference_replacement'
+          ? {image:'picture',video:'video',audio:'audio',video_audio:'audio'}[referenceType(target.binding.slot)]
+          : ['audio_clip', 'voice_clip'].includes(target.binding.kind) ? 'audio'
+          : ['plate', 'guide', 'candidate'].includes(target.binding.kind) ? 'guide' : 'picture';
+        const source = await response.blob();
+        await this.uploadProjectAsset(new File([source], target.file.filename), role);
+        upload = this.node.properties.h3c_uploaded_assets.at(-1);
+      }
+      bindings = bindings.map(asset => ({...asset, bindings: asset.bindings.filter(binding => identity(binding) !== identity(target.binding))}));
+      bindings.push({asset_id: upload.asset_id, bindings: [target.binding]});
+      // Use the registered role file in the editable document after ingestion.
+      for(const authored of targets(line).filter(item=>identity(item.binding)===identity(target.binding)))
+        Object.assign(authored.file, upload.file);
+    }
+    const active = new Set(desired.map(item => identity(item.binding)));
+    const textHash = line.timed_text?.source_sha256;
+    bindings = bindings.map(asset => ({...asset, bindings: asset.bindings.filter(binding => binding.kind !== 'whisper'
+      || binding.source_sha256 === textHash)}));
+    if (textHash && !bindings.some(asset => asset.bindings.some(binding => binding.kind === 'whisper'))) {
+      // Asset IDs identify original bytes; this also restores a prior source on Undo.
+      bindings.push({asset_id: `asset_${textHash}`, bindings: [{kind: 'whisper', source_sha256: textHash}]});
+    }
+    body.assets = bindings.map(asset => ({...asset, bindings: asset.bindings.filter(binding => binding.kind === 'whisper'
+      || (binding.kind === 'picture' && Number(binding.slot.slice(5)) <= 16) || active.has(identity(binding)))})).filter(asset => asset.bindings.length);
+  }
+}
+
+app.registerExtension({
+  name: 'h3c.timeline',
+  setup() {
+    const graphToPrompt = app.graphToPrompt;
+    app.graphToPrompt = async function (...args) {
+      for (const host of mounted) {
+        syncImageOutputs(host.node, host.editor.state);
+        host.node.properties ??= {};
+        host.node.properties.h3c_image_output_box = Math.max(1, host.editor.selected + 1);
+      }
+      return compileImageOutputs(await graphToPrompt.apply(this, args));
+    };
+    for (const type of WATCH_EVENTS) {
+      api.addEventListener(type, (event) => {
+        watch = watchEvent(watch, type, event.detail);
+        for (const host of mounted) {
+          if (RUN_ENDS.has(type)) {
+            host.requested = host.requestedBridge = null;
+            host.recoverImageResult(event.detail?.prompt_id);
+          }
+          host.showProgress();
+        }
+      });
+    }
+    api.addEventListener('execution_success', () => {
+      for (const host of mounted) host.schedule(0);
+    });
+  },
+  beforeRegisterNodeDef(nodeType, nodeData) {
+    if (nodeData?.name !== NODE_TYPE) return;
+    const onNodeCreated = nodeType.prototype.onNodeCreated;
+    nodeType.prototype.onNodeCreated = function (...args) {
+      const result = onNodeCreated?.apply(this, args);
+      if (!findWidget(this, 'timeline')) return result;
+      const host = new TimelineHost(this);
+      host.editor.startIfEmpty();
+      this.setSize?.([Math.max(this.size?.[0] ?? 0, 420), Number(this.computeSize?.()?.[1]) || FACE_HEIGHT]);
+      host.schedule(0);
+      return result;
+    };
+  },
+});

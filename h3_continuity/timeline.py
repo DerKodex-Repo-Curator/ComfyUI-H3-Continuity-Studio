@@ -1,0 +1,1155 @@
+"""H3 Timeline rules: the timeline JSON, box lengths, reference mentions, H3 modes and slots, and
+matching boxes with saved segments. Pure Python, no torch."""
+
+import hashlib
+import json
+import math
+import re
+import zlib
+from copy import deepcopy
+from dataclasses import dataclass, field
+
+from .timing import FPS, seconds, effective_audio_context
+from . import timed_text
+
+MAX_FRAMES = 362
+# A Timeline may raise its box limit to this with "max_frames"; boxes past MAX_FRAMES are sampled in context windows.
+LONG_MAX_FRAMES = 991
+GRID = 17
+MIN_FRESH_FRAMES = 22
+MIN_CONTINUING_FRAMES = 17
+MAX_REF_IMAGES = 9
+MAX_REF_AUDIOS = 3
+MAX_REF_VIDEOS = 3
+VIDEO_SLOTS = [f"video{i}" for i in range(1, MAX_REF_VIDEOS + 1)]
+VIDEO_AUDIO_SLOTS = [f"video_audio{i}" for i in range(1, MAX_REF_VIDEOS + 1)]
+IMAGE_SLOTS = [f"image{i}" for i in range(1, 17)]
+AUDIO_SLOTS = [f"audio{i}" for i in range(1, MAX_REF_AUDIOS + 1)]
+MAX_SEED = 2**64 - 1
+# A bridge's new frames: 17j - 5, so carried and frozen ends of 17k + 5 frames keep the run on H3's latent grid.
+BRIDGE_FRAMES = (12, 29, 46)
+MENTION = re.compile(r"(?<![\w@])@(image|audio|video_audio|video)(\d+)(?!\w)", re.IGNORECASE)
+RAW_TAG = re.compile(r"<(?:Picture|Audio|Video) \d+>")
+IMAGE_SLOT = re.compile(r"@?image(\d+)", re.IGNORECASE)
+MEMORY_MODES = ("off", "scene", "selected", "cast")
+
+
+@dataclass
+class Box:
+    id: str
+    frames: int
+    prompt: str
+    seed: int
+    cut: bool
+    first: str
+    last: str
+    previews: list = field(default_factory=list)
+    plate_changes: list = field(default_factory=list)
+    memory: str = "off"
+    memories: list = field(default_factory=list)
+    new_scene: bool = False
+    flf_refmods: bool = False
+
+
+@dataclass
+class Timeline:
+    prompt: str
+    boxes: list
+    render_box: int | None = None
+    plates: list = field(default_factory=list)
+    refmods: list = field(default_factory=list)
+    disabled_refs: list = field(default_factory=list)
+    audio_clips: list = field(default_factory=list)
+    pictures: list = field(default_factory=list)
+    voice_clips: list = field(default_factory=list)
+    reference_descriptions: dict = field(default_factory=dict)
+    reference_replacements: dict = field(default_factory=dict)
+    timed_text: dict | None = None
+    bible: dict | None = None
+    # Each box's Story fields as saved: {"schedule", "source", "cast"}. Not on Box, whose every field a box plan records.
+    story: list = field(default_factory=list)
+    # Whether each box plays exactly its frames; empty without `parse`. Not on Box either.
+    exact: list = field(default_factory=list)
+    # The bridges on cuts, each {"before", "frames", "seed", "prompt"}; outside the boxes, which never see them.
+    bridges: list = field(default_factory=list)
+    render_bridge: str | None = None
+    still_requests: list = field(default_factory=list)
+    continuity: dict | None = None
+    reference_preparation: dict | None = None
+    still_prompt_preparation: dict | None = None
+    # Most frames a box can generate: 362 unless the JSON asks for more (windowed sampling).
+    max_frames: int = MAX_FRAMES
+
+
+@dataclass
+class Slots:
+    mode: str
+    references: list
+    audios: list
+    first: str
+    last: str
+    tags: dict
+    refmods: list = field(default_factory=list)
+
+    @property
+    def image_inputs(self):
+        return [name for name in self.references if name.startswith("image")
+                and name not in {ref["slot"] for ref in self.refmods}]
+
+    @property
+    def audio_inputs(self):
+        return [name for name in self.audios if name.startswith("audio")
+                and name not in {ref["slot"] for ref in self.refmods}]
+
+    @property
+    def video_inputs(self):
+        return [name for name in self.references if name.startswith('video')]
+
+    @property
+    def video_audio_inputs(self):
+        return [name for name in self.audios if name.startswith('video_audio')]
+
+
+def reference_disabled(name, disabled):
+    return name in disabled or (name.startswith("video_audio") and name.replace("video_audio", "video") in disabled)
+
+
+def _error(message):
+    return ValueError(f"H3 Timeline: {message}")
+
+
+class BridgeError(ValueError):
+    """A bad entry in the Timeline's bridges; `index` counts from 0, so Prepare can name it."""
+
+    def __init__(self, index, message):
+        super().__init__(f"H3 Timeline: {message}")
+        self.index = index
+
+
+def slot_number(name):
+    return int(re.sub(r"\D", "", name))
+
+
+def is_picture_slot(name):
+    return isinstance(name, str) and re.fullmatch(r"image[1-9]\d*", name) is not None
+
+
+def is_studio_slot(name):
+    """Pictures saved in the Timeline itself are numbered after the node's 16 wired inputs, with no last slot."""
+    return is_picture_slot(name) and slot_number(name) > len(IMAGE_SLOTS)
+
+
+def is_voice_slot(name):
+    """Voice clips saved in the Timeline are numbered after the node's 3 wired audio inputs."""
+    return isinstance(name, str) and re.fullmatch(r"audio[1-9]\d*", name) is not None and slot_number(name) > MAX_REF_AUDIOS
+
+
+def parse(text):
+    """Timeline from the node's JSON; raises ValueError naming the problem."""
+    try:
+        data = json.loads(text or "{}")
+    except json.JSONDecodeError as error:
+        raise _error(f"the timeline is not valid JSON ({error.msg} at character {error.pos})") from None
+    if not isinstance(data, dict):
+        raise _error("the timeline must be a JSON object")
+    if data.get("version", 1) != 1:
+        raise _error(f"timeline version {data['version']!r} is not supported; this node reads version 1")
+    boxes = data.get("boxes") or []
+    if not isinstance(boxes, list):
+        raise _error("'boxes' must be a list")
+    target = data.get("render_box")
+    if target is not None and (type(target) is not int or not 1 <= target <= len(boxes)):
+        raise _error("render_box must be the number of a box in this timeline")
+    parsed = Timeline(_text(data.get("prompt"), "the shared prompt"), [_box(raw, n) for n, raw in enumerate(boxes, 1)], target)
+    parsed.exact = [_exact(raw, n, box) for n, (raw, box) in enumerate(zip(boxes, parsed.boxes), 1)]
+    from . import still_scene, reference_assets
+    parsed.reference_preparation = reference_assets.validate(data["reference_preparation"]) if "reference_preparation" in data else None
+    if "still_prompt_preparation" in data:
+        from . import still_prompt_preparation
+        parsed.still_prompt_preparation = still_prompt_preparation.validate(data["still_prompt_preparation"])
+    parsed.continuity = still_scene.validate(data["continuity"]) if "continuity" in data else None
+    parsed.still_requests = data.get("still_requests", [])
+    if not isinstance(parsed.still_requests, list) or any(not isinstance(item, dict) for item in parsed.still_requests):
+        raise _error("still_requests must be a list of request receipts")
+    parsed.timed_text = timed_text.validate(data.get("timed_text"))
+    parsed.bible = data.get("bible")
+    parsed.story = [{"schedule": raw.get("schedule"), "source": raw.get("source"),
+                     "cast": raw["cast"] if isinstance(raw.get("cast"), dict) else {}} for raw in boxes]
+    for index, box in enumerate(parsed.boxes):
+        if box.memory not in MEMORY_MODES:
+            raise _error(f"box {index + 1} memory must be off, scene, selected or cast")
+        if not isinstance(box.memories, list) or len(box.memories) > 3:
+            raise _error(f"box {index + 1} can remember at most 3 earlier moments")
+        for item in box.memories:
+            if not isinstance(item, dict) or type(item.get("frame")) is not int or item["frame"] < 0:
+                raise _error(f"box {index + 1} memories need a source box and a nonnegative frame")
+            _text(item.get("label"), "memory description")
+        if box.memory != "cast":
+            memory_sources(parsed, index)
+    parsed.audio_clips = data.get("audio_clips", [])
+    if not isinstance(parsed.audio_clips, list):
+        raise _error("audio_clips must be a list")
+    audio_slots = set()
+    for clip in parsed.audio_clips:
+        if not isinstance(clip, dict) or clip.get("slot") not in AUDIO_SLOTS or clip["slot"] in audio_slots:
+            raise _error("audio clips need unique audio1, audio2 or audio3 slots")
+        audio_slots.add(clip["slot"])
+        if "file" in clip:
+            audio_file(clip["file"])
+        for key in ("start", "source_start", "duration"):
+            value = _number(clip.get(key), f"audio clip {key}")
+            if value < 0 or (key == "duration" and value == 0):
+                raise _error(f"audio clip {key} must be {'positive' if key == 'duration' else 'nonnegative'}")
+        _text(clip.get("description"), "audio clip description")
+        if clip.get("layer", "music") not in ("music", "soundscape", "shot"):
+            raise _error("audio clip layer must be music, soundscape or shot")
+        if "in_full_video" in clip:
+            if type(clip["in_full_video"]) is not bool:
+                raise _error("audio clip in_full_video must be true or false")
+            if clip["in_full_video"] and "file" not in clip:
+                raise _error("only an uploaded audio clip can play in the full video")
+    parsed.pictures = data.get("pictures", [])
+    if not isinstance(parsed.pictures, list):
+        raise _error("pictures must be a list")
+    held = set()
+    for picture in parsed.pictures:
+        if not isinstance(picture, dict) or not is_studio_slot(picture.get("slot")) or picture["slot"] in held:
+            raise _error("Studio pictures need unique slots from image17 up")
+        held.add(picture["slot"])
+        picture_file(picture.get("file"))
+        _text(picture.get("title"), "Studio picture title")
+    parsed.voice_clips = data.get("voice_clips", [])
+    if not isinstance(parsed.voice_clips, list):
+        raise _error("voice_clips must be a list")
+    voiced = set()
+    for clip in parsed.voice_clips:
+        if not isinstance(clip, dict) or not is_voice_slot(clip.get("slot")) or clip["slot"] in voiced:
+            raise _error("voice clips need unique slots from audio4 up")
+        voiced.add(clip["slot"])
+        audio_file(clip.get("file"))
+    from . import reference_replacements
+    parsed.reference_replacements = reference_replacements.validate(data.get('reference_replacements', {}))
+    reference_replacements.pairing(parsed)
+    parsed.reference_descriptions = data.get("reference_descriptions", {})
+    if not isinstance(parsed.reference_descriptions, dict) or any(
+            not is_picture_slot(key) or not isinstance(value, dict)
+            or not isinstance(value.get("text"), str) or not isinstance(value.get("source"), str)
+            for key, value in parsed.reference_descriptions.items()):
+        raise _error("reference_descriptions must map image slots to text and source")
+    parsed.disabled_refs = data.get("disabled_refs", [])
+    if not isinstance(parsed.disabled_refs, list) or any(
+            not is_picture_slot(name) and name not in AUDIO_SLOTS and not is_voice_slot(name)
+            and name not in VIDEO_SLOTS and name not in VIDEO_AUDIO_SLOTS and not reference_replacements.kind(name)
+            for name in parsed.disabled_refs):
+        raise _error("disabled_refs must be a list of image, video, video_audio or audio slots")
+    parsed.refmods = data.get("refmods", [])
+    if not isinstance(parsed.refmods, list):
+        raise _error("refmods must be a list")
+    assigned = set()
+    for ref in parsed.refmods:
+        if not isinstance(ref, dict) or (not is_picture_slot(ref.get("slot")) and ref.get("slot") not in AUDIO_SLOTS):
+            raise _error("a RefMod needs an image or audio slot")
+        if ref["slot"] in assigned:
+            raise _error(f"multiple RefMods use {ref['slot']}")
+        assigned.add(ref["slot"])
+        if ref["slot"] in audio_slots:
+            raise _error(f"{ref['slot']} has both a Timeline audio clip and a RefMod")
+        if ref["slot"] in held:
+            raise _error(f"{ref['slot']} has both a Studio picture and a RefMod")
+        if not isinstance(ref.get("name"), str) or not ref["name"]:
+            raise _error("a RefMod needs a saved name")
+        strength = _number(ref.get("strength", 1), "RefMod strength")
+        if not 0 <= strength <= 1:
+            raise _error("RefMod strength must be between 0 and 1")
+        if type(ref.get("member", -1)) is not int or ref.get("member", -1) < -1:
+            raise _error("a RefMod member must be a valid index")
+        _text(ref.get("description"), "RefMod description")
+        if ref.get("kind") not in ("image", "video", "audio"):
+            raise _error("a RefMod needs its stored reference type; select it again")
+        if (ref["kind"] == "audio") != ref["slot"].startswith("audio"):
+            raise _error("audio RefMods need an audio slot; visual RefMods need an image slot")
+    limit = data.get("max_frames", MAX_FRAMES)
+    if type(limit) is not int or not MAX_FRAMES <= limit <= LONG_MAX_FRAMES or limit % GRID != 5:
+        raise _error(f"max_frames must be a length on the 17k+5 grid from {MAX_FRAMES} to {LONG_MAX_FRAMES} frames")
+    parsed.max_frames = limit
+    parsed.plates = data.get("plates", [])
+    if not isinstance(parsed.plates, list):
+        raise _error("plates must be a list")
+    revisions = {}
+    for plate in parsed.plates:
+        if not isinstance(plate, dict) or not isinstance(plate.get("id"), str) or not plate["id"] or plate["id"] in revisions:
+            raise _error("plates need unique nonempty revision IDs")
+        plate["slot"] = _image_slot(plate.get("slot"), "the plate slot")
+        if not plate.get("slot"):
+            raise _error("a plate needs its original image slot")
+        if plate.get("image"):
+            preview_file(plate["image"])
+        revisions[plate["id"]] = plate
+    for n, box in enumerate(parsed.boxes, 1):
+        seen = set()
+        for change in box.plate_changes:
+            if (not isinstance(change, dict) or type(change.get("frame")) is not int
+                    or not 0 <= change["frame"] < LONG_MAX_FRAMES):
+                raise _error(f"box {n} plate changes need a valid local frame")
+            slot = _image_slot(change.get("slot"), f"box {n} plate slot")
+            change["slot"] = slot
+            fresh = is_fresh(parsed, n - 1)
+            if change["frame"] > played_frames(parsed, n - 1) - (1 if fresh else 0):
+                raise _error(f"box {n} has a plate change past its end; lengthen the box or remove the change")
+            if not slot or (slot, change["frame"]) in seen:
+                raise _error(f"box {n} has duplicate or empty plate changes")
+            seen.add((slot, change["frame"]))
+            revision = change.get("revision")
+            if not isinstance(revision, str):
+                raise _error(f"box {n} needs a plate revision or an empty string for the original")
+            if revision and (revision not in revisions or revisions[revision]["slot"] != slot or not revisions[revision].get("image")):
+                raise _error(f"box {n} has a missing accepted plate for {slot}")
+    parsed.bridges = _bridges(data.get("bridges", []), parsed)
+    target = data.get("render_bridge")
+    if target is not None:
+        if not isinstance(target, str) or target not in {bridge["before"] for bridge in parsed.bridges}:
+            raise _error("render_bridge must be the box id of one of this Timeline's bridges")
+        if parsed.render_box is not None:
+            raise _error("a run renders one box or one bridge: drop render_box or render_bridge")
+        parsed.render_bridge = target
+    if any(box.memory == "cast" for box in parsed.boxes):
+        from . import cast_memory
+        cast_memory.check(parsed)
+    return parsed
+
+
+def _text(value, what):
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise _error(f"{what} must be text")
+    return value
+
+
+def _local_file(value):
+    return (isinstance(value, dict) and value.get("type") in ("input", "output", "temp")
+            and isinstance(value.get("filename"), str) and value["filename"] not in ("", ".", "..")
+            and not re.search(r"[\\/:\x00]", value["filename"])
+            and isinstance(value.get("subfolder", ""), str))
+
+
+def audio_file(value):
+    if not _local_file(value):
+        raise _error("audio needs a local ComfyUI file")
+    return value
+
+
+def picture_file(value):
+    if not _local_file(value):
+        raise _error("a Studio picture needs a file in ComfyUI's input, output or temp folder")
+    return value
+
+
+def box_start(timeline, index):
+    return sum(played_frames(timeline, i) for i in range(index)) / FPS
+
+
+def active_audio_clips(timeline, index):
+    start = box_start(timeline, index)
+    end = start + played_frames(timeline, index) / FPS
+    return [clip for clip in timeline.audio_clips if clip["slot"] not in timeline.disabled_refs
+            and clip["start"] < end and clip["start"] + clip["duration"] > start]
+
+
+def _number(value, what):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise _error(f"{what} must be a number")
+    return value
+
+
+def _image_slot(value, what):
+    value = _text(value, what).strip()
+    if not value:
+        return ""
+    match = IMAGE_SLOT.fullmatch(value)
+    if not match:
+        raise _error(f"{what} is {value!r}; use an image slot such as image1")
+    return f"image{int(match.group(1))}"
+
+
+def _box(raw, n):
+    if not isinstance(raw, dict):
+        raise _error(f"box {n} must be a JSON object")
+    box_id = str(raw.get("id") or f"box{n}")
+    if raw.get("frames") is not None:
+        frames = round(_number(raw["frames"], f"box {n} frames"))
+    elif raw.get("seconds") is not None:
+        frames = round(_number(raw["seconds"], f"box {n} seconds") * FPS)
+    else:
+        raise _error(f"box {n} needs frames or seconds")
+    seed = raw.get("seed")
+    if seed is None:
+        seed = zlib.crc32(box_id.encode("utf-8"))
+    elif isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= MAX_SEED:
+        raise _error(f"box {n} seed must be a whole number from 0 to {MAX_SEED}")
+    return Box(box_id, frames, _text(raw.get("prompt"), f"box {n} prompt"), seed, bool(raw.get("cut")),
+               _image_slot(raw.get("first"), f"box {n} first frame"),
+               _image_slot(raw.get("last"), f"box {n} last frame"), _previews(raw.get("previews", []), n),
+               _changes(raw.get("plate_changes", []), n), raw.get("memory", "off"), raw.get("memories", []),
+               bool(raw.get("new_scene")), raw.get("flf_refmods") is True)
+
+
+def _bridges(raw, parsed):
+    if not isinstance(raw, list):
+        raise BridgeError(0, "bridges must be a list")
+    positions = {box.id: index for index, box in enumerate(parsed.boxes)}
+    bridges, taken = [], {}
+    for index, item in enumerate(raw):
+        n = index + 1
+        before = item.get("before") if isinstance(item, dict) else None
+        if not isinstance(before, str) or not before:
+            raise BridgeError(index, f"bridge {n} needs the id of the box it leads into, as before")
+        if before not in positions:
+            raise BridgeError(index, f"bridge {n} leads into box {before!r}, which this Timeline doesn't have")
+        position = positions[before]
+        if position == 0:
+            raise BridgeError(index, f"bridge {n} leads into box 1, which has no box before it")
+        if not is_fresh(parsed, position):
+            raise BridgeError(index, f"bridge {n} leads into box {position + 1}, which continues box {position}: "
+                                     "a bridge needs a box that starts with Cut or New scene")
+        if before in taken:
+            raise BridgeError(index, f"bridges {taken[before] + 1} and {n} both lead into box {position + 1}")
+        frames = item.get("frames")
+        if type(frames) is not int:
+            raise BridgeError(index, f"bridge {n} frames must be 12, 29 or 46")
+        if frames not in BRIDGE_FRAMES:
+            raise BridgeError(index, f"bridge {n} has {frames} frames; a bridge has 12, 29 or 46")
+        seed = item.get("seed")
+        if seed is None:
+            seed = zlib.crc32(f"bridge:{before}".encode("utf-8"))
+        elif isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= MAX_SEED:
+            raise BridgeError(index, f"bridge {n} seed must be a whole number from 0 to {MAX_SEED}")
+        prompt = item.get("prompt")
+        if prompt is not None and not isinstance(prompt, str):
+            raise BridgeError(index, f"bridge {n} prompt must be text")
+        taken[before] = index
+        bridges.append({"before": before, "frames": frames, "seed": seed, "prompt": prompt or ""})
+    return bridges
+
+
+def _exact(raw, n, box):
+    value = raw.get("exact", False)
+    if type(value) is not bool:
+        raise _error(f"box {n} exact must be true or false")
+    if value and box.frames < 1:
+        raise _error(f"box {n} plays at least 1 frame")
+    return value
+
+
+def memory_sources(timeline, index):
+    """Earlier delivered-frame moments as (source box index, frame after its replay, label); scene memory spans cuts
+    and resets at new scenes and appearance changes, and Cast memory chooses them from the Story bible."""
+    box = timeline.boxes[index]
+    if box.memory == "off":
+        return []
+    if box.memory == "cast":
+        from . import cast_memory
+        result = cast_memory.windows(timeline, index)
+    elif box.memory == "scene":
+        result = scene_sources(timeline, index)
+    else:
+        result = []
+        for item in box.memories:
+            candidates = [i for i, source in enumerate(timeline.boxes) if source.id == item.get("box")]
+            if len(candidates) != 1 or candidates[0] >= index:
+                raise _error(f"box {index + 1} memory must refer to a unique earlier box; choose its source again")
+            source = candidates[0]
+            if item["frame"] >= played_frames(timeline, source):
+                raise _error(f"box {index + 1} memory is past the end of box {source + 1}; choose an earlier moment")
+            result.append((source, item["frame"], item.get("label") or "visual continuity"))
+    if index and box.cut:
+        # The full preceding video covers its individual moments, independently of Cast's picture/budget filters.
+        return [(index - 1, 0, "the previous shot before this cut"),
+                *(item for item in result if box.memory == "selected" or item[0] != index - 1)]
+    return result
+
+
+def scene_sources(timeline, index):
+    """Same scene's windows for box `index`: the scene's first frame, then the moment before a cut or an earlier view
+    of the current scene."""
+    box = timeline.boxes[index]
+    start = max(i for i, item in enumerate(timeline.boxes[:index + 1])
+                if i == 0 or (item.cut and item.new_scene) or item.plate_changes)
+    if start == index:
+        return []
+    previous = played_frames(timeline, index - 1)
+    if box.cut:
+        return [(start, 0, "scene establishing view"), (index - 1, max(0, previous - 5), "the moment before this cut")]
+    return [(start, 0, "scene establishing view"),
+            (index - 1, max(0, (previous - 5) // 2), "earlier view of the current scene")]
+
+
+def _changes(value, n):
+    if not isinstance(value, list):
+        raise _error(f"box {n} plate changes must be a list")
+    return value
+
+
+def effective_plates(timeline, index, frame=0):
+    revisions = {p["id"]: p for p in timeline.plates}
+    active = {}
+    for i, box in enumerate(timeline.boxes[:index + 1]):
+        for change in sorted(box.plate_changes, key=lambda c: c["frame"]):
+            if change['slot'] in timeline.reference_replacements:
+                continue
+            if i == index and change["frame"] > frame:
+                continue
+            if change["revision"]:
+                active[change["slot"]] = revisions[change["revision"]]
+            else:
+                active.pop(change["slot"], None)
+    return active
+
+
+def plate_chain(timeline, index):
+    start = index
+    while start and not is_fresh(timeline, start):
+        start -= 1
+    values = []
+    for i in range(start, index + 1):
+        slots = box_slots(timeline, i)
+        used = set(slots.references) - {slots.first, slots.last}
+        plates = [[slot, p["id"], p["image"]] for slot, p in sorted(effective_plates(timeline, i).items()) if slot in used]
+        if plates:
+            values.append([timeline.boxes[i].id, plates])
+    return _digest(values) if values else ""
+
+
+def _preview_target(value, n):
+    if not isinstance(value, dict) or value.get('kind') not in ('first', 'last', 'shot'):
+        raise _error(f"box {n} preview target must be first, last or a numbered shot")
+    if value['kind'] == 'shot':
+        if set(value) != {'kind', 'shot'} or type(value.get('shot')) is not int or value['shot'] < 1:
+            raise _error(f"box {n} preview target needs a positive shot number")
+        return dict(kind='first') if value['shot'] == 1 else dict(value)
+    if set(value) != {'kind'}:
+        raise _error(f"box {n} endpoint target must contain only kind")
+    return dict(value)
+
+
+def _previews(value, n):
+    if not isinstance(value, list) or len(value) > LONG_MAX_FRAMES:
+        raise _error(f"box {n} previews must be a list of at most {LONG_MAX_FRAMES} shots")
+    shots, targets = set(), set()
+    for item in value:
+        if not isinstance(item, dict):
+            raise _error(f"box {n} previews must be objects")
+        if 'target' in item:
+            item['target'] = _preview_target(item['target'], n)
+            key = (item['target']['kind'], item['target'].get('shot'))
+            if key in targets:
+                raise _error(f"box {n} previews need unique targets")
+            targets.add(key)
+        else:
+            if type(item.get("shot")) is not int or item["shot"] < 1 or item["shot"] in shots:
+                raise _error(f"box {n} previews need unique positive shot numbers")
+            shots.add(item["shot"])
+        if type(item.get("frame")) is not int or not 0 <= item["frame"] < LONG_MAX_FRAMES:
+            raise _error(f"box {n} preview frame must be a whole number from 0 to {LONG_MAX_FRAMES - 1}")
+        if item.get("guide"):
+            preview_file(item["guide"])
+        if 'images' in item:
+            if not isinstance(item['images'], list) or any(not isinstance(image, dict) for image in item['images']):
+                raise _error(f"box {n} preview images must be a list of candidates")
+            for image in item['images']:
+                preview_file(image.get('file'))
+    return value
+
+
+def _shot_frames(prompt, carried, last):
+    # Match promptShots: filter marker locations in dialogue, but retain original timestamp bodies.
+    dialogue = list(re.finditer(r'<d>[\s\S]*?(?:</d>|$)', prompt))
+    base = ['integrated_multimodal_description', 'overall_soundscape', 'non_diegetic_music']
+    ref = ['subject_definitions', 'summary', 'retention_analysis', 'detailed_description', *base[1:]]
+    headers = [m for m in re.finditer(r'^[ \t]*(' + '|'.join(dict.fromkeys(base + ref)) + r'):', prompt, re.MULTILINE)
+               if not any(d.start() <= m.start() < d.end() for d in dialogue)]
+    structured = [m[1] for m in headers] in (base, ref)
+    start, end = 0, len(prompt)
+    if structured:
+        scene = next(i for i, m in enumerate(headers) if m[1] in ('detailed_description', base[0]))
+        start, end = headers[scene].end(), headers[scene + 1].start()
+    source = prompt[start:end]
+    marked = source if structured else re.sub(r'<d>[\s\S]*?(?:</d>|$)', lambda m: ' ' * len(m[0]), source)
+    flags = re.MULTILINE if structured else re.MULTILINE | re.IGNORECASE
+    markers = [m for m in re.finditer(r'^[ \t]*\[Shot ([1-9]\d*)\](?=\s|$)', marked, flags)
+               if not structured or not any(d.start() <= start + m.start() < d.end() for d in dialogue)]
+    numbers = [int(m[1]) for m in markers]
+    frames = {}
+    for i, marker in enumerate(markers):
+        shot = int(marker[1])
+        if numbers.count(shot) != 1:
+            continue
+        body = source[marker.end():markers[i + 1].start() if i + 1 < len(markers) else len(source)].strip()
+        match = re.match(r'At (\d+):(\d+)\.(\d+),', body, re.IGNORECASE)
+        generated = math.floor((int(match[1]) * 60 + int(match[2]) + int(match[3]) / 1000) * FPS + .5) if match else 0
+        frame = 0 if shot == 1 else max(0, generated - (carried - 1 if carried else 0)) if match else None
+        if frame is not None and frame <= last:
+            frames[shot] = frame
+    return frames
+
+
+def resolved_previews(timeline, index, context):
+    """Active saved records; explicit targets own positions, legacy records keep their raw local frame."""
+    saved_previews = timeline.boxes[index].previews
+    if not any('target' in item for item in saved_previews):
+        return deepcopy(saved_previews)
+    frames, carried = box_length(timeline, index, context)
+    last = frames - (0 if carried else 1)
+    shots = _shot_frames(timeline.boxes[index].prompt, carried, last)
+    result = []
+    for saved in saved_previews:
+        item = deepcopy(saved)
+        target = item.get('target')
+        if target is not None:
+            target = item['target'] = _preview_target(target, index + 1)
+            frame = 0 if target['kind'] == 'first' else last if target['kind'] == 'last' else shots.get(target['shot'])
+            if frame is None:
+                continue
+            item['frame'] = frame
+        result.append(item)
+    if last == 0 and any(p.get('target', {}).get('kind') == 'first' and p.get('guide') for p in result):
+        result = [p for p in result if p.get('target', {}).get('kind') != 'last']
+    return result
+
+
+def accepted_endpoints(timeline, index, context):
+    """Accepted PNGs at delivered endpoints, including the shared opening of a continuing box."""
+    frames, carried = box_length(timeline, index, context)
+    positions = {'first': 0, 'last': frames - (0 if carried else 1)}
+    result = {}
+    for item in resolved_previews(timeline, index, context):
+        if item.get('guide'):
+            for key, frame in positions.items():
+                if item['frame'] == frame:
+                    if key in result and result[key] != item['guide']:
+                        raise _error(f"box {index + 1} has conflicting guides at its {key} endpoint")
+                    result[key] = item['guide']
+    return result
+
+
+def preview_file(image):
+    """Only our immutable generated PNG assets can be loaded from timeline JSON."""
+    if (not isinstance(image, dict) or image.get("type") != "output"
+            or image.get("subfolder") != "h3_previews"
+            or not re.fullmatch(r"[A-Za-z0-9_-]+\.png", str(image.get("filename", "")))):
+        raise _error("a preview guide must be a generated PNG in output/h3_previews")
+    if "visible_text" in image or "text_contract" in image:
+        if (not isinstance(image.get("visible_text"), list)
+                or any(not isinstance(text, str) for text in image["visible_text"])
+                or not isinstance(image.get("text_contract"), str)
+                or not re.fullmatch(r"[a-f0-9]{64}", image["text_contract"])):
+            raise _error("a lettering image needs visible_text strings and a SHA-256 text_contract")
+    return "h3_previews/" + image["filename"]
+
+
+def frame_movie_time(timeline, index, frame, context):
+    frames, carried = box_length(timeline, index, context)
+    if type(frame) is not int or not 0 <= frame < frames + int(bool(carried)):
+        raise _error(f"box {index + 1} preview frame is past its end")
+    return box_start(timeline, index) + (frame - int(bool(carried))) / FPS
+
+
+def frame_text(timeline, index, frame, context):
+    return timed_text.anchor_metadata(timeline.timed_text, timeline.audio_clips,
+                                      frame_movie_time(timeline, index, frame, context))
+
+
+def frame_guides(timeline, index, context):
+    """Generated-frame positions; local frame 0 is the shared boundary on continuing boxes."""
+    frames, carried = box_length(timeline, index, context)
+    guides = {}
+    for item in resolved_previews(timeline, index, context):
+        if not item.get("guide"):
+            continue
+        frame = item["frame"] + (carried - 1 if carried else 0)
+        if frame >= frames + carried:
+            raise _error(f"box {index + 1} has a saved guide past its end; lengthen the box or remove that guide")
+        timed_text.check_anchor(item["guide"], frame_text(timeline, index, item["frame"], context),
+                                f"box {index + 1} guide")
+        if frame in guides and guides[frame] != item["guide"]:
+            raise _error(f"box {index + 1} has two different preview guides at frame {item['frame']}")
+        guides[frame] = item["guide"]
+    if index + 1 < len(timeline.boxes) and not is_fresh(timeline, index + 1):
+        for item in resolved_previews(timeline, index + 1, context):
+            if item["frame"] == 0 and item.get("guide"):
+                timed_text.check_anchor(item["guide"], frame_text(timeline, index + 1, 0, context),
+                                        f"box {index + 2} guide")
+                end = frames + carried - 1
+                if end in guides and guides[end] != item["guide"]:
+                    raise _error(f"box {index + 1} has conflicting guides at its shared boundary")
+                guides[end] = item["guide"]
+    return sorted(guides.items())
+
+
+def guide_chain(timeline, index, context=39):
+    """Guide edits invalidate dependent continuations, stopping at a cut. Empty preserves old manifests."""
+    start = index
+    while start and not is_fresh(timeline, start):
+        start -= 1
+    values = []
+    for i in range(start, index + 1):
+        own = []
+        if any(p.get("guide") for p in timeline.boxes[i].previews):
+            own = [[p["frame"], p["guide"]] for p in resolved_previews(timeline, i, context) if p.get("guide")]
+        if (i + 1 < len(timeline.boxes) and not is_fresh(timeline, i + 1)
+                and any(p.get("guide") for p in timeline.boxes[i + 1].previews)):
+            own += [["end", p["guide"]] for p in resolved_previews(timeline, i + 1, context)
+                    if p["frame"] == 0 and p.get("guide")]
+        if own:
+            values.append([timeline.boxes[i].id, own])
+    return _digest(values) if values else ""
+
+
+def is_fresh(timeline, index):
+    """Box 1 and cut boxes carry no frames from the box before them."""
+    return index == 0 or timeline.boxes[index].cut
+
+
+def frame_limits(fresh, context, limit=MAX_FRAMES):
+    """Fewest and most frames a box can add to the movie; `limit` is the Timeline's most generated frames."""
+    return (MIN_FRESH_FRAMES, limit) if fresh else (MIN_CONTINUING_FRAMES, limit - context)
+
+
+def snap_frames(frames, fresh):
+    """Nearest length on the grid: 17k+5 frames for a fresh box, 17k for a continuing one, k >= 1."""
+    offset = 5 if fresh else 0
+    return GRID * max(1, round((frames - offset) / GRID)) + offset
+
+
+def generated_frames(frames, fresh):
+    """Smallest length on the grid that holds `frames`: 17k+5 frames for a fresh box, 17k for a continuing one."""
+    offset = 5 if fresh else 0
+    return GRID * max(1, math.ceil((frames - offset) / GRID)) + offset
+
+
+def is_exact(timeline, index):
+    return index < len(timeline.exact) and timeline.exact[index]
+
+
+def played_frames(timeline, index):
+    """The frames box `index` adds to the movie: its own for an exact box, else the nearest length on the grid."""
+    box = timeline.boxes[index]
+    return box.frames if is_exact(timeline, index) else snap_frames(box.frames, is_fresh(timeline, index))
+
+
+def dropped_frames(timeline, index):
+    """The generated frames an exact box drops after its last played one; 0 for every other box."""
+    if not is_exact(timeline, index):
+        return 0
+    frames = timeline.boxes[index].frames
+    return generated_frames(frames, is_fresh(timeline, index)) - frames
+
+
+def _drop_conflict(timeline, index, context):
+    """The error for box `index`, which drops frames, and the next box, which would continue from them."""
+    fresh = is_fresh(timeline, index)
+    low, high = frame_limits(fresh, context, timeline.max_frames)
+    above = generated_frames(timeline.boxes[index].frames, fresh)
+    lengths = " or ".join(str(length) for length in (above - GRID, above) if low <= length <= high)
+    n = index + 1
+    return _error(f"box {n} drops {dropped_frames(timeline, index)} generated frames, so box {n + 1} can't continue "
+                  f"it: make box {n + 1} a cut, or give box {n} a length on the grid ({lengths} frames)")
+
+
+def box_length(timeline, index, context):
+    """(frames box `index` adds to the movie, frames it carries); raises when the box is too long, or when it or the
+    box before it drops frames that the next one would continue from."""
+    for source in (index - 1, index):
+        if 0 <= source < len(timeline.boxes) - 1 and not is_fresh(timeline, source + 1) and dropped_frames(timeline, source):
+            raise _drop_conflict(timeline, source, context)
+    fresh = is_fresh(timeline, index)
+    frames = played_frames(timeline, index)
+    high = frame_limits(fresh, context, timeline.max_frames)[1]
+    if frames > high:
+        n = index + 1
+        if fresh:
+            raise _error(f"box {n} is {seconds(frames):.2f} s ({frames} frames), but H3 generates at most "
+                         f"{seconds(timeline.max_frames):.2f} s ({timeline.max_frames} frames)")
+        raise _error(f"box {n} adds {seconds(frames):.2f} s ({frames} frames), but a box that continues the "
+                     f"previous one can add at most {seconds(high):.2f} s ({timeline.max_frames} frames minus {context} "
+                     "carried)")
+    return frames, 0 if fresh else context
+
+
+def carry_conflict(timeline, index, context):
+    """The problem when box `index` continues a box that plays fewer frames than it carries, or "". Only rendering
+    refuses it; the Studio shows it on the box."""
+    if is_fresh(timeline, index) or not is_fresh(timeline, index - 1):
+        return ""
+    before = played_frames(timeline, index - 1)
+    if before >= context:
+        return ""
+    return (f"box {index + 1} continues box {index}, which plays {before} frames, fewer than the {context} it carries: "
+            f"make box {index + 1} a cut, or give box {index} at least {context} frames")
+
+
+def assemble_prompt(timeline, index):
+    inactive = [clip["slot"] for clip in timeline.audio_clips if clip not in active_audio_clips(timeline, index)]
+    from . import reference_assets
+    prompt = join_prompts(*(without_disabled_refs(part.strip(), timeline.disabled_refs + inactive)
+                            for part in (timeline.prompt, timeline.boxes[index].prompt)))
+    return join_prompts(prompt,reference_assets.native_prompt(timeline,index))
+
+
+def join_prompts(shared, prompt):
+    """Shared direction stays inside a structured prompt's body, after its alignment/header."""
+    if shared and (prompt.startswith(("integrated_multimodal_description:", "subject_definitions:",
+                                      "For the target video,", "How the reference pictures align"))
+                   and "\noverall_soundscape:" in prompt and "\nnon_diegetic_music:" in prompt):
+        marker = "[Shot 1] "
+        if marker in prompt:
+            return prompt.replace(marker, marker + shared + " ", 1)
+    return "\n\n".join(part for part in (shared, prompt) if part)
+
+
+def without_disabled_refs(text, disabled):
+    return MENTION.sub(lambda match: ("the described sound" if match.group(1).lower() in ("audio", "video_audio") else "the described subject")
+                       if reference_disabled(f"{match.group(1).lower()}{int(match.group(2))}", disabled) else match.group(0), text)
+
+
+def mentions(text):
+    """Distinct mentions in order of appearance, as (kind, slot) pairs such as ("image", "image3")."""
+    found = []
+    for match in MENTION.finditer(text):
+        kind = match.group(1).lower()
+        item = (kind, f"{kind}{int(match.group(2))}")
+        if item not in found:
+            found.append(item)
+    return found
+
+
+def rewrite(text, tags):
+    """Replaces mentions and bare names of selected references with their H3 tags."""
+    rewritten = MENTION.sub(lambda match: tags[f"{match.group(1).lower()}{int(match.group(2))}"], text)
+    rewritten = re.sub(r"(?<![\w@])(image|audio|video_audio|video)(\d+)(?!\w)",
+                       lambda match: tags.get(f"{match.group(1).lower()}{int(match.group(2))}", match.group(0)),
+                       rewritten, flags=re.IGNORECASE)
+    # MiniMax's FL2VA alignment sentence uses unbracketed Picture/Shot names.
+    # The keyframe order is fixed even when both endpoints use the same image slot.
+    if rewritten.startswith("How the reference pictures align with the target video — "):
+        first, separator, rest = rewritten.partition("\n")
+        if "(from Shot 1)" in first and "; " in first:
+            pictures = re.findall(r"<Picture \d+>", first)
+            ordinary_pair = pictures == ["<Picture 1>", "<Picture 2>"] and len(tags) == 2
+            repeated_endpoint = pictures == ["<Picture 1>", "<Picture 1>"] and len(tags) == 1
+            if ordinary_pair or repeated_endpoint:
+                ordinal = iter(("Picture 1", "Picture 2"))
+                first = re.sub(r"<Picture \d+>", lambda _: next(ordinal), first, count=2)
+                rewritten = first + separator + rest
+    return rewritten
+
+
+def box_slots(timeline, index, context=39):
+    """Mode, references and the H3 tag of each slot for box `index` (the spec's box rules)."""
+    box = timeline.boxes[index]
+    first = box.first if is_fresh(timeline, index) and box.first not in timeline.disabled_refs else ""
+    last = box.last if box.last not in timeline.disabled_refs else ""
+    keyframes = [name for name in (first, last) if name]
+    found = mentions(assemble_prompt(timeline, index))
+    images = [name for kind, name in found if kind == "image"]
+    audios = [name for kind, name in found if kind == "audio"]
+    video_audios = sorted([name for kind, name in found if kind == "video_audio"], key=slot_number)
+    videos = sorted(set([name for kind, name in found if kind == "video"] +
+                        [name.replace("video_audio", "video") for name in video_audios]), key=slot_number)
+    audios = list(dict.fromkeys(audios + [clip["slot"] for clip in active_audio_clips(timeline, index)]))
+    assigned = {ref["slot"]: ref for ref in timeline.refmods if ref.get("strength", 1) > 0}
+    mods = [assigned[name] for name in sorted(images + audios, key=lambda name: (name.startswith("audio"), slot_number(name)))
+            if name in assigned and name not in effective_plates(timeline, index)]
+    mod_slots = {ref["slot"] for ref in mods}
+    images = [name for name in images if name not in mod_slots]
+    audios = [name for name in audios if name not in mod_slots]
+    endpoint_first = endpoint_last = False
+    if any(p.get("guide") for box in timeline.boxes[index:index + 2] for p in box.previews):
+        frames, carried = box_length(timeline, index, context)
+        guides = frame_guides(timeline, index, context)
+        endpoint_first = is_fresh(timeline, index) and any(frame == 0 for frame, _ in guides)
+        endpoint_last = any(frame == frames + carried - 1 for frame, _ in guides)
+    effective_first = "" if endpoint_first else first
+    effective_last = "" if endpoint_last else last
+    fresh = is_fresh(timeline, index)
+    if box.flf_refmods and (not fresh or first or endpoint_first) and not audios and not videos:
+        if endpoint_first and played_frames(timeline, index) == 1 and last in images:
+            effective_last = last  # A referenced named Last remains a text-image source; First owns frame 0.
+        last_present = bool((last or endpoint_last) and (not fresh or played_frames(timeline, index) > 1
+                            or (effective_last and effective_last in images)))
+        first_present = int(bool(first or endpoint_first))
+        endpoint_count = first_present + int(last_present)
+        tags = {first: "<Picture 1>"} if first else {}
+        if last and last_present:
+            tags.setdefault(last, f"<Picture {first_present + 1}>")
+        images = sorted([name for name in images if name not in keyframes], key=slot_number)
+        counters = {"image": endpoint_count * 2, "video": 0, "audio": 0}
+        for name in images:
+            counters["image"] += 1
+            tags[name] = f"<Picture {counters['image']}>"
+        labels = {"image": "Picture", "video": "Video", "audio": "Audio"}
+        for ref in mods:
+            counters[ref["kind"]] += 1
+            tags[ref["slot"]] = f"<{labels[ref['kind']]} {counters[ref['kind']]}>"
+        return Slots("flf2va", sorted(images + [ref["slot"] for ref in mods if ref["kind"] != "audio"], key=slot_number),
+                     [ref["slot"] for ref in mods if ref["kind"] == "audio"],
+                     effective_first, effective_last if last_present else "", tags, mods)
+    if not mods and not audios and not videos and set(images) <= set(keyframes):
+        if endpoint_first and played_frames(timeline, index) == 1 and last in images:
+            effective_last = last  # A named Last remains a text-image source; First owns the only physical frame.
+        tags = {}
+        for number, name in enumerate(keyframes, 2 if endpoint_first and not first else 1):
+            tags.setdefault(name, f"<Picture {number}>")
+        return Slots("flf2va" if keyframes or endpoint_first or endpoint_last else "t2va", [], [],
+                     effective_first, effective_last, tags)
+    images.sort(key=slot_number)
+    audios.sort(key=slot_number)
+    tags = {name: f"<Picture {number}>" for number, name in enumerate(images, 1)}
+    tags.update({name: f"<Video {number}>" for number, name in enumerate(videos, 1)})
+    tags.update({name: f"<Audio {number}>" for number, name in enumerate(video_audios + audios, 1)})
+    counters = {"image": len(images), "audio": len(video_audios) + len(audios), "video": len(videos)}
+    labels = {"image": "Picture", "audio": "Audio", "video": "Video"}
+    for ref in mods:
+        counters[ref["kind"]] += 1
+        tags[ref["slot"]] = f"<{labels[ref['kind']]} {counters[ref['kind']]}>"
+    return Slots("ref2va", sorted(images + [ref["slot"] for ref in mods if ref["kind"] != "audio"], key=slot_number) + videos,
+                 video_audios + sorted(audios + [ref["slot"] for ref in mods if ref["kind"] == "audio"], key=slot_number),
+                 effective_first, effective_last, tags, mods)
+
+
+@dataclass
+class BoxPlan:
+    index: int
+    box: Box
+    fresh: bool
+    frames: int
+    carried: int
+    generated: int
+    slots: Slots
+    prompt: str
+    layout: str
+    settings: dict
+    notes: list
+    text_window: dict = field(default_factory=dict)
+
+
+def plan_box(timeline, index, context, carry_audio, width, height, ref_image_size, images, audios, *, audio_context_frames=0):
+    """What to render for box `index`, checked against the connected `images` / `audios` slot names."""
+    n = index + 1
+    box = timeline.boxes[index]
+    fresh = is_fresh(timeline, index)
+    frames, carried = box_length(timeline, index, context)
+    source = timeline.story[index].get("source") if index < len(timeline.story) else None
+    if source and "stages" in source.get("frame", {}):
+        frame = source["frame"]
+        if (frame["frames"], frame["carried"]) != (frames + carried, carried):
+            raise _error(f"box {n}'s stage schedule has a different length or replay; rewrite it before rendering")
+    text = assemble_prompt(timeline, index)
+    if not text:
+        raise _error(f"box {n} has no prompt")
+    assigned = {ref["slot"] for ref in timeline.refmods if ref.get("strength", 1) > 0}
+    slots = box_slots(timeline, index, context)
+    for kind, name in mentions(text):
+        if ((kind == "video" and name not in VIDEO_SLOTS) or (kind == "video_audio" and name not in VIDEO_AUDIO_SLOTS)) and name not in timeline.reference_replacements and name.replace('video_audio', 'video') not in timeline.reference_replacements:
+            raise _error(f"box {n} uses unsupported @{name}; video and video_audio slots run from 1 to 3")
+        pool = images if kind in ("image", "video") else audios
+        if (slots.mode != "ref2va" and kind == "image" and name in slots.tags
+                and name not in (slots.first, slots.last) and name not in slots.references):
+            continue
+        if name not in pool and name not in assigned:
+            listed = ", ".join(sorted(pool, key=slot_number)) or "none"
+            raise _error(f"box {n} mentions @{name}, but {name} is not connected (connected {kind} slots: {listed})")
+    for name in slots.video_inputs:
+        if name not in images:
+            raise _error(f"box {n} needs {name}, but {name} is not connected")
+    if len(slots.video_inputs) > MAX_REF_VIDEOS:
+        raise _error(f"box {n} mentions too many videos; H3 takes at most {MAX_REF_VIDEOS}")
+    for change in box.plate_changes:
+        if change['slot'] not in timeline.reference_replacements and change["frame"] > 0 and change["slot"] in slots.references and change["slot"] not in (slots.first, slots.last):
+            raise _error(f"box {n} changes a plate inside one H3 generation. Split before that shot to use both appearances")
+    for what, name in (("first frame", slots.first), ("last frame", slots.last)):
+        if name in assigned:
+            raise _error(f"box {n} uses RefMod {name} as its {what}; use an image input or a saved guide")
+        if name and name not in images:
+            raise _error(f"box {n} uses {name} as its {what}, but {name} is not connected")
+    if len(slots.image_inputs) > MAX_REF_IMAGES and slots.mode == "ref2va":
+        raise _error(f"box {n} mentions {len(slots.references)} images; H3 takes at most {MAX_REF_IMAGES} references")
+    if len(slots.audio_inputs) > MAX_REF_AUDIOS:
+        raise _error(f"box {n} mentions {len(slots.audios)} audios; H3 takes at most {MAX_REF_AUDIOS} references")
+    notes = []
+    dropped = dropped_frames(timeline, index)
+    if dropped:
+        notes.append(f"Box {n} plays {frames} frame{'' if frames == 1 else 's'}; H3 generates {frames + dropped} "
+                     f"and drops the last {dropped}.")
+    elif frames != box.frames:
+        notes.append(f"Box {n}: {box.frames} frames is off the H3 grid, so it renders {frames}.")
+    if frames + dropped + carried > MAX_FRAMES:
+        notes.append(f"Box {n} generates {frames + dropped + carried} frames, more than H3 samples at once ({MAX_FRAMES}): "
+                     "connect H3 Context Windows between the model and the sampler.")
+    if box.first and not fresh:
+        notes.append(f"Box {n} continues box {index}, so its first frame {box.first} is not used.")
+    if slots.first and slots.last and frames == 1:
+        notes.append(f"Box {n} plays 1 frame, so its last frame {slots.last} is not used.")
+    if RAW_TAG.search(text):
+        notes.append(f"Box {n} has a typed <Picture N>-style tag, sent as written; @image mentions are safer.")
+    settings = box_settings(fresh, slots.mode, width, height, context, carry_audio, ref_image_size,
+                            audio_context_frames=audio_context_frames)
+    window = text_window(timeline, index, context)
+    prompt = timed_text.insert(rewrite(text, slots.tags), slots.mode, window)
+    return BoxPlan(index, box, fresh, frames, carried, frames + dropped + carried, slots, prompt,
+                   layout_key(timeline, index, context), settings, notes, window)
+
+
+def _digest(value):
+    return hashlib.sha1(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def text_window(timeline, index, context):
+    frames, carried = box_length(timeline, index, context)
+    return timed_text.project(timeline.timed_text, timeline.audio_clips, box_start(timeline, index), frames, carried)
+
+
+def text_chain(timeline, index, context):
+    """Text edits invalidate carried lettering up to the next cut, without hashing unrelated cues."""
+    if timeline.timed_text is None or not timeline.timed_text["enabled"]:
+        return ""
+    start = index
+    while start and not is_fresh(timeline, start):
+        start -= 1
+    values = []
+    for i in range(start, index + 1):
+        contract = timed_text.render_contract(text_window(timeline, i, context))
+        if contract:
+            values.append([timeline.boxes[i].id, contract])
+    return _digest(values) if values else ""
+
+
+def layout_key(timeline, index, context=39):
+    """Fingerprint of what the timeline says about box `index`; its id is not part of it."""
+    box = timeline.boxes[index]
+    fresh = is_fresh(timeline, index)
+    slots = box_slots(timeline, index, context)
+    value = {"prompt": assemble_prompt(timeline, index), "frames": played_frames(timeline, index),
+             "seed": box.seed, "fresh": fresh, "first": slots.first, "last": slots.last}
+    if box.flf_refmods:
+        value["flf_refmods"] = True
+    if timeline.reference_replacements:
+        value['reference_replacements'] = timeline.reference_replacements
+    dropped = dropped_frames(timeline, index)
+    if dropped:
+        value["generated"] = value["frames"] + dropped
+    clips = active_audio_clips(timeline, index)
+    if clips:
+        value["audio_clips"] = [{key: clip.get(key) for key in ("slot", "file", "start", "source_start", "duration")}
+                                for clip in clips]
+        value["audio_box_start"] = box_start(timeline, index)
+    from . import studio_pictures, voice_clips
+    pictures = studio_pictures.used(timeline, index)
+    if pictures:
+        value["studio_pictures"] = [{"slot": picture["slot"], "file": picture["file"]} for picture in pictures]
+    voices = voice_clips.used(timeline, index)
+    if voices:
+        value["voice_clips"] = [{"slot": clip["slot"], "file": clip["file"]} for clip in voices]
+    mods = slots.refmods
+    if mods:
+        value["refmods"] = [{key: ref.get(key) for key in ("slot", "name", "member", "kind", "strength", "stamp")} for ref in mods]
+    chain = guide_chain(timeline, index, context)
+    if chain:
+        value["preview_guides"] = chain
+    text = text_chain(timeline, index, context)
+    if text:
+        value["timed_text"] = text
+    plates = plate_chain(timeline, index)
+    if plates:
+        value["appearance_plates"] = plates
+    if box.plate_changes:
+        value["plate_changes"] = box.plate_changes
+    sources = memory_sources(timeline, index)
+    if sources:
+        value["visual_memory"] = [[timeline.boxes[source].id, frame, label] for source, frame, label in sources]
+    return _digest(value)
+
+
+def box_settings(fresh, mode, width, height, context, carry_audio, ref_image_size, *, audio_context_frames=0):
+    """The node settings that change what H3 renders for a box; unknown (None) values stay None."""
+    result = {"width": width, "height": height, "context_frames": 0 if fresh else context,
+              "carry_audio": False if fresh else carry_audio,
+              "ref_image_size": ref_image_size if mode == "ref2va" else None}
+    if audio_context_frames is None:
+        if not fresh:
+            result['audio_context_frames'] = None
+    elif context is not None and carry_audio is not None:
+        audio = effective_audio_context(context, carry_audio and not fresh, audio_context_frames)
+        if audio not in (0, context):
+            result['audio_context_frames'] = audio
+    elif audio_context_frames:
+        result['audio_context_frames'] = None
+    return result
+
+
+def settings_match(saved, wanted):
+    """Compare known render settings, including an omitted legacy follow-video audio budget."""
+    if not all(key in saved and saved[key] == value for key, value in wanted.items()
+               if key != 'audio_context_frames' and value is not None):
+        return False
+    context, carry = wanted.get('context_frames'), wanted.get('carry_audio')
+    requested = wanted.get('audio_context_frames', 0)
+    if context is None or carry is None or requested is None:
+        return True
+    return (effective_audio_context(context, carry, requested)
+            == effective_audio_context(context, carry, saved.get('audio_context_frames', 0)))
+
+
+def segment_matches(entry, layout, settings, media=None):
+    """Whether saved segment `entry` was rendered from this box: the same layout, the given settings
+    and, unless `media` is None, the same references."""
+    record = entry.get("timeline") or {}
+    saved = record.get("settings") or {}
+    return (record.get("layout") == layout
+            and settings_match(saved, settings)
+            and (media is None or record.get("media") == media))
+
+
+def next_box(count, segments_by_index, is_done):
+    """Index of the first of `count` boxes that is not done, or None. `is_done(index, entry)` judges
+    box `index` against the segment saved at position index + 1."""
+    for index in range(count):
+        entry = segments_by_index.get(index + 1)
+        if entry is None or not is_done(index, entry):
+            return index
+    return None
+
+
+def status_payload(name, timeline, segments, next_index, thumb, full_video, movie_seconds, done_indices=None):
+    """What the editor shows; `thumb(entry)` returns a /view file dict or None."""
+    count = len(timeline.boxes)
+    by_index = {entry["index"]: entry for entry in segments}
+    done_indices = set(range(count if next_index is None else next_index)) if done_indices is None else done_indices
+    done = len(done_indices)
+    boxes = []
+    for index, box in enumerate(timeline.boxes):
+        entry = by_index.get(index + 1)
+        if index in done_indices:
+            item = {"id": box.id, "status": "done"}
+            picture = thumb(entry)
+            if picture:
+                item["thumb"] = picture
+        else:
+            item = {"id": box.id, "status": "next" if index == next_index else "pending"}
+            if entry is not None:
+                item["replaces"] = True
+        boxes.append(item)
+    trailing = [entry["index"] for entry in segments if entry["index"] > count]
+    if not count:
+        message = "Draw a box to start."
+    elif next_index is not None:
+        message = f"Box {next_index + 1} is next."
+    else:
+        message = "The box is rendered." if count == 1 else f"All {count} boxes are rendered."
+        if trailing:
+            listed = ", ".join(map(str, trailing))
+            message += (f" The next run moves segment{'s' if len(trailing) > 1 else ''} {listed}, after the last "
+                        "box, to takes/.")
+    return {"ok": True, "name": name, "next": None if next_index is None else next_index + 1, "done": done,
+            "segments": len(segments), "trailing": len(trailing), "seconds": round(movie_seconds, 2),
+            "full_video": full_video, "boxes": boxes, "message": message}
