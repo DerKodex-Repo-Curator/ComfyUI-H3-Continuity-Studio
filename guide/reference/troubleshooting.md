@@ -1,0 +1,49 @@
+# Troubleshooting and limits
+
+## The nodes don't appear
+
+- Restart ComfyUI **and** refresh the browser so the matching frontend loads.
+- Check the console for an import error. Confirm `requirements.txt` was installed into the Python that runs ComfyUI.
+- Make sure only **one** copy of H3 Continuity is installed; two copies register the same nodes and routes.
+
+## Open Studio does nothing, or the Studio looks old
+
+A browser can hold an older frontend module. Hard-refresh the page after updating the node pack. The Timeline node loads its current editor even when an older one is cached, but the Studio itself needs the matching frontend.
+
+## A clip says it needs a render
+
+A clip is current only while its prompt, seed, length, join, pictures, RefMods, guides, audio clips, timed text, memory and the node's settings match its saved render, and (for a continuing clip) the clip before it. Point at the clip's marker for the reason. Nothing renders until you ask.
+
+## "Render box N first"
+
+A bridge, a memory moment or a continuing clip needs a rendered neighbour or source. Render the named clip first.
+
+## A continuing clip refuses to render
+
+After a clip that [drops frames](../build/exact-lengths.md#cuts-after-dropped-frames), the next clip must be a **Cut**, and a continuing clip needs the clip before it to play at least `context_frames` frames.
+
+## The check won't start
+
+It needs a linked H3 Story node and an empty ComfyUI queue. See [the continuity check](../continuity/check.md#the-queue-and-the-gpu).
+
+## Take actions are greyed out
+
+**Use** and the deletes are off while a run of this sequence is running or queued, and briefly after an edit until the Studio reads the new status.
+
+## Write is refused
+
+A missing or unreadable [template](../story/templates.md#a-missing-template), a running continuity check, or an unreachable endpoint. The Story panel names the cause.
+
+## Boxes appear as *clips*
+
+The Studio says **clip**; older notes, saved JSON and some messages say **box**. They are the same thing.
+
+## Known limits
+
+- **Quality is the model's.** Continuity features give H3 more context; they don't guarantee identity or geometry. Inspect each join.
+- **Arbitrary-view geometry from still generators is experimental.** Reference delivery does not establish exact reconstructed geometry.
+- **Long clips** (past 362 frames) need ComfyUI's Context Windows node and `max_frames`; the Studio and Story planner still stop at 362. Results were measured on one GPU setup and judged from frame statistics, not by eye. See [Long clips](../build/long-clips.md).
+- **Bridges** send no pictures, references, guides, timed text or memory, and lengthen only the full video.
+- **Voice clips** never play in the full video.
+- **One Timeline per sequence.** Two tabs on the same sequence can fight over which take is in use.
+- **Models and providers are separate.** H3 Continuity downloads no model weights and provides no credentials; the optional MiniMax prompt guides are not bundled and are subject to MiniMax's terms, including territorial restrictions.

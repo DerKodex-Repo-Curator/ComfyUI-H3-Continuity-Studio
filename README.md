@@ -29,7 +29,9 @@ Avoid installing a second copy beside an existing H3 Continuity installation: bo
 
 ## Documentation
 
-See [Story Studio](docs/QWEN-STORY-STUDIO.md), [external Timeline](docs/EXTERNAL-TIMELINE.md), and [continuity checks](docs/CONTINUITY-CHECK.md). Generation quality and continuity vary with the model, inputs and settings; inspect the resulting joins.
+The full user guide, with screenshots of every feature, is at **https://kadobot.github.io/ComfyUI-H3-Continuity-Studio/**. Its source is in [`guide/`](guide/).
+
+Deeper reference notes: [Story Studio](docs/QWEN-STORY-STUDIO.md), [external Timeline](docs/EXTERNAL-TIMELINE.md), and [continuity checks](docs/CONTINUITY-CHECK.md). Generation quality and continuity vary with the model, inputs and settings; inspect the resulting joins.
 
 ## License and third-party material
 
