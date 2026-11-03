@@ -32,6 +32,8 @@ MENTION = re.compile(r"(?<![\w@])@(image|audio|video_audio|video)(\d+)(?!\w)", r
 RAW_TAG = re.compile(r"<(?:Picture|Audio|Video) \d+>")
 IMAGE_SLOT = re.compile(r"@?image(\d+)", re.IGNORECASE)
 MEMORY_MODES = ("off", "scene", "selected", "cast")
+# Reader features a Timeline can name in "requires"; an editor writes them when the file depends on them.
+REQUIRES = ("dialogue-cues-1", "replacement-bridges-1")
 
 
 @dataclass
@@ -79,6 +81,10 @@ class Timeline:
     still_prompt_preparation: dict | None = None
     # Most frames a box can generate: 362 unless the JSON asks for more (windowed sampling).
     max_frames: int = MAX_FRAMES
+    # Cues bound to recordings and observed protections: {"version", "cues", "observed"}; see dialogue.py.
+    dialogue: dict | None = None
+    # Whether each box keeps its own typed dialogue instead of the cues; empty without `parse`. Not on Box either.
+    manual_dialogue: list = field(default_factory=list)
 
 
 @dataclass
@@ -154,6 +160,12 @@ def parse(text):
         raise _error("the timeline must be a JSON object")
     if data.get("version", 1) != 1:
         raise _error(f"timeline version {data['version']!r} is not supported; this node reads version 1")
+    requires = data.get("requires", [])
+    if not isinstance(requires, list) or any(not isinstance(item, str) for item in requires):
+        raise _error("requires must be a list of feature names")
+    unknown = [item for item in requires if item not in REQUIRES]
+    if unknown:
+        raise _error(f"this Timeline needs a newer H3 Continuity ({', '.join(unknown)}); update the node pack")
     boxes = data.get("boxes") or []
     if not isinstance(boxes, list):
         raise _error("'boxes' must be a list")
@@ -162,6 +174,10 @@ def parse(text):
         raise _error("render_box must be the number of a box in this timeline")
     parsed = Timeline(_text(data.get("prompt"), "the shared prompt"), [_box(raw, n) for n, raw in enumerate(boxes, 1)], target)
     parsed.exact = [_exact(raw, n, box) for n, (raw, box) in enumerate(zip(boxes, parsed.boxes), 1)]
+    for n, raw in enumerate(boxes, 1):
+        if raw.get("dialogue", "cues") not in ("cues", "manual"):
+            raise _error(f"box {n} dialogue must be cues or manual")
+    parsed.manual_dialogue = [raw.get("dialogue") == "manual" for raw in boxes]
     from . import still_scene, reference_assets
     parsed.reference_preparation = reference_assets.validate(data["reference_preparation"]) if "reference_preparation" in data else None
     if "still_prompt_preparation" in data:
@@ -172,6 +188,8 @@ def parse(text):
     if not isinstance(parsed.still_requests, list) or any(not isinstance(item, dict) for item in parsed.still_requests):
         raise _error("still_requests must be a list of request receipts")
     parsed.timed_text = timed_text.validate(data.get("timed_text"))
+    from . import dialogue
+    parsed.dialogue = dialogue.validate(data.get("dialogue"))
     parsed.bible = data.get("bible")
     parsed.story = [{"schedule": raw.get("schedule"), "source": raw.get("source"),
                      "cast": raw["cast"] if isinstance(raw.get("cast"), dict) else {}} for raw in boxes]
@@ -208,6 +226,11 @@ def parse(text):
                 raise _error("audio clip in_full_video must be true or false")
             if clip["in_full_video"] and "file" not in clip:
                 raise _error("only an uploaded audio clip can play in the full video")
+        if "locked" in clip:
+            if type(clip["locked"]) is not bool:
+                raise _error("audio clip locked must be true or false")
+            if clip["locked"] and "file" not in clip:
+                raise _error("only an uploaded audio clip can be locked to the sequence clock")
     parsed.pictures = data.get("pictures", [])
     if not isinstance(parsed.pictures, list):
         raise _error("pictures must be a list")
