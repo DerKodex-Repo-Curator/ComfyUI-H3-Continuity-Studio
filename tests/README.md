@@ -15,6 +15,8 @@ To run one Python file, use discovery from the checkout root. ComfyUI's embedded
 python -m unittest discover -s tests -t . -p test_guide_split_server.py -v
 ```
 
+`test_skill_pack.py` checks that the instruction bundle serves every skill in `skills/` exactly, entry first, and that `skills/install.py` links the whole pack.
+
 `test_guide_split_server.py` runs `tests/js/emit_guide_split.mjs` in Node. It checks that the render code reads the browser's split of a clip in the way the browser intends. It is skipped when Node is not on `PATH`.
 
 These tests run on the CPU and load no models. They do not replace watching a render.

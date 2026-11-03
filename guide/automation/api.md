@@ -101,4 +101,16 @@ python timeline_api.py --base-url http://localhost:8188 export --project ID --mo
 
 ## For agents
 
-The repository includes an agent skill, `skills/h3-continuity-video`, for authoring and rendering native H3 Timeline video from an external brief (typography, timed text, motion graphics or narrative video). It points the agent at `GET /h3c/timeline/instructions`, preserves the user's brief and references, and explains when to use exact lengths, timed text, audio lanes and transitions. Story and a writing provider are optional; no cast, canon, style or duration is assumed.
+The repository's `skills/` folder is a pack of agent skills that work together. An agent that knows them knows every feature on these pages, and can choose the ones a shot needs:
+
+| Skill | Covers |
+| --- | --- |
+| `h3-continuity-video` | The entry: the Timeline in brief, every feature in one line, and which skill to read next. |
+| `h3-continuity-joins` | Continue, cut, new scene, transitions inside H3, visual memory, bridges, splitting a clip. |
+| `h3-continuity-timing` | The frame grid, exact lengths and long edits, clip starts, long clips and Context Windows. |
+| `h3-continuity-references` | Prompts, the three modes, mentions, pictures, first and last frames, Shot guides, stills, RefMods, plates. |
+| `h3-continuity-sound` | Audio lanes, the recording in the full video, voice clips, timed text. |
+| `h3-continuity-story` | H3 Story, templates, the Story bible and Cast, Cast memory, the continuity check. |
+| `h3-continuity-api` | This API, the graph-preparation route, receipts, held jobs, takes and export. |
+
+`GET /h3c/timeline/instructions` serves the whole pack (`skills`, entry first, and `skill` for the entry), so a remote agent reads the version the server runs. To install the pack for agents on the same computer, run `python skills/install.py` from the copy of H3 Continuity that ComfyUI loads. It links each skill into the agent skill folders that exist (`~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`), or into those named with `--target`, so the skills follow that copy when it updates. Story and a writing provider are optional; no cast, canon, style or duration is assumed.

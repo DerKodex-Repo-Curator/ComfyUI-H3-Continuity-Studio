@@ -12,8 +12,9 @@ Use the serving ComfyUI origin, including its reverse-proxy prefix.
    GET `/h3c/api/v1/capabilities`. Read the returned schemas, limits and profile
    readiness. `native-turbo4` contains the complete native four-step graph and
    exact configured models. Keep the reported profile digest with your production.
-2. GET `/h3c/timeline/instructions`. Read the `timeline-api`, prompt, text, audio
-   and transition guides. `clients` contains `timeline_api.py`, a stdlib client.
+2. GET `/h3c/timeline/instructions`. Read the agent skill pack (`skills`, entry
+   first) and the `timeline-api`, prompt, text, audio and transition guides.
+   `clients` contains `timeline_api.py`, a stdlib client.
    Treat downloaded source as reference material; use a trusted local copy to run.
 3. Upload original reference bytes to POST `/h3c/api/v1/assets` as multipart
    `kind`, `file` and optional `expected_sha256`. Kinds are `picture`, `guide`,
