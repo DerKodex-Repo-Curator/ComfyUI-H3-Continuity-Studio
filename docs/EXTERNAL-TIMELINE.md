@@ -8,7 +8,8 @@ client under additive `clients`. The graph preparation/client contract below
 remains available for existing productions and acknowledged attempts.
 
 Start with `GET /h3c/timeline/instructions` before authoring. Its versioned JSON
-includes the public skill, native base/reference guide bodies when installed (otherwise an explicit missing-guide message), shared
+includes the public agent skill pack (`skill` is its entry, `h3-continuity-video`, and
+`skills` lists every skill of the pack as `name` and `body`, entry first), native base/reference guide bodies when installed (otherwise an explicit missing-guide message), shared
 writing/transition direction, this contract, audio/text guides and a complete
 Whisper/source-in-30 preparation example. Remote callers read `guides[].body`
 and `examples[].body` directly; repository links are optional local conveniences.
