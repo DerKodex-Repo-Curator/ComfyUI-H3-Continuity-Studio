@@ -89,3 +89,12 @@ def with_note(prompt, records, first_video, cast=False):
     if shot:
         return prompt[:shot.start(1)] + note + "\n" + prompt[shot.start(1):]
     return prompt + "\n" + note
+
+
+def box_prompt(timeline, index, context, plan, records):
+    """What H3 receives for box `index` planned as `plan`, with `records` noted before its timed text and dialogue."""
+    slots = plan.slots
+    prose = rules.rewrite(rules.assemble_prompt(timeline, index), slots.tags)
+    prose = with_note(prose, records, 1 + len(slots.video_inputs) + sum(ref["kind"] == "video" for ref in slots.refmods),
+                      cast=timeline.boxes[index].memory == "cast")
+    return rules.timed_prompt(timeline, index, context, prose, slots.mode, plan.text_window)

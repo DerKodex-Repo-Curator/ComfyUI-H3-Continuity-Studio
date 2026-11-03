@@ -8,7 +8,7 @@ import os
 from comfy_api.latest import io
 from comfy_execution.graph_utils import ExecutionBlocker
 
-from . import conditioning, latents, store, timing, shot_preview, refmods, audio_tracks, visual_memory, timed_text
+from . import conditioning, latents, store, timing, shot_preview, refmods, audio_tracks, visual_memory
 from . import box_checks, bridges, dialogue, studio_pictures, voice_clips, reference_replacements, replacement_candidates
 from . import nodes as continuity
 from . import timeline as rules
@@ -285,7 +285,8 @@ def request_status(body, *, materialize=True, managed_owner=None):
                         window = rules.text_window(parsed, index, context)
                         slots = rules.box_slots(parsed, index, context)
                         prompt = rules.rewrite(rules.assemble_prompt(parsed, index), slots.tags)
-                        item.update(text_window=window, effective_prompt=timed_text.insert(prompt, slots.mode, window))
+                        item.update(text_window=window,
+                                    effective_prompt=rules.timed_prompt(parsed, index, context, prompt, slots.mode, window))
                     except ValueError as error:
                         item["text_note"] = str(error)
             return status
@@ -580,11 +581,7 @@ class H3C_Timeline(io.ComfyNode):
         if memories:
             memory_args["memories"] = visual_memory.load(folder, by_index, memories)
             memory_args["memory_frames"] = [item.get("frames") for item in memories]
-            prose = rules.rewrite(rules.assemble_prompt(parsed, next_index), box.slots.tags)
-            prose = visual_memory.with_note(prose, memories, 1 + len(box.slots.video_inputs)
-                                            + sum(ref["kind"] == "video" for ref in box.slots.refmods),
-                                            cast=parsed.boxes[next_index].memory == "cast")
-            box.prompt = timed_text.insert(prose, box.slots.mode, box.text_window)
+            box.prompt = visual_memory.box_prompt(parsed, next_index, context, box, memories)
             sources = list(dict.fromkeys(str(item["index"]) for item in memories))
             views = "video references (full preceding video included)" if any(item.get("whole") for item in memories) else "earlier 5-frame views"
             box.notes.append(f"Visual memory: {len(memories)} {views} from box{'es' if len(sources) > 1 else ''} "

@@ -70,6 +70,15 @@ class PlanTest(unittest.TestCase):
         self.assertTrue(result.prompt.startswith("detailed_description: A quiet street.\nDialogue from the recording"))
         self.assertIn("<d>[English] Hello there.</d>", result.prompt)
 
+    def test_visual_memory_keeps_the_compiled_dialogue(self):
+        from h3_continuity import visual_memory
+        timeline = cued([box("a", 107), box("b", 107, cut=True, memory="scene")], cue(start=5.6, end=7.9))
+        records = [{"label": "the previous shot before this cut", "whole": True, "new_scene": False}]
+        prompt = visual_memory.box_prompt(timeline, 1, 39, plan(timeline, 1), records)
+        self.assertIn("<Video 1> is an earlier moment of this film (the previous shot before this cut).", prompt)
+        # Box 2 starts at 107/24 s, so the line plays from 1.142 s of its own clock.
+        self.assertIn("From 00:01.142 to 00:03.442: Mara (S1) says: <d>Hello there.</d>", prompt)
+
     def test_a_cut_cue_needs_review_before_rendering(self):
         timeline = cued([box("a", 107)], cue(start=9.0, end=11.0), clips=[clip(source_start=10.0, duration=5.0)])
         with self.assertRaises(ValueError) as caught:

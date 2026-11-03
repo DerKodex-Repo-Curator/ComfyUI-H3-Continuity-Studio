@@ -1050,10 +1050,16 @@ def plan_box(timeline, index, context, carry_audio, width, height, ref_image_siz
     settings = box_settings(fresh, slots.mode, width, height, context, carry_audio, ref_image_size,
                             audio_context_frames=audio_context_frames)
     window = text_window(timeline, index, context)
-    prompt = timed_text.insert(rewrite(text, slots.tags), slots.mode, window)
-    prompt = dialogue.insert(prompt, slots.mode, dialogue.box_events(timeline, index, context))
+    prompt = timed_prompt(timeline, index, context, rewrite(text, slots.tags), slots.mode, window)
     return BoxPlan(index, box, fresh, frames, carried, frames + dropped + carried, slots, prompt,
                    layout_key(timeline, index, context), settings, notes, window)
+
+
+def timed_prompt(timeline, index, context, prose, mode, window):
+    """`prose` with box `index`'s timed text and its recordings' dialogue, as H3 receives it."""
+    from . import dialogue
+    prompt = timed_text.insert(prose, mode, window)
+    return dialogue.insert(prompt, mode, dialogue.box_events(timeline, index, context))
 
 
 def _digest(value):
