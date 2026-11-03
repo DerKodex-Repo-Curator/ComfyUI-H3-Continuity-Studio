@@ -262,6 +262,9 @@ class H3C_SaveSegment(io.ComfyNode):
         if "bridge" in (segment.timeline or {}):
             return cls.save_bridge(segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate,
                                    description, notes, color_space)
+        if "replacement" in (segment.timeline or {}):
+            return cls.save_replacement(segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate,
+                                        description, notes, color_space)
 
         with SEQUENCE_LOCK:
             authorize_sequence(sequence.name, sequence_owner(cls), "save_segment")
@@ -356,6 +359,53 @@ class H3C_SaveSegment(io.ComfyNode):
                 info += " " + (record['export_error'] if record.get('export_error') else
                                rebuild_full_video(folder, sequence.name, manifest, crf, bridges.spliced(folder, manifest, keys),
                                                  record.get("soundtrack", ()), managed_owner=sequence_owner(cls)))
+            if notes:
+                info += " " + " ".join(notes)
+            return io.NodeOutput(info, ui=ui.PreviewText(info))
+
+
+    @classmethod
+    def save_replacement(cls, segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate,
+                         description, notes, color_space="sRGB"):
+        """Saves a replacement candidate beside the earlier ones; nothing is moved and nothing is selected."""
+        from . import replacement_candidates
+        sequence, record = segment.sequence, segment.timeline
+        from .timeline_api.service import authorize_sequence, sequence_owner
+        with SEQUENCE_LOCK:
+            authorize_sequence(sequence.name, sequence_owner(cls), "save_segment")
+            now = datetime.datetime.now()
+            folder = sequence.folder
+            os.makedirs(folder, exist_ok=True)
+            manifest = store.load_manifest(folder)
+            box = record["replacement"]
+            taken = {entry.get("candidate") for entry in replacement_candidates.entries(manifest, box)}
+            salt, candidate = 0, None
+            while candidate is None or candidate in taken:
+                candidate = replacement_candidates.candidate_id(box, f"{now.isoformat()}#{salt}", record["seed"],
+                                                                record["region"])
+                salt += 1
+            width, height = latents.pixel_size(video)
+            entry = {
+                "box": box, "candidate": candidate, "stem": replacement_candidates.stem(box, candidate),
+                "frames": frames, "context_frames": segment.context_frames, "carried_audio": segment.carried_ticks > 0,
+                "latent_width": width, "latent_height": height, "video": None, "audio_sample_rate": sample_rate,
+                "description": description or segment.description or "", "created": now.isoformat(timespec="seconds"),
+                "timeline": {**{key: value for key, value in record.items() if key not in UNSAVED},
+                             "candidate": candidate},
+                "played": record["played"],
+            }
+            if segment.carried_audio_start:
+                entry['audio_pin'] = {'start_tick': segment.carried_audio_start, 'ticks': segment.carried_ticks}
+            if images is not None:
+                _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space)
+            store.save_segment(folder, entry, video, audio_latent, waveform)
+            replacement_candidates.add(manifest, entry)
+            store.write_manifest(folder, manifest)
+            info = (f"Saved replacement candidate {candidate} before box {sequence.index} of '{sequence.name}': "
+                    f"{entry['played']} frames ({timing.seconds(entry['played']):.2f} s) in place of the same number. "
+                    "Select it in the Studio to play it in the full video.")
+            if images is None:
+                info += " No images were connected, so it has no video to review or play."
             if notes:
                 info += " " + " ".join(notes)
             return io.NodeOutput(info, ui=ui.PreviewText(info))

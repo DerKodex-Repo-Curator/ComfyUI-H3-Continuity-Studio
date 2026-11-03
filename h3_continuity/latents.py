@@ -4,7 +4,8 @@ import torch
 
 import comfy.nested_tensor
 
-from .timing import audio_context_window, audio_tail_start, frames_for_tokens, ticks_for_frames, tokens_for_frames
+from .timing import (AUDIO_TICKS_PER_SECOND, FPS, GRID_STEP, audio_context_window, audio_tail_start,
+                     frames_for_tokens, ticks_for_frames, tokens_for_frames)
 
 
 def split_h3_latent(latent, node):
@@ -103,6 +104,41 @@ def build_ending(latent, source_video, source_audio, context_frames, carry_audio
     out["samples"] = comfy.nested_tensor.NestedTensor((video, audio))
     out["noise_mask"] = comfy.nested_tensor.NestedTensor((video_mask, audio_mask))
     return out, ending_video, ending_audio
+
+
+def window(video, audio, start, frames, vae=None):
+    """`frames` frames of a saved run from frame `start`, as a run of their own: (video latent, audio ticks).
+
+    A run's latent restarts its temporal grid every 17 frames, so a window starting on such a boundary is an exact
+    token slice. Any other start has no latent of its own: the covering chunks are decoded, the window is cut from the
+    frames and encoded again with `vae`. The audio ticks are cut at the window's own position."""
+    tokens = tokens_for_frames(frames)
+    total = frames_for_tokens(video.shape[2])
+    if start < 0 or start + frames > total:
+        raise ValueError(f"H3 Timeline: frames {start}-{start + frames} are outside the saved run's {total} frames")
+    ticks = ticks_for_frames(frames)
+    if audio.shape[-1] < ticks:
+        raise ValueError(f"H3 Timeline: the saved run has {audio.shape[-1]} audio ticks, fewer than the {ticks} needed")
+    tick = max(0, min(round(start * AUDIO_TICKS_PER_SECOND / FPS), audio.shape[-1] - ticks))
+    audio_window = audio[:1, ..., tick:tick + ticks]
+    if start % GRID_STEP == 0:
+        first = start // GRID_STEP * 5
+        return video[:1, :, first:first + tokens], audio_window
+    if vae is None:
+        raise ValueError("H3 Timeline: a window off the 17-frame grid needs the VAE to encode it again")
+    chunk = start // GRID_STEP
+    spans = max(0, -(-(start + frames - chunk * GRID_STEP - 5) // GRID_STEP))
+    covering = video[:1, :, chunk * 5:chunk * 5 + spans * 5 + 2]
+    pixels = vae.decode(covering)
+    pixels = pixels.reshape(-1, *pixels.shape[-3:])
+    offset = start - chunk * GRID_STEP
+    encoded = vae.encode(pixels[offset:offset + frames, ..., :3])
+    if encoded.ndim == 4:
+        encoded = encoded.unsqueeze(0)
+    if encoded.shape[2] != tokens or encoded.shape[3:] != video.shape[3:]:
+        raise ValueError(f"H3 Timeline: the VAE encoded the {frames}-frame window as {tuple(encoded.shape)}, "
+                         f"not {tokens} latent frames of {tuple(video.shape[3:])}")
+    return encoded[:1].to(device=video.device, dtype=video.dtype), audio_window
 
 
 def drop_guides_before(conditioning, frame, end_frame=None):

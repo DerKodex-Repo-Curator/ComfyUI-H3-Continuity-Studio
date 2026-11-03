@@ -9,7 +9,7 @@ from comfy_api.latest import io
 from comfy_execution.graph_utils import ExecutionBlocker
 
 from . import conditioning, latents, store, timing, shot_preview, refmods, audio_tracks, visual_memory, timed_text
-from . import box_checks, bridges, studio_pictures, voice_clips, reference_replacements
+from . import box_checks, bridges, studio_pictures, voice_clips, reference_replacements, replacement_candidates
 from . import nodes as continuity
 from . import timeline as rules
 from .story_node import StoryType
@@ -471,7 +471,8 @@ class H3C_Timeline(io.ComfyNode):
 
         next_index = parsed.render_box - 1 if parsed.render_box is not None else rules.next_box(len(parsed.boxes), by_index, is_done)
         known = bridges.settings(width, height, context, carry_audio, audio_context_frames=audio_context_frames)
-        if parsed.render_bridge is not None or (next_index is None and parsed.bridges):
+        replacing = parsed.render_bridge in {item["before"] for item in parsed.replacements}
+        if (parsed.render_bridge is not None and not replacing) or (next_index is None and parsed.bridges):
             done = {i for i in range(len(parsed.boxes)) if i + 1 in by_index and is_done(i, by_index[i + 1])}
             found = bridges.states(folder, parsed, manifest, done, known)
             if parsed.render_bridge is not None:
@@ -484,6 +485,18 @@ class H3C_Timeline(io.ComfyNode):
                 complete = len(done) == len(parsed.boxes) and not any(index > len(parsed.boxes) for index in by_index)
                 return cls.bridge(chosen, parsed, name, folder, manifest, by_index, is_done, known, complete,
                                   clip, vae, audio_vae, ref_image_size, negative)
+        if replacing or (next_index is None and parsed.replacements):
+            done = {i for i in range(len(parsed.boxes)) if i + 1 in by_index and is_done(i, by_index[i + 1])}
+            found = replacement_candidates.states(folder, parsed, manifest, done, known, context)
+            if replacing:
+                chosen = next(state for state in found if state.bridge["before"] == parsed.render_bridge)
+                if chosen.status in ("problem", "waiting", "review"):
+                    raise ValueError(f"H3 Timeline: the replacement before box {chosen.index + 1}: {chosen.note}")
+            else:
+                chosen = next((state for state in found if state.status == "next"), None)
+            if chosen is not None:
+                return cls.replace(chosen, parsed, name, folder, manifest, by_index, is_done, known,
+                                   clip, vae, audio_vae, ref_image_size, negative)
         if next_index is None:
             return cls.finish(name, folder, parsed, manifest, is_done, known)
         box = plan(next_index)
@@ -655,6 +668,37 @@ class H3C_Timeline(io.ComfyNode):
             info += " Saving it moves its earlier take to takes/."
         status = _status(name, folder, parsed, manifest, is_done, known=known)
         return io.NodeOutput(positive, negative, latent, segment, plan.box.seed, plan.prompt, info,
+                             ui={"h3c_timeline": [status]})
+
+    @classmethod
+    def replace(cls, state, parsed, name, folder, manifest, by_index, is_done, known,
+                clip, vae, audio_vae, ref_image_size, negative):
+        """Renders a candidate for the reviewed replacement of `state` from the footage that survives around it."""
+        before, after = by_index[state.index], by_index[state.index + 1]
+        width, height, context, carry_audio = (known[key] for key in ("width", "height", "context_frames", "carry_audio"))
+        audio_context_frames = known.get('audio_context_frames', 0)
+        plan = replacement_candidates.plan(parsed, state, width, height, context, carry_audio,
+                                           audio_context_frames=audio_context_frames)
+        positive, latent = conditioning.encode(plan, clip, vae, audio_vae, width, height, ref_image_size, {}, {})
+        latent, positive, negative, segment = replacement_candidates.prepare(
+            state, latent, positive, negative, (name, folder, state.index + 1, before),
+            store.load_segment_latents(folder, before), store.load_segment_latents(folder, after), vae, carry_audio,
+            audio_context_frames=audio_context_frames)
+        shape, bridge = state.geometry, state.bridge
+        segment.description = plan.prompt
+        segment.timeline = {"replacement": bridge["before"], "region": state.region, "recipe": state.recipe,
+                            "settings": plan.settings, "from": bridges.link(folder, before),
+                            "to": bridges.link(folder, after), "left": shape.left, "right": shape.right,
+                            "windows": [list(shape.left_window), list(shape.right_window)],
+                            "played": shape.frames, "seed": bridge["seed"]}
+        attach_soundtrack(segment.timeline, parsed, manifest)
+        n = state.index + 1
+        info = (f"Replacement candidate before box {n}: {shape.frames} frames in place of the last {shape.left} of box "
+                f"{n - 1} and the first {shape.right} of box {n}, from box {n - 1}'s surviving {shape.context_frames} "
+                f"frames to box {n}'s next {shape.ending_frames}. Seed {bridge['seed']}. It plays in the full video "
+                "only once you select it.")
+        status = _status(name, folder, parsed, manifest, is_done, known=known)
+        return io.NodeOutput(positive, negative, latent, segment, bridge["seed"], plan.prompt, info,
                              ui={"h3c_timeline": [status]})
 
     @classmethod
