@@ -1,6 +1,7 @@
 import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
 import {settledPreparation} from './h3c_reference_preparation.mjs?v=20261014-reference-thumbnails-1';
 import {applyResult,parseStoryState,serializeStoryState} from './h3c_story_model.mjs?v=20261011-reference-preparation-1';
+import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-preparation-1';
 
 const CONTENT_FIELDS=new Set(['name','timeline','idea','state','idea_images','template']);
 
@@ -40,7 +41,8 @@ export function sameStoryWiring(a,b) {
         if(['H3C_Story','H3C_Timeline'].includes(node.type)) {
           node.widgets_values=Object.fromEntries(Object.entries(savedFields(current,node)).filter(([name])=>!CONTENT_FIELDS.has(name)));
           delete node.widgets_values_named;
-          for(const key of ['h3c_library_revision','h3c_fork_sequence','h3c_project','h3c_asset_bindings','h3c_generation_import'])
+          // Uploaded guide and asset registries record media, not generator wiring.
+          for(const key of ['h3c_library_revision','h3c_fork_sequence','h3c_project','h3c_asset_bindings','h3c_generation_import','h3c_manual_guides','h3c_uploaded_assets'])
             if(node.properties)delete node.properties[key];
         }
         if(textNodes.has(String(node.id))){delete node.widgets_values;delete node.widgets_values_named;}
@@ -71,10 +73,14 @@ export function savedStoryContent(value,current) {
   const renders=sameStoryWiring(current,workflow);
   if(!renders) {
     delete timeline.still_requests;
-    if(timeline.continuity)delete timeline.continuity.anchors;
     if(timeline.reference_preparation)timeline.reference_preparation=settledPreparation(timeline.reference_preparation);
+    // Accepted guides are the user's chosen frames, not renders of the saved generator; keep them.
+    // Candidates, in-flight jobs and saved-take sources belong to the old generator and sequence.
     for(const box of timeline.boxes)for(const preview of box.previews??[])
-      for(const key of ['image','images','guide','pending','job','still_source'])delete preview[key];
+      for(const key of ['image','images','pending','job','still_source'])delete preview[key];
+    // Scene anchors are pinned accepted guides; keep only those whose guide is still accepted.
+    if(Array.isArray(timeline.continuity?.anchors))reconcileSceneAnchors(timeline);
+    else if(timeline.continuity)delete timeline.continuity.anchors;
   }
   return {story,timeline:before===stringifyJSON(timeline)?fields.timeline:stringifyJSON(timeline),
     sequence:renders?value.sequence:`Project-${crypto.randomUUID().slice(0,8)}`,renders};
