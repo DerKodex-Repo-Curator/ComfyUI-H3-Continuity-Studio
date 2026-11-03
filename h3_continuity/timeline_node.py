@@ -64,6 +64,27 @@ def _view(name, filename, version):
     return {"filename": filename, "subfolder": f"h3_sequences/{name}", "type": "output", "v": version}
 
 
+def replacement_states(folder, parsed, manifest, done, known):
+    """(each replacement's State, or None while context_frames is unknown; the candidates the full video plays;
+    why the full video can't be checked, or "")."""
+    if not parsed.replacements:
+        return [], [], ""
+    context = known.get("context_frames")
+    if context is None:
+        note = ("Full video not rebuilt: the node's context_frames is unknown, so the selected replacements can't be "
+                "checked." if any(item.get("selected") for item in parsed.replacements) else "")
+        return None, [], note
+    found = replacement_candidates.states(folder, parsed, manifest, done, known, context)
+    return found, list(replacement_candidates.active(found).values()), ""
+
+
+def selections(folder, parsed, manifest, by_index, is_done, known):
+    """{box id, candidate} of each selected candidate the full video plays now, for H3 Save Segment to check again."""
+    done = {i for i in range(len(parsed.boxes)) if i + 1 in by_index and is_done(i, by_index[i + 1])}
+    _, replaced, _ = replacement_states(folder, parsed, manifest, done, known)
+    return [{"box": entry["box"], "candidate": entry["candidate"]} for entry in replaced]
+
+
 def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=False, known=None, managed_owner=None):
     """`known` holds the node settings a bridge compares, None where they are unknown."""
     with continuity.SEQUENCE_LOCK:
@@ -74,6 +95,7 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
         known = known or {}
         keys = bridges.splice(parsed, known)
         spliced = bridges.spliced(folder, manifest, keys) if keys else []
+        found_replacements, replaced, unchecked = replacement_states(folder, parsed, manifest, done, known)
 
         def thumb(entry):
             filename = entry["stem"] + "_last.png"
@@ -90,7 +112,9 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
         except ValueError as error:
             export_error = str(error)
             soundtrack = None
-        if contiguous and current and materialize:
+        if unchecked and not export_error:
+            export_error = unchecked
+        if contiguous and current and materialize and not unchecked:
             from .timeline_api.service import authorize_sequence
             authorize_sequence(name, managed_owner, "full_video")
 
@@ -99,13 +123,13 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
                     sources = audio_tracks.soundtrack_sources(soundtrack)
                 except ValueError:
                     return None
-                return store.current_full_video(folder, manifest, spliced, sources)
+                return store.current_full_video(folder, manifest, [*spliced, *replaced], sources)
 
             record = saved_full_video() if soundtrack is not None else None
             if record is None and soundtrack is not None:
                 try:
                     export_error = continuity.rebuild_full_video(folder, name, manifest, FULL_VIDEO_CRF, spliced, soundtrack,
-                                                                managed_owner=managed_owner)
+                                                                managed_owner=managed_owner, replaced=replaced)
                 except (OSError, ValueError) as error:
                     export_error = f"Full video could not be saved: {error}"
                 record = saved_full_video()
@@ -625,6 +649,8 @@ class H3C_Timeline(io.ComfyNode):
             segment.timeline["ending_context_frames"] = ending
         if parsed.bridges:
             segment.timeline["splice"] = bridges.splice(parsed, known)
+        if parsed.replacements:
+            segment.timeline["replace"] = selections(folder, parsed, manifest, by_index, is_done, known)
         attach_soundtrack(segment.timeline, parsed, manifest)
         saved = max(by_index, default=0)
         if segment.preserve_following:
@@ -659,6 +685,8 @@ class H3C_Timeline(io.ComfyNode):
         segment.timeline = {"bridge": state.bridge["before"], "layout": plan.layout, "settings": plan.settings,
                             "from": bridges.link(folder, before), "to": bridges.link(folder, after),
                             "played": plan.frames, "splice": bridges.splice(parsed, known), "seed": plan.box.seed}
+        if parsed.replacements:
+            segment.timeline["replace"] = selections(folder, parsed, manifest, by_index, is_done, known)
         attach_soundtrack(segment.timeline, parsed, manifest)
         segment.timeline_complete = complete
         n = state.index + 1
@@ -691,6 +719,8 @@ class H3C_Timeline(io.ComfyNode):
                             "to": bridges.link(folder, after), "left": shape.left, "right": shape.right,
                             "windows": [list(shape.left_window), list(shape.right_window)],
                             "played": shape.frames, "seed": bridge["seed"]}
+        if parsed.bridges:
+            segment.timeline["splice"] = bridges.splice(parsed, known)
         attach_soundtrack(segment.timeline, parsed, manifest)
         n = state.index + 1
         info = (f"Replacement candidate before box {n}: {shape.frames} frames in place of the last {shape.left} of box "
@@ -731,9 +761,13 @@ class H3C_Timeline(io.ComfyNode):
             if trailing:
                 soundtrack = {}
                 attach_soundtrack(soundtrack, parsed, manifest)
-                info += " " + (soundtrack['export_error'] if 'export_error' in soundtrack else
+                done = {entry["index"] - 1 for entry in manifest["segments"]
+                        if entry["index"] <= count and is_done(entry["index"] - 1, entry)}
+                _, replaced, unchecked = replacement_states(folder, parsed, manifest, done, known or {})
+                info += " " + (soundtrack['export_error'] if 'export_error' in soundtrack else unchecked or
                                continuity.rebuild_full_video(folder, name, manifest, FULL_VIDEO_CRF, spliced,
-                                  soundtrack.get('soundtrack', ()), managed_owner=sequence_owner(cls)))
+                                  soundtrack.get('soundtrack', ()), managed_owner=sequence_owner(cls),
+                                  replaced=replaced))
             blocked = ExecutionBlocker(None)
             status = _status(name, folder, parsed, manifest, is_done, materialize=True, known=known, managed_owner=sequence_owner(cls))
             return io.NodeOutput(blocked, blocked, blocked, blocked, blocked, blocked, info, ui={"h3c_timeline": [status]})

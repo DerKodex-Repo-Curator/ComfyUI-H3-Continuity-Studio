@@ -175,9 +175,9 @@ def proposal(timeline, index, context, takes=None, choices=None):
     return None
 
 
-def static_key(timeline, bridge, context, settings):
-    """Everything a reviewed region depends on except the endpoint takes: its coverage and windows, the cues,
-    protections and recordings around it and the node settings."""
+def static_key(timeline, bridge, context):
+    """Everything a reviewed region depends on except the endpoint takes: its coverage and windows, and the cues,
+    protections and recordings around it. Node settings are compared per candidate, where they are known."""
     shape = geometry(timeline, bridge, context)
     span = (shape.start - shape.context_frames, shape.end + shape.ending_frames)
     cues = [{"id": item["id"], "state": item["state"], "key": dialogue.alignment_key(item["cue"]),
@@ -190,8 +190,7 @@ def static_key(timeline, bridge, context, settings):
     return rules._digest({"boxes": [timeline.boxes[shape.index - 1].id, timeline.boxes[shape.index].id],
                           "join": shape.join, "left": shape.left, "right": shape.right,
                           "windows": [shape.left_window, shape.right_window], "problem": shape.problem,
-                          "cues": cues, "observed": marks, "clips": clips,
-                          "settings": {key: value for key, value in settings.items() if value is not None}})
+                          "cues": cues, "observed": marks, "clips": clips})
 
 
 def region_key(static, before, after):

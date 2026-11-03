@@ -4,8 +4,6 @@ from h3_continuity import bridges, dialogue, replacement
 
 from .helpers import box, clip, cue, parse, wav
 
-SETTINGS = {"width": 512, "height": 512, "context_frames": 39, "carry_audio": True}
-
 
 def swap(before, left, right, **extra):
     return {"before": before, "mode": "replace", "left": left, "right": right, "seed": 7, "prompt": "A turn.", **extra}
@@ -139,16 +137,16 @@ class KeyTest(unittest.TestCase):
     def test_static_key_follows_the_region_inputs(self):
         line = checked(cue(start=4.6, end=4.8, portrayal="voiceover"))
         base = two_boxes(line)
-        key = replacement.static_key(base, base.replacements[0], 39, SETTINGS)
+        key = replacement.static_key(base, base.replacements[0], 39)
         for changed in (two_boxes(line, left=15, right=14),
                         two_boxes(checked({**line, "text": "Other."})),
                         two_boxes(line, clips=[clip(start=0.5, locked=True, in_full_video=True)])):
-            self.assertNotEqual(replacement.static_key(changed, changed.replacements[0], 39, SETTINGS), key)
-        self.assertNotEqual(replacement.static_key(base, base.replacements[0], 39, {**SETTINGS, "width": 640}), key)
+            self.assertNotEqual(replacement.static_key(changed, changed.replacements[0], 39), key)
+        self.assertNotEqual(replacement.static_key(base, base.replacements[0], 22), key)
         reworded = parse([box("a", 107), box("b", 107, cut=True)],
                          bridges=[{**swap("b", 14, 15), "prompt": "Other.", "seed": 9}],
                          audio_clips=[clip(locked=True, in_full_video=True)], dialogue={"version": 1, "cues": [line]})
-        self.assertEqual(replacement.static_key(reworded, reworded.replacements[0], 39, SETTINGS), key)
+        self.assertEqual(replacement.static_key(reworded, reworded.replacements[0], 39), key)
         self.assertNotEqual(replacement.recipe(reworded, reworded.replacements[0]),
                             replacement.recipe(base, base.replacements[0]))
 

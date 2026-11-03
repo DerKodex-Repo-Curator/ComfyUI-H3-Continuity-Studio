@@ -7,7 +7,7 @@ import unittest
 
 import torch
 
-from h3_continuity import replacement, replacement_candidates as candidates, store
+from h3_continuity import bridges, replacement, replacement_candidates as candidates, store
 
 from .helpers import box, clip, cue, document
 from h3_continuity import timeline as rules
@@ -41,8 +41,8 @@ class CandidateTest(unittest.TestCase):
                          audio_clips=[clip(locked=True, in_full_video=True)], dialogue={"version": 1, "cues": list(cues)})
         return rules.parse(json.dumps(value))
 
-    def state(self, timeline, done=(0, 1)):
-        [found] = candidates.states(self.folder, timeline, self.manifest, set(done), KNOWN, 39)
+    def state(self, timeline, done=(0, 1), known=KNOWN):
+        [found] = candidates.states(self.folder, timeline, self.manifest, set(done), known, 39)
         return found
 
     def add_candidate(self, state, recipe=None, video=True):
@@ -50,7 +50,8 @@ class CandidateTest(unittest.TestCase):
         entry = {"box": "b", "candidate": cid, "stem": candidates.stem("b", cid), "frames": 107, "context_frames": 39,
                  "played": 29, "created": "2026-11-03T10:00:00",
                  "timeline": {"replacement": "b", "candidate": cid, "region": state.region,
-                              "recipe": recipe or state.recipe, "left": 14, "right": 15, "played": 29}}
+                              "recipe": recipe or state.recipe, "left": 14, "right": 15, "played": 29,
+                              "settings": KNOWN}}
         if video:
             entry["video"] = {"file": entry["stem"] + ".mp4", "frames": 29, "fps": 24}
             with open(os.path.join(self.folder, entry["video"]["file"]), "wb") as handle:
@@ -89,6 +90,51 @@ class CandidateTest(unittest.TestCase):
         self.assertEqual((found.status, found.selected), ("review", "stale"))
         self.assertEqual([item["state"] for item in found.candidates], ["stale"])
         self.assertEqual(candidates.active([found]), {})
+
+    def test_node_settings_compare_only_where_known(self):
+        state = self.state(self.timeline())
+        cid = self.add_candidate(state)
+        reviewed = self.timeline(review=state.region, selected=cid)
+        unknown = self.state(reviewed, known={**KNOWN, "width": None, "carry_audio": None})
+        self.assertEqual((unknown.region, unknown.status, unknown.selected), (state.region, "done", "current"))
+        changed = self.state(reviewed, known={**KNOWN, "carry_audio": False})
+        self.assertEqual((changed.region, changed.status, changed.selected), (state.region, "next", "stale"))
+
+    def test_a_selection_plays_only_in_a_reviewed_region(self):
+        state = self.state(self.timeline())
+        cid = self.add_candidate(state)
+        unreviewed = self.state(self.timeline(review="older", selected=cid))
+        self.assertEqual((unreviewed.status, unreviewed.selected), ("review", "current"))
+        self.assertEqual(candidates.active([unreviewed]), {})
+
+    def test_full_video_plays_current_selections_once_context_is_known(self):
+        from h3_continuity import timeline_node
+        state = self.state(self.timeline())
+        cid = self.add_candidate(state)
+        reviewed = self.timeline(review=state.region, selected=cid)
+        found, replaced, note = timeline_node.replacement_states(self.folder, reviewed, self.manifest, {0, 1}, KNOWN)
+        self.assertEqual(([s.selected for s in found], [e["candidate"] for e in replaced], note), (["current"], [cid], ""))
+        unknown = {**KNOWN, "context_frames": None}
+        found, replaced, note = timeline_node.replacement_states(self.folder, reviewed, self.manifest, {0, 1}, unknown)
+        self.assertEqual((found, replaced), (None, []))
+        self.assertIn("context_frames", note)
+        unselected = self.timeline(review=state.region)
+        self.assertEqual(timeline_node.replacement_states(self.folder, unselected, self.manifest, {0, 1}, unknown),
+                         (None, [], ""))
+
+    def test_a_saved_selection_needs_the_takes_it_was_rendered_from(self):
+        state = self.state(self.timeline())
+        cid = self.add_candidate(state)
+        segments = {entry["index"]: entry for entry in self.manifest["segments"]}
+        record = self.manifest["replacements"][0]["timeline"]
+        record["from"], record["to"] = (bridges.link(self.folder, segments[n]) for n in (1, 2))
+        wanted = [{"box": "b", "candidate": cid}]
+        self.assertEqual([entry["candidate"] for entry in candidates.selected_entries(self.folder, self.manifest, wanted)],
+                         [cid])
+        self.assertEqual(candidates.selected_entries(self.folder, self.manifest, [{"box": "b", "candidate": "x"}]), [])
+        time.sleep(0.02)
+        self.save_box(2, "b")
+        self.assertEqual(candidates.selected_entries(self.folder, self.manifest, wanted), [])
 
     def test_missing_candidate_files(self):
         state = self.state(self.timeline())

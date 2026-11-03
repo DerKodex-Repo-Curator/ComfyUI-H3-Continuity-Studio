@@ -151,18 +151,21 @@ def _replace(temporary, path):
 
 
 def build_full_video(path, videos, audio, crf):
-    """Concatenate segment videos into `path` with `audio` = (waveform, sample_rate) or None.
-    Packets are copied when every file has the same encoding; otherwise the frames are re-encoded.
+    """Concatenate segment videos into `path` with `audio` = (waveform, sample_rate) or None. Each video is a path, or
+    (path, first frame, frames) for a window of it.
+    Packets are copied when every file has the same encoding and every window starts at its first frame (segments
+    have no B-frames, so a prefix is its first packets); otherwise the frames are re-encoded.
     Returns (written path or None, note)."""
-    signatures = [_signature(video) for video in videos]
+    windows = [(video, 0, None) if isinstance(video, str) else tuple(video) for video in videos]
+    signatures = [_signature(video) for video, _, _ in windows]
     first = signatures[0]
     if any(signature[2:5] != first[2:5] for signature in signatures):
         return None, "Full video skipped: the segment videos differ in size or frame rate."
     if any(signature[5] != first[5] for signature in signatures):
         return None, "Full video skipped: the segment videos differ in color space."
-    copy = all(signature[:2] == first[:2] for signature in signatures)
+    copy = all(signature[:2] == first[:2] for signature in signatures) and all(start == 0 for _, start, _ in windows)
     temporary = path + ".tmp.mp4"
-    with av.open(videos[0]) as template, av.open(temporary, mode="w") as container:
+    with av.open(windows[0][0]) as template, av.open(temporary, mode="w") as container:
         color_space = first[5]
         if copy:
             video_stream = container.add_stream_from_template(template.streams.video[0], opaque=True)
@@ -170,18 +173,24 @@ def build_full_video(path, videos, audio, crf):
             video_stream = _add_video_stream(container, first[4], first[2], first[3], crf, color_space)
         audio_stream = _add_audio_stream(container, *audio) if audio is not None else None
         offset = Fraction(0)
-        for video in videos:
+        for video, start, frames in windows:
+            end = None if frames is None else start + frames
             with av.open(video) as source_container:
                 source = source_container.streams.video[0]
                 if not copy:
-                    for frame in source_container.decode(source):
-                        frame.pts = None
-                        container.mux(video_stream.encode(frame))
+                    for number, frame in enumerate(source_container.decode(source)):
+                        if end is not None and number >= end:
+                            break
+                        if number >= start:
+                            frame.pts = None
+                            container.mux(video_stream.encode(frame))
                     continue
                 origin, count = None, 0
                 for packet in source_container.demux(source):
                     if packet.pts is None or packet.size == 0:
                         continue
+                    if end is not None and count >= end:
+                        break
                     if origin is None:
                         origin = packet.pts
                     shift = offset / packet.time_base - origin

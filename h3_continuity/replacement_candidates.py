@@ -60,11 +60,15 @@ def takes(folder, timeline, manifest):
     return result
 
 
-def candidate_state(folder, entry, region):
+def candidate_state(folder, entry, region, known):
+    """missing, current, or stale when its region or a known node setting changed."""
     video = entry.get("video")
     if not video or not os.path.isfile(os.path.join(folder, video["file"])):
         return "missing"
-    return "current" if region is not None and (entry.get("timeline") or {}).get("region") == region else "stale"
+    record = entry.get("timeline") or {}
+    current = (region is not None and record.get("region") == region
+               and rules.settings_match(record.get("settings") or {}, known))
+    return "current" if current else "stale"
 
 
 def states(folder, timeline, manifest, done, known, context):
@@ -80,9 +84,9 @@ def states(folder, timeline, manifest, done, known, context):
         links = [bridges.link(folder, segments.get(n)) for n in (index, index + 1)]
         region = None
         if all(links) and [link["box"] for link in links] == [timeline.boxes[index - 1].id, timeline.boxes[index].id]:
-            region = replacement.region_key(replacement.static_key(timeline, bridge, context, known), *links)
+            region = replacement.region_key(replacement.static_key(timeline, bridge, context), *links)
         recipe = replacement.recipe(timeline, bridge)
-        saved = [{"entry": entry, "state": candidate_state(folder, entry, region)}
+        saved = [{"entry": entry, "state": candidate_state(folder, entry, region, known)}
                  for entry in entries(manifest, bridge["before"])]
         chosen = bridge.get("selected")
         selected = "none"
@@ -112,13 +116,33 @@ def states(folder, timeline, manifest, done, known, context):
 
 
 def active(found):
-    """{box id: candidate entry} for the replacements whose selected candidate plays in the full video."""
+    """{box id: candidate entry} for the replacements whose selected candidate plays in the full video: current, in
+    a region that is still the reviewed one."""
     result = {}
     for state in found:
-        if state.selected == "current":
+        if state.selected == "current" and state.status not in ("problem", "waiting", "review"):
             result[state.bridge["before"]] = next(item["entry"] for item in state.candidates
                                                   if item["entry"].get("candidate") == state.bridge["selected"])
     return result
+
+
+def selected_entries(folder, manifest, selections):
+    """The candidates `selections` ({box, candidate}) names whose video is saved and whose two boxes are still the
+    saved takes they were rendered from."""
+    boxes = {(entry.get("timeline") or {}).get("box"): entry for entry in manifest["segments"]}
+    segments = {entry["index"]: entry for entry in manifest["segments"]}
+    found = []
+    for wanted in selections:
+        entry = next((item for item in entries(manifest, wanted["box"])
+                      if item.get("candidate") == wanted["candidate"]), None)
+        after = boxes.get(wanted["box"])
+        before = segments.get(after["index"] - 1) if after else None
+        if entry is None or before is None or candidate_state(folder, entry, None, {}) == "missing":
+            continue
+        record = entry.get("timeline") or {}
+        if record.get("from") == bridges.link(folder, before) and record.get("to") == bridges.link(folder, after):
+            found.append(entry)
+    return found
 
 
 def prepare(state, latent, positive, negative, sequence, before, after, vae, carry_audio, *, audio_context_frames=0):
