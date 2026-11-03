@@ -172,7 +172,7 @@ def build_full_video(path, videos, audio, crf):
         else:
             video_stream = _add_video_stream(container, first[4], first[2], first[3], crf, color_space)
         audio_stream = _add_audio_stream(container, *audio) if audio is not None else None
-        offset = Fraction(0)
+        offset, encoded = Fraction(0), 0
         for video, start, frames in windows:
             end = None if frames is None else start + frames
             with av.open(video) as source_container:
@@ -182,7 +182,9 @@ def build_full_video(path, videos, audio, crf):
                         if end is not None and number >= end:
                             break
                         if number >= start:
-                            frame.pts = None
+                            # a decoded frame keeps its source time base, so numbering it there collapses the times
+                            frame.pts, frame.time_base = encoded, 1 / first[4]
+                            encoded += 1
                             container.mux(video_stream.encode(frame))
                     continue
                 origin, count = None, 0

@@ -65,6 +65,16 @@ class AssemblyTest(unittest.TestCase):
         expected = [(0, i) for i in range(16)] + [(1, i) for i in range(12)] + [(2, i) for i in range(6, 22)]
         self.assertEqual(labels[:44], expected)
 
+    def test_re_encoded_frames_play_at_the_frame_rate(self):
+        self.build([self.candidate(6, 6)])
+        with av.open(os.path.join(self.folder, "full.mp4")) as container:
+            stream = container.streams.video[0]
+            times = [frame.time for frame in container.decode(stream)]
+            self.assertEqual(stream.average_rate, 24)
+        self.assertEqual(len(times), 44)
+        for index, time in enumerate(times):
+            self.assertAlmostEqual(time, index / 24, places=3)
+
     def test_trims_at_the_end_only_still_copy_packets(self):
         parts, labels, note = self.build([self.candidate(12, 0)])
         self.assertNotIn("re-encoded", note)
