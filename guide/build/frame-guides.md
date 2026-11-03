@@ -72,7 +72,7 @@ Select models you have installed; nothing is downloaded. Other pixel generators 
 
 ## Split a clip at a Shot guide
 
-A guide on a **Shot** marker pins one frame in the middle of a generation. H3 doesn't build up to that frame, so the image tends to appear as an insert. **Split at guide** makes the guide a real endpoint instead:
+A guide on a **Shot** marker steers one frame in the middle of a generation; H3 blends the video toward it and away again. **Split at guide** turns the guide into a real endpoint instead, so one clip ends exactly on the image and the next starts from it. In testing the video looked about as smooth either way; the split gives you a hard boundary, the native First/Last path and two separately editable clips:
 
 - The clip now ends on the guide (its **Last**), and a new clip continues from it (its **First**) with a **Continue** join, so motion and sound carry through.
 - Both clips are rounded up to H3's frame grid, so no performance time is lost. The guide can land a few frames later; the button's tooltip and the note after the split give the lengths and the time added. An [exact-length](exact-lengths.md) clip keeps its second half exact.

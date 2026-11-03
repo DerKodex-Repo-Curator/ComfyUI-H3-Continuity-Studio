@@ -4,7 +4,7 @@
 
 ## Problem
 
-A mid-clip frame guide (a `previews` record with `guide` and a `frame`) is pinned into the clip at that frame. H3 does not develop smoothly toward it; the image is effectively an insert. A real Last frame (end of the left clip) followed by a real First frame (start of the right clip) makes H3 generate toward and away from the image.
+A mid-clip frame guide (a `previews` record with `guide` and a `frame`) is pinned into the clip at that frame. The original premise was that H3 does not develop smoothly toward it. GS7 testing found it does blend toward and away from the guide; the split's real value is a hard boundary, the native First/Last path and separately editable clips. A real Last frame (end of the left clip) followed by a real First frame (start of the right clip) makes H3 generate toward and away from the image.
 
 ## Feature
 
