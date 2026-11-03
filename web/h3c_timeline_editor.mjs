@@ -5,8 +5,9 @@ import { promptSections, promptShots, writePromptSections } from './h3c_prompt_s
 import * as model from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
 import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261103-replacement-bridges-1';
 import { shotFrames, frameTargets, syncTargets } from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
-import {FrameImages, targetLabel} from './h3c_frame_images.mjs?v=20261103-replacement-bridges-1';
-import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261011-reference-preparation-1';
+import {FrameImages, targetLabel} from './h3c_frame_images.mjs?v=20261103-bridges-guide-split-1';
+import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261103-bridges-guide-split-1';
+import { splitAtGuide, guideSplitTiming, describeGuideSplit, describeGuideSplitTiming } from './h3c_guide_split.mjs?v=20261103-bridges-guide-split-1';
 import { fillReferenceSwitches } from './h3c_reference_switches.mjs?v=20261010-image-descriptions-1';
 import { ReferenceReplacements } from './h3c_reference_replacements.mjs?v=20261011-reference-preparation-1';
 import { fillPicturePicker, mentionedReferences, referenceChip } from './h3c_reference_pictures.mjs?v=20261010-reference-workspace-1';
@@ -35,6 +36,7 @@ const CSS = `
 .h3ct-link { color: #8fbcff; white-space: nowrap; }
 .h3ct-link[hidden] { display: none; }
 .h3ct-lane { overflow-x: auto; flex-shrink: 0; background: #101218; border: 1px solid var(--border-color, #333); border-radius: 6px; }
+.h3ct-lane > .h3ct-stills, .h3ct-lane > .h3ct-ruler, .h3ct-lane > .h3ct-track, .h3ct-lane > .h3ct-audio { width: calc(100% * var(--h3ct-zoom, 1)); }
 .h3ct-stills { position: relative; height: 74px; }
 .h3ct-still { position: absolute; padding: 0; text-align: left; overflow: hidden; white-space: normal; }
 .h3ct-still img, .h3ct-still-empty { width: 100%; height: 42px; object-fit: contain; display: block; background: #181c25; }
@@ -1267,10 +1269,18 @@ export class TimelineEditor {
     this.dialogue.render();
   }
 
+  // The Studio sets how wide the lane draws (zoom, 1 = fit the panel).
+  setLaneView({zoom = 1} = {}) {
+    if (zoom === this.zoom) return;
+    this.zoom = zoom;
+    this.laneEl.style.setProperty('--h3ct-zoom', String(zoom));
+    this.renderTrack();
+  }
+
   renderRuler(span) {
     this.rulerEl.textContent = '';
     const total = span / model.FPS;
-    const step = [1, 2, 5, 10, 15, 30, 60, 120].find((s) => total / s <= 10) ?? 300;
+    const step = [1, 2, 5, 10, 15, 30, 60, 120].find((s) => total / (this.zoom ?? 1) / s <= 10) ?? 300;
     for (let t = 0; t < total; t += step) {
       const tick = el('span', 'h3ct-tick', `${t}s`);
       tick.style.left = percent((t * model.FPS) / span);
@@ -1690,6 +1700,32 @@ export class TimelineEditor {
     return row;
   }
 
+  // Splits clip `index` at an accepted mid-clip guide as one undo step, then shows the clip that now opens on it.
+  splitClipAtGuide(index, preview) {
+    this.host.undoStep?.();
+    const result = splitAtGuide(this.state, index, preview, this.host.context());
+    for (const changed of this.state.boxes.slice(index)) this.statusById.delete(changed.id);
+    this.selected = index + 1;
+    this.selectedShot = 1;
+    this.commit();
+    this.host.undoStep?.();
+    this.inspectClip();
+    const note = describeGuideSplit(result);
+    this.frameImages.note(note);
+    return note;
+  }
+
+  guideSplitButton(saved) {
+    const index = this.selected;
+    const split = button('Split at guide', '', () => {
+      try { this.splitClipAtGuide(index, saved); }
+      catch (error) { split.after(el('span', 'h3ct-hint problem', error.message)); }
+    });
+    try { split.title = describeGuideSplitTiming(guideSplitTiming(this.state, index, saved, this.host.context()), index); }
+    catch (error) { split.disabled = true; split.title = error.message; }
+    return split;
+  }
+
   savedStills(shots) {
     const box = this.box();
     const list = el('div');
@@ -1708,6 +1744,7 @@ export class TimelineEditor {
       const where = active ? label : `Removed ${label}`;
       row.append(el('span', null, saved.guide ? `${where} · guides frame ${saved.frame}` : `${where} · saved still, not a guide`));
       if (saved.target && active) continue; // The marker panel has separate guide and candidate controls.
+      if (saved.guide && !saved.target) row.append(this.guideSplitButton(saved)); // A legacy guide has no marker.
       row.append(button('Remove', saved.guide ? 'Stop guiding this frame and remove the saved still' : 'Remove this saved still', () => {
         box.previews = box.previews.filter((p) => p !== saved);
         this.commit();

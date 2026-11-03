@@ -15,6 +15,9 @@ const OLDER_TAKE = 'Older take: this clip changed after it rendered.';
 const MOVING = 'Moving the take…';
 const NO_STORY = 'Link an H3 Story node to this Timeline’s story input to write with a model.';
 const STYLE_ID = 'h3cx-style';
+const LAYOUT_KEY = 'h3cx-layout';
+const TRACK_MIN = 250;
+const ZOOM_MAX = 16;
 const MOBILE_QUERY = '(max-width:600px), (max-width:1100px) and (max-height:500px)';
 const CSS = `
 .h3cx-studio { position: fixed; inset: 0; z-index: 1500; display: flex; flex-direction: column; outline: none;
@@ -30,8 +33,11 @@ const CSS = `
 .h3cx-slot { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .h3cx-grow { flex: 1 1 auto; }
 .h3cx-progress { color: #aab1bd; white-space: nowrap; }
-.h3cx-main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 256px minmax(0, 1fr) 346px; position: relative; }
-.h3cx-references-hidden .h3cx-main { grid-template-columns:minmax(0,1fr) 346px; }
+.h3cx-main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: var(--h3cx-lib) minmax(0, 1fr) var(--h3cx-insp); position: relative;
+  --h3cx-lib-min: 256px; --h3cx-insp-min: 346px;
+  --h3cx-lib: clamp(var(--h3cx-lib-min), var(--h3cx-lib-w, var(--h3cx-lib-min)), 40vw);
+  --h3cx-insp: clamp(var(--h3cx-insp-min), var(--h3cx-insp-w, var(--h3cx-insp-min)), 40vw); }
+.h3cx-references-hidden .h3cx-main { grid-template-columns:minmax(0,1fr) var(--h3cx-insp); }
 .h3cx-center { display:flex; flex-direction:column; min-width:0; min-height:0; }
 .h3cx-center > .h3cx-player, .h3cx-center > .h3cx-focus { flex:1 1 auto; }
 .h3cx-player { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; overflow-y:auto; padding: 8px 10px; }
@@ -64,7 +70,7 @@ const CSS = `
 .h3cx-template select { width: 100%; }
 .h3cx-template-details p, .h3cx-template-folder { margin: 0; font-size: 12px; color: #aab1bd; }
 .h3cx-template-folder { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; overflow-wrap: anywhere; }
-.h3cx-track { flex: 0 0 250px; min-height: 0; max-height: 40vh; overflow-y: auto; padding: 6px 10px 8px;
+.h3cx-track { flex: 0 0 clamp(250px, var(--h3cx-track-h, 250px), 70vh); min-height: 0; max-height: max(250px, 70vh); overflow-y: auto; padding: 6px 10px 8px;
   background: #1d2027; border-top: 1px solid #2c313c; }
 .h3cx-track .h3ct-hint { margin-top: 4px; }
 .h3cx-track .h3ct-ruler { height:1.2em; }
@@ -91,6 +97,15 @@ const CSS = `
 .h3cx-track-toolbar, .h3cx-audio-toolbar, .h3cx-text-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:6px; }
 .h3cx-track-toolbar .h3cx-slot { flex-wrap:wrap; }
 .h3cx-library-toggle { display:inline-block; }
+.h3cx-split { position:absolute; z-index:4; background:transparent; touch-action:none; }
+.h3cx-split:hover, .h3cx-split:focus-visible, .h3cx-split.h3cx-dragging { background:#729cdd88; outline:none; }
+.h3cx-split-v { top:0; bottom:0; width:7px; cursor:col-resize; }
+.h3cx-split-lib { left:calc(var(--h3cx-lib) - 4px); }
+.h3cx-split-insp { right:calc(var(--h3cx-insp) - 3px); }
+.h3cx-references-hidden .h3cx-split-lib { display:none; }
+.h3cx-split-h { flex:0 0 6px; position:relative; margin:-3px 0; z-index:4; cursor:row-resize; }
+.h3cx-zoom { display:inline-flex; align-items:center; gap:4px; margin-left:auto; }
+.h3cx-zoom output { min-width:4ch; text-align:center; font-size:12px; color:#aab1bd; }
 .h3cx-inspector-toggle { display:none; }
 .h3cx-studio button, .h3cx-studio input, .h3cx-studio select, .h3cx-studio textarea { font-size:14px; }
 .h3cx-studio .h3ct-hint, .h3cx-studio .h3ct-label { font-size:12px; }
@@ -102,9 +117,10 @@ const CSS = `
 .h3cx-project-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .h3cx-mobile-nav, .h3cx-mobile-more { display:none; }
 .h3cx-focus-body { flex:1; min-width:0; }
-@media(max-width:1150px) { .h3cx-main { grid-template-columns:220px minmax(0,1fr) 310px; } .h3cx-references-hidden .h3cx-main { grid-template-columns:minmax(0,1fr) 310px; } .h3cx-bar .h3cx-slot { font-size:12px; } }
+@media(max-width:1150px) { .h3cx-main { --h3cx-lib-min:220px; --h3cx-insp-min:310px; } .h3cx-bar .h3cx-slot { font-size:12px; } }
 @media(max-width:899px) {
  .h3cx-main, .h3cx-references-hidden .h3cx-main { grid-template-columns:minmax(0,1fr); }
+ .h3cx-split { display:none; }
  .h3cx-inspector-toggle { display:inline-block; }
  .h3cx-inspector { display:none; }
  .h3cx-inspector-open .h3cx-inspector { display:flex; position:absolute; inset:0 0 0 auto; width:min(346px,100%); z-index:3; box-shadow:-8px 0 24px #0008; }
@@ -224,6 +240,7 @@ class Studio {
     this.mobileLayout = this.mobileMedia.matches;
     this.narrowMedia = matchMedia('(max-width:899px)');
     this.mobilePage = 'viewer';
+    this.layout = this.loadLayout();
     this.build();
     this.mobileMedia.addEventListener('change', () => this.layoutChanged());
     this.narrowMedia.addEventListener('change', () => this.layoutChanged());
@@ -447,14 +464,145 @@ class Studio {
     this.track = el('footer', 'h3cx-track');
     this.track.setAttribute('aria-label', 'Timeline');
     const toolbar = el('div', 'h3cx-track-toolbar');
-    toolbar.append(el('h2', 'h3cx-title', 'Timeline'), this.actionsSlot);
+    this.zoomOut = button('−', 'Zoom the timeline out (Ctrl + scroll)', () => this.zoomBy(1 / 1.25), 'h3cx-zoom-out');
+    this.zoomIn = button('+', 'Zoom the timeline in (Ctrl + scroll)', () => this.zoomBy(1.25), 'h3cx-zoom-in');
+    this.zoomFit = button('Fit', 'Fit the whole timeline in the panel', () => this.setZoom(1), 'h3cx-zoom-fit');
+    this.zoomOut.setAttribute('aria-label', 'Zoom timeline out');
+    this.zoomIn.setAttribute('aria-label', 'Zoom timeline in');
+    this.zoomText = el('output');
+    const zoom = el('span', 'h3cx-zoom');
+    zoom.setAttribute('role', 'group'); zoom.setAttribute('aria-label', 'Timeline zoom');
+    zoom.append(this.zoomOut, this.zoomText, this.zoomIn, this.zoomFit);
+    toolbar.append(el('h2', 'h3cx-title', 'Timeline'), this.actionsSlot, zoom);
     this.track.append(toolbar);
-    root.append(bar, activity, main, this.track, this.mobileNav);
+    main.append(this.splitter('lib', 'v', 'References width'), this.splitter('insp', 'v', 'Inspector width'));
+    this.splitTrack = this.splitter('track', 'h', 'Timeline height');
+    root.append(bar, activity, main, this.splitTrack, this.track, this.mobileNav);
+    this.applyLayout();
+    // Ctrl + scroll over the lane zooms about the pointer; plain scroll still pans.
+    this.track.addEventListener('wheel', (event) => {
+      const lane = this.host?.editor.laneEl;
+      if (!event.ctrlKey || !lane?.contains(event.target)) return;
+      event.preventDefault();
+      this.zoomBy(event.deltaY < 0 ? 1.15 : 1 / 1.15, event.clientX);
+    }, {passive: false});
     this.setReferencesVisible(this.referencesVisible);
     this.setInspectorVisible(this.inspectorVisible);
     if (typeof ResizeObserver === 'function') new ResizeObserver(() => this.trackResized()).observe(this.track);
     this.setLibrary('references');
     this.setPage('box');
+  }
+
+  // Layout: pane sizes and the timeline zoom survive a refresh. Each is a size the user chose, never below the original.
+
+  loadLayout() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? '{}') ?? {}; } catch { saved = {}; }
+    const number = (value, min, max) => Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : null;
+    return {lib: number(saved.lib, 0, 4000), insp: number(saved.insp, 0, 4000), track: number(saved.track, TRACK_MIN, 4000),
+      zoom: number(saved.zoom, 1, ZOOM_MAX) ?? 1};
+  }
+
+  saveLayout() {
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(this.layout)); } catch { /* storage may be unavailable */ }
+  }
+
+  // The smallest and largest size of a pane right now; the minimums are the sizes it had before it could be resized.
+  paneLimits(name) {
+    const narrow = matchMedia('(max-width:1150px)').matches;
+    if (name === 'track') return {min: TRACK_MIN, max: Math.max(TRACK_MIN, innerHeight * .7)};
+    return {min: name === 'lib' ? (narrow ? 220 : 256) : (narrow ? 310 : 346), max: innerWidth * .4};
+  }
+
+  applyLayout() {
+    const style = this.root.style;
+    for (const [name, prop] of [['lib', '--h3cx-lib-w'], ['insp', '--h3cx-insp-w'], ['track', '--h3cx-track-h']]) {
+      if (this.layout[name] == null) style.removeProperty(prop);
+      else style.setProperty(prop, `${this.layout[name]}px`);
+    }
+    this.zoomText.textContent = `${Math.round(this.layout.zoom * 100)}%`;
+    this.zoomOut.disabled = this.layout.zoom <= 1;
+    this.zoomFit.disabled = this.layout.zoom === 1;
+    this.zoomIn.disabled = this.layout.zoom >= ZOOM_MAX;
+    this.applyLaneView();
+  }
+
+  applyLaneView() {
+    this.host?.editor.setLaneView({zoom: this.layout.zoom});
+  }
+
+  splitter(name, axis, label) {
+    const node = el('div', `h3cx-split h3cx-split-${axis} h3cx-split-${name}`);
+    node.setAttribute('role', 'separator');
+    node.setAttribute('aria-orientation', axis === 'v' ? 'vertical' : 'horizontal');
+    node.setAttribute('aria-label', label);
+    node.title = `${label} — drag, or use the arrow keys · double-click to reset`;
+    node.tabIndex = 0;
+    // Dragging right grows References and shrinks the Inspector; dragging up grows the Timeline.
+    const sign = name === 'lib' ? 1 : -1;
+    const size = () => {
+      const rect = (name === 'track' ? this.track : name === 'lib' ? this.library : this.inspector).getBoundingClientRect();
+      return axis === 'v' ? rect.width : rect.height;
+    };
+    const set = (value) => {
+      const {min, max} = this.paneLimits(name);
+      this.layout[name] = Math.round(Math.min(max, Math.max(min, value)));
+      this.applyLayout();
+    };
+    node.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      node.setPointerCapture(event.pointerId);
+      node.classList.add('h3cx-dragging');
+      const start = axis === 'v' ? event.clientX : event.clientY, base = size();
+      const move = (e) => set(base + sign * ((axis === 'v' ? e.clientX : e.clientY) - start));
+      const stop = () => {
+        node.classList.remove('h3cx-dragging');
+        node.removeEventListener('pointermove', move);
+        node.removeEventListener('pointerup', stop);
+        node.removeEventListener('pointercancel', stop);
+        this.saveLayout();
+      };
+      node.addEventListener('pointermove', move);
+      node.addEventListener('pointerup', stop);
+      node.addEventListener('pointercancel', stop);
+    });
+    node.addEventListener('dblclick', () => {
+      this.layout[name] = null;
+      this.applyLayout();
+      this.saveLayout();
+    });
+    node.addEventListener('keydown', (event) => {
+      const grow = name === 'lib' ? 'ArrowRight' : name === 'insp' ? 'ArrowLeft' : 'ArrowUp';
+      const shrink = name === 'lib' ? 'ArrowLeft' : name === 'insp' ? 'ArrowRight' : 'ArrowDown';
+      if (event.key !== grow && event.key !== shrink) return;
+      event.preventDefault();
+      event.stopPropagation();
+      set(size() + (event.key === grow ? 24 : -24));
+      this.saveLayout();
+    });
+    return node;
+  }
+
+  setZoom(zoom, anchorX) {
+    const lane = this.host?.editor.laneEl;
+    const next = Math.min(ZOOM_MAX, Math.max(1, zoom));
+    if (next === this.layout.zoom) return;
+    // Keep the moment under the pointer (or the middle of the view) where it is while the lane grows or shrinks.
+    let fraction = 0, offset = 0;
+    if (lane) {
+      const rect = lane.getBoundingClientRect();
+      offset = anchorX == null ? rect.width / 2 : anchorX - rect.left;
+      fraction = (lane.scrollLeft + offset) / (lane.scrollWidth || 1);
+    }
+    this.layout.zoom = next;
+    this.applyLayout();
+    if (lane) lane.scrollLeft = fraction * lane.scrollWidth - offset;
+    this.saveLayout();
+  }
+
+  zoomBy(factor, anchorX) {
+    this.setZoom(this.layout.zoom * factor, anchorX);
   }
 
   openNewProject() {
@@ -852,6 +1000,7 @@ class Studio {
     regions.refmods.open = true;
     this.setLibrary('references');
     this.trackWidth = this.track.clientWidth;
+    this.applyLaneView();
     this.host.editor.renderTrack();
   }
 
@@ -862,6 +1011,7 @@ class Studio {
     this.endLive();
     this.setScreen();
     const editor = this.host?.editor;
+    editor?.setLaneView();
     this.host = null;
     this.trackWidth = 0;
     editor?.renderTrack();

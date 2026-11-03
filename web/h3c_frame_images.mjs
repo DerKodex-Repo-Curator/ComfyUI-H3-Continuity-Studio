@@ -4,6 +4,7 @@ import {parseState, serialize} from './h3c_timeline_model.mjs?v=20261103-replace
 import {StillPromptPreparation,preparedStillPrompt,setPreparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
 
 import {seedValue, stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
+import {guideSplitTiming, describeGuideSplitTiming} from './h3c_guide_split.mjs?v=20261103-bridges-guide-split-1';
 
 const key = target => target.kind === 'shot' ? `shot:${target.shot}` : target.kind;
 export const targetLabel = target => target.kind === 'shot' ? `Shot ${target.shot}` : target.kind === 'last' ? 'Last' : 'First';
@@ -287,6 +288,7 @@ export class FrameImages {
       this.acceptedEl.append(this.image(preview,saved?.guide?'Accepted guide':'Candidate'));
       const caption=el('div',null,'h3ct-row');caption.append(el('span',saved?.guide?'Guide in use':'Candidate preview',saved?.guide?'h3ct-guide-status':'h3ct-hint'));
       if(saved?.guide) caption.append(button('Remove guide',()=>this.removeGuide()),button('Use as scene anchor',()=>this.useSceneAnchor(saved.guide)));
+      if(saved?.guide&&this.target.kind==='shot') caption.append(this.splitButton(saved));
       this.acceptedEl.append(caption);
     } else this.acceptedEl.append(el('p','No image yet. Generate candidates or upload a guide.','h3ct-image-empty'));
     const anchors=this.editor.state.continuity?.anchors??[];
@@ -476,6 +478,20 @@ export class FrameImages {
     this.live();const {box}=this.location();const saved=box.previews?.find(item=>key(itemTarget(item))===key(this.target));
     if (!saved?.images?.[index]) return;
     this.host.undoStep?.();saved.images.splice(index,1);this.editor.commit();this.host.undoStep?.();this.render();
+  }
+  // A Shot guide sits mid-clip: splitting there makes it the Last of this clip and the First of the next one.
+  splitButton(saved) {
+    const split=button('Split at guide',()=>this.splitAtGuide());
+    try {
+      const {index}=this.location();
+      split.title=describeGuideSplitTiming(guideSplitTiming(this.editor.state,index,saved,this.host.context()),index);
+    } catch(error) {split.disabled=true;split.title=error.message;}
+    return split;
+  }
+  splitAtGuide() {
+    this.live();const {box,index}=this.location();const saved=box.previews?.find(item=>key(itemTarget(item))===key(this.target));
+    if (!saved?.guide) throw new Error('This marker no longer has an accepted guide.');
+    this.editor.splitClipAtGuide(index,saved);
   }
   removeGuide() {
     this.live();const {box}=this.location();const saved=box.previews?.find(item=>key(itemTarget(item))===key(this.target));

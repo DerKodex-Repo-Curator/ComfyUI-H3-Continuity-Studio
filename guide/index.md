@@ -99,7 +99,7 @@ H3 Continuity is a ComfyUI custom node pack. You lay a film out as **clips** on 
 
     ---
 
-    A versioned HTTP API, a Python client and an agent skill let scripts and agents author and render a Timeline headlessly.
+    A versioned HTTP API, a Python client and a pack of agent skills let scripts and agents author and render a Timeline headlessly.
 
     [:octicons-arrow-right-24: Timeline HTTP API](automation/api.md)
 

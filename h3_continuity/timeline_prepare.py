@@ -36,9 +36,12 @@ def instructions():
                           ("timeline-references", "TIMELINE-REFERENCES.md"),
                           ("native-transitions", "H3-TRANSITIONS.md"), ("timeline-api", "TIMELINE-API.md")):
         guides.append(dict(id=key, body=(root / "docs" / filename).read_text(encoding="utf-8")))
-    result = dict(ok=True, version=1, instructions_revision="external-instructions-v7",
+    entry = "h3-continuity-video"
+    names = sorted((path.parent.name for path in (root / "skills").glob("*/SKILL.md")), key=lambda name: (name != entry, name))
+    skills = [dict(name=name, body=(root / "skills" / name / "SKILL.md").read_text(encoding="utf-8")) for name in names]
+    result = dict(ok=True, version=1, instructions_revision="external-instructions-v8",
                   revisions=dict(preparation=REVISION, schema=ir.VERSION, guidance=ir.GUIDELINE_REVISION),
-                  skill=(root / "skills/h3-continuity-video/SKILL.md").read_text(encoding="utf-8"),
+                  skill=skills[0]["body"], skills=skills,
                   guides=guides,
                   examples=[dict(id="whisper-source30", body=json.loads(
                       (root / "examples/whisper-source30.json").read_text(encoding="utf-8")))],

@@ -12,7 +12,7 @@ The Timeline is a list of **clips**. Each clip is one H3 generation with its own
 | Resize a clip | Drag its right edge. Lengths snap to H3's frame grid (see below), unless the clip uses [Exact length](exact-lengths.md). |
 | Select a clip | Click it. The right-hand panel and the Viewer follow. |
 | Move, copy or delete | **Clip N actions** in the panel: move earlier or later, **Duplicate** (the copy gets a new seed) or **Delete**. |
-| Split a clip | A clip whose prompt has more than one `[Shot N]` offers **Split before Shot N** in its **Shots** tab. It turns that shot boundary into two clips; each half keeps the references it uses and the accepted guide moves with its shot. A bridge before the clip stays with the first half. |
+| Split a clip | A clip whose prompt has more than one `[Shot N]` offers **Split before Shot N** in its **Shots** tab. It turns that shot boundary into two clips; each half keeps the references it uses and the accepted guide moves with its shot. A bridge before the clip stays with the first half. A Shot marker with an accepted guide also offers **Split at guide**, which makes that guide the first half's Last and the second half's First; see [Split a clip at a Shot guide](frame-guides.md#split-a-clip-at-a-shot-guide). |
 
 !!! info "H3's frame grid"
     H3 generates at 24 fps, in lengths of `17k + 5` frames for a clip that starts fresh (at least 22) and `17k` new frames for a clip that continues the one before (at least 17). Without Exact length, every clip snaps to that grid. The default maximum is 362 frames; see [Long clips](long-clips.md) to raise it.
