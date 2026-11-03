@@ -1,6 +1,6 @@
 # Timed text
 
-Attach a **Whisper-style transcript** and H3 is asked to show those exact phrases as on-screen lettering, at the right times. Spoken dialogue is separate and goes in `<d>…</d>` in the prompt.
+Attach a **Whisper-style transcript** and H3 is asked to show those exact phrases as on-screen lettering, at the right times. Spoken dialogue is separate: type it in `<d>…</d>` in the prompt, or keep it as [dialogue cues](dialogue.md) bound to the recording.
 
 ## Import a transcript
 

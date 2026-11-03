@@ -2,6 +2,18 @@
 
 All notable changes to H3 Continuity Studio are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Replacement bridges (experimental).** A bridge can now *replace around the cut*: H3 regenerates a reviewed region of the two clips with exactly as many frames, so the full video keeps its length and recordings stay in sync. You confirm the exact region, render candidates, compare them in context with the original cut, and select one; nothing plays until you do, and a stale, failed or missing candidate plays the original footage. Joins are not yet validated with real generations. See [Joins and bridges](guide/continuity/joins-and-bridges.md#replacement-bridges).
+- **Dialogue cues.** A recording's exact words at its own times, with speaker, on-screen or voiceover portrayal and a check against the recording. Import them from a timed transcript, take them from the Story or type them. Clips speak the cues in their window as `<d>` lines, and replacements keep on-screen speech and footage you mark. See [Dialogue cues](guide/sound/dialogue.md).
+- **Locked recordings.** An uploaded audio clip can be locked to the sequence clock: bridges inside it replace footage instead of adding time, and the Timeline names any inserted bridge or setting that would move the picture off it.
+
+### Changed
+
+- Timelines that use replacements, cues or locks list them in `requires`. From this version on, a reader that doesn't know a listed feature stops with *this Timeline needs a newer H3 Continuity* instead of misreading the file. Existing bridges keep their meaning: a bridge without `mode` still inserts time.
+
 ## [0.2.0] - 2026-11-03
 
 ### Fixed
