@@ -970,6 +970,10 @@ def plan_box(timeline, index, context, carry_audio, width, height, ref_image_siz
     text = assemble_prompt(timeline, index)
     if not text:
         raise _error(f"box {n} has no prompt")
+    from . import dialogue
+    problem = dialogue.box_problem(timeline, index, context, text)
+    if problem:
+        raise _error(problem)
     assigned = {ref["slot"] for ref in timeline.refmods if ref.get("strength", 1) > 0}
     slots = box_slots(timeline, index, context)
     for kind, name in mentions(text):
@@ -1019,6 +1023,7 @@ def plan_box(timeline, index, context, carry_audio, width, height, ref_image_siz
                             audio_context_frames=audio_context_frames)
     window = text_window(timeline, index, context)
     prompt = timed_text.insert(rewrite(text, slots.tags), slots.mode, window)
+    prompt = dialogue.insert(prompt, slots.mode, dialogue.box_events(timeline, index, context))
     return BoxPlan(index, box, fresh, frames, carried, frames + dropped + carried, slots, prompt,
                    layout_key(timeline, index, context), settings, notes, window)
 
@@ -1082,6 +1087,10 @@ def layout_key(timeline, index, context=39):
     text = text_chain(timeline, index, context)
     if text:
         value["timed_text"] = text
+    from . import dialogue
+    events = dialogue.box_events(timeline, index, context)
+    if events:
+        value["dialogue"] = dialogue.digest(events)
     plates = plate_chain(timeline, index)
     if plates:
         value["appearance_plates"] = plates

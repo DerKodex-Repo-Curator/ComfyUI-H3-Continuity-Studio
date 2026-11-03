@@ -182,6 +182,115 @@ def projected(timeline):
     return result
 
 
+def _milliseconds(seconds):
+    return math.floor(seconds * 1000 + .5)
+
+
+def _clock(ms):
+    return f"{ms // 60000:02d}:{ms % 60000 // 1000:02d}.{ms % 1000:03d}"
+
+
+def _window(timeline, index, context):
+    """(generation origin, delivered start, delivered end) of box `index` in sequence seconds."""
+    from . import timeline as rules
+    frames, carried = rules.box_length(timeline, index, context)
+    start = rules.box_start(timeline, index)
+    return start - carried / FPS, start, start + frames / FPS
+
+
+def _covering(timeline, index, context):
+    """Projected bound cues whose placed interval overlaps the frames box `index` delivers."""
+    _, start, end = _window(timeline, index, context)
+    return [item for item in projected(timeline) if item["placed"]
+            and item["sequence"][1] > start + EPSILON and item["sequence"][0] < end - EPSILON]
+
+
+def box_events(timeline, index, context):
+    """Bound cues on box `index`'s generation clock, in time order; [] for a manual-dialogue box."""
+    if not cues(timeline) or (index < len(timeline.manual_dialogue) and timeline.manual_dialogue[index]):
+        return []
+    origin, _, end = _window(timeline, index, context)
+    events = []
+    for item in sorted(_covering(timeline, index, context), key=lambda item: (item["sequence"][0], item["id"])):
+        cue, (first, last) = item["cue"], item["sequence"]
+        low, high = max(first, origin), min(last, end)
+        segments = []
+        for a, b, portrayal in item["segments"]:
+            a, b = max(a / FPS, low), min(b / FPS, high)
+            if b - a > EPSILON:
+                segments.append((_milliseconds(a - origin), _milliseconds(b - origin), portrayal))
+        events.append({"id": cue["id"], "speaker": cue.get("speaker", ""), "text": cue["text"],
+                       "language": cue.get("language", ""),
+                       "start_ms": _milliseconds(low - origin), "end_ms": _milliseconds(high - origin),
+                       "continuing": first < origin - EPSILON, "continues_after": last > end + EPSILON,
+                       "segments": segments})
+    return events
+
+
+def _speech(event, number):
+    speaker = event["speaker"].strip() or "A speaker"
+    who = f"{speaker} (S{number})"
+    portrayals = {portrayal for _, _, portrayal in event["segments"]}
+    if event["continuing"]:
+        return (f"{who} finishes the line already in progress (\"{event['text']}\"); its words started before this "
+                "clip, so don't start a new line.")
+    language = f"[{event['language']}] " if event["language"] else ""
+    if portrayals == {"voiceover"}:
+        spoken = (f"{who} says in an off-screen voiceover: <d>{language}{event['text']}</d>; no on-screen "
+                  "character's lips move with it.")
+    else:
+        spoken = f"{who} says: <d>{language}{event['text']}</d>"
+        parts = [f"from {_clock(a)} to {_clock(b)}" for a, b, portrayal in event["segments"] if portrayal == "voiceover"]
+        if parts:
+            spoken += f" (off-screen voiceover {' and '.join(parts)})"
+    if event["continues_after"]:
+        spoken += " The line is still being spoken at the final frame; don't finish it early."
+    return spoken
+
+
+def block(events):
+    """The prompt lines for `events`: exact words at exact times, one line per spoken event."""
+    if not events:
+        return ""
+    lines = ["Dialogue from the recording: speak only these exact words at these times; add no other speech."]
+    speakers, previous_end = {}, None
+    for event in events:
+        number = speakers.setdefault((event["speaker"].strip() or "").casefold(), len(speakers) + 1)
+        line = f"From {_clock(event['start_ms'])} to {_clock(event['end_ms'])}: {_speech(event, number)}"
+        if previous_end is not None and event["start_ms"] < previous_end:
+            line = line.replace(": ", ": Overlapping the preceding speech, ", 1)
+        previous_end = max(previous_end or 0, event["end_ms"])
+        lines.append(line)
+    return "\n" + "\n".join(lines)
+
+
+def insert(prompt, mode, events):
+    return timed_text.insert_block(prompt, mode, block(events)) if events else prompt
+
+
+def digest(events):
+    """Identity of what box dialogue asks H3 for; alignment checks don't change it."""
+    value = [{key: event[key] for key in ("speaker", "text", "language", "start_ms", "end_ms", "continuing",
+                                          "continues_after", "segments")} for event in events]
+    return hashlib.sha1(json.dumps(value, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def box_problem(timeline, index, context, prompt):
+    """Why box `index` can't compile its dialogue, or ""; `prompt` is its assembled text."""
+    n = index + 1
+    if not cues(timeline) or (index < len(timeline.manual_dialogue) and timeline.manual_dialogue[index]):
+        return ""
+    covering = _covering(timeline, index, context)
+    for item in covering:
+        if item["cut"]:
+            return (f"box {n}: cue {item['id']!r} is cut by @{item['slot']}'s placed window; review it: extend the "
+                    "clip, or edit the cue to the words the clip keeps")
+    if covering and "<d>" in prompt:
+        return (f"box {n} has typed <d> dialogue and dialogue cues from the recording also cover it: remove the typed "
+                "dialogue, or set the box to manual dialogue to keep your prompt and leave the cues out")
+    return ""
+
+
 def locked_clips(timeline):
     return [clip for clip in timeline.audio_clips if clip.get("locked") is True and clip["slot"] not in timeline.disabled_refs]
 
