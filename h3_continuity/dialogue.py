@@ -307,8 +307,6 @@ def lock_conflicts(timeline):
                             "In the full video, or unlock it.")
         start, end = clip["start"], clip["start"] + clip["duration"]
         for bridge in timeline.bridges:
-            if "frames" not in bridge:
-                continue
             index = positions[bridge["before"]]
             join = rules.box_start(timeline, index)
             if start < join < end:

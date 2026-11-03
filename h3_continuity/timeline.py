@@ -72,8 +72,14 @@ class Timeline:
     story: list = field(default_factory=list)
     # Whether each box plays exactly its frames; empty without `parse`. Not on Box either.
     exact: list = field(default_factory=list)
-    # The bridges on cuts, each {"before", "frames", "seed", "prompt"}; outside the boxes, which never see them.
+    # The bridges on cuts that insert time, each {"before", "frames", "seed", "prompt"}; outside the boxes, which never
+    # see them.
     bridges: list = field(default_factory=list)
+    # The bridges that replace a reviewed region instead, each {"before", "mode": "replace", "left", "right", "seed",
+    # "prompt"} with optional "review" and "selected"; see replacement.py.
+    replacements: list = field(default_factory=list)
+    # Both kinds in the Timeline's order, as the JSON keeps them.
+    all_bridges: list = field(default_factory=list)
     render_bridge: str | None = None
     still_requests: list = field(default_factory=list)
     continuity: dict | None = None
@@ -327,10 +333,12 @@ def parse(text):
                 raise _error(f"box {n} needs a plate revision or an empty string for the original")
             if revision and (revision not in revisions or revisions[revision]["slot"] != slot or not revisions[revision].get("image")):
                 raise _error(f"box {n} has a missing accepted plate for {slot}")
-    parsed.bridges = _bridges(data.get("bridges", []), parsed)
+    parsed.all_bridges = _bridges(data.get("bridges", []), parsed)
+    parsed.bridges = [bridge for bridge in parsed.all_bridges if bridge.get("mode") != "replace"]
+    parsed.replacements = [bridge for bridge in parsed.all_bridges if bridge.get("mode") == "replace"]
     target = data.get("render_bridge")
     if target is not None:
-        if not isinstance(target, str) or target not in {bridge["before"] for bridge in parsed.bridges}:
+        if not isinstance(target, str) or target not in {bridge["before"] for bridge in parsed.all_bridges}:
             raise _error("render_bridge must be the box id of one of this Timeline's bridges")
         if parsed.render_box is not None:
             raise _error("a run renders one box or one bridge: drop render_box or render_bridge")
@@ -437,11 +445,26 @@ def _bridges(raw, parsed):
                                      "a bridge needs a box that starts with Cut or New scene")
         if before in taken:
             raise BridgeError(index, f"bridges {taken[before] + 1} and {n} both lead into box {position + 1}")
-        frames = item.get("frames")
-        if type(frames) is not int:
-            raise BridgeError(index, f"bridge {n} frames must be 12, 29 or 46")
-        if frames not in BRIDGE_FRAMES:
-            raise BridgeError(index, f"bridge {n} has {frames} frames; a bridge has 12, 29 or 46")
+        mode = item.get("mode", "insert")
+        if mode not in ("insert", "replace"):
+            raise BridgeError(index, f"bridge {n} mode must be insert or replace")
+        if mode == "replace":
+            if "frames" in item:
+                raise BridgeError(index, f"bridge {n} replaces footage, so it has left and right coverage, not frames")
+            left, right = item.get("left"), item.get("right")
+            if type(left) is not int or type(right) is not int or left < 0 or right < 0:
+                raise BridgeError(index, f"bridge {n} left and right must be whole numbers of frames")
+            if left + right not in BRIDGE_FRAMES:
+                raise BridgeError(index, f"bridge {n} replaces {left + right} frames; a replacement covers 12, 29 or 46")
+            for key in ("review", "selected"):
+                if key in item and not isinstance(item[key], str):
+                    raise BridgeError(index, f"bridge {n} {key} must be text")
+        else:
+            frames = item.get("frames")
+            if type(frames) is not int:
+                raise BridgeError(index, f"bridge {n} frames must be 12, 29 or 46")
+            if frames not in BRIDGE_FRAMES:
+                raise BridgeError(index, f"bridge {n} has {frames} frames; a bridge has 12, 29 or 46")
         seed = item.get("seed")
         if seed is None:
             seed = zlib.crc32(f"bridge:{before}".encode("utf-8"))
@@ -451,7 +474,12 @@ def _bridges(raw, parsed):
         if prompt is not None and not isinstance(prompt, str):
             raise BridgeError(index, f"bridge {n} prompt must be text")
         taken[before] = index
-        bridges.append({"before": before, "frames": frames, "seed": seed, "prompt": prompt or ""})
+        if mode == "replace":
+            bridges.append({"before": before, "mode": "replace", "left": left, "right": right, "seed": seed,
+                            "prompt": prompt or "", **{key: item[key] for key in ("review", "selected") if key in item}})
+        else:
+            bridges.append({"before": before, "frames": frames, "seed": seed, "prompt": prompt or "",
+                            **({"mode": "insert"} if "mode" in item else {})})
     return bridges
 
 
