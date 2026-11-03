@@ -21,7 +21,10 @@ Each box runs in one native mode, decided by what it uses (`box_slots` in
 How frames are pinned differs by mode:
 
 - In **`flf2va`**, H3 knows the first and last frames as endpoints and **works
-  toward the last frame**, so the motion arrives at it smoothly.
+  toward the last frame**, so the motion arrives at it smoothly. In an exact box
+  that drops frames, the last frame stays a true endpoint only when the first frame
+  is a frame-0 guide, or with cached RefMods. With a `first` picture it is inserted
+  as a guide on the last played frame.
 - In **`ref2va`**, the first and last frames are **inserted as guides** at frame 0
   and the last played frame. The video doesn't build toward them, so a box whose
   start or end must be exact can jump or flash there.

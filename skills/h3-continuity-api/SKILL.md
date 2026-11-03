@@ -33,6 +33,12 @@ expose it only through an authenticated proxy.
    `reference_replacement` (`slot`, for example a video on `videoN`), `candidate`
    (a still candidate) and `whisper` (`source_sha256`). Caller file paths and
    arbitrary graphs are refused.
+   An asset is bound only in the roles its upload kinds allow: the response lists
+   `kinds`, one installed file per kind in `files`, and the resulting
+   `permitted_uses`. A `guide`, `plate` or `candidate` binding needs a `guide` upload
+   (an original PNG), so a picture that is also a timed guide is uploaded once per
+   kind; the same bytes keep one asset ID and gain the kind. A binding outside
+   `permitted_uses` is refused as `asset_role`.
 4. **Project.** `POST /h3c/api/v1/projects` with a saved `Idempotency-Key` and the
    body `{name, profile, settings, timeline, assets, consumer, semantic_boxes?}`.
    `consumer` and unknown creative fields are kept. Keep the project ID, revision,
@@ -57,7 +63,9 @@ expose it only through an authenticated proxy.
 ### Revisions, settings and reuse
 
 - `GET /projects/{id}` returns the authored body, revision, `inspection`, native
-  status and active jobs. `PUT` replaces the authored body with `expected_revision`;
+  status and active jobs. `inspection.boxes[]` gives each box's `mode`, `tags`,
+  frame ranges, `effective_prompt`, `text_window` and `guides` (each `{frame, file}`):
+  read the mode and every guide's frame and file there before planning a render. `PUT` replaces the authored body with `expected_revision`;
   omit `profile`, because it is pinned at creation. A stale revision is
   `409 revision_conflict`, and an active render or take lease is `409 project_busy`.
   Fetch, reconcile on purpose, and send again.
