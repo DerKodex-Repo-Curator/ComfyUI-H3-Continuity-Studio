@@ -14,7 +14,7 @@ import { migrateStoryDescriptionInputs, migrateSerializedStoryDescriptionInputs 
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import * as story from './h3c_story_model.mjs?v=20261011-reference-preparation-1';
 import { StoryPanel } from './h3c_story_panel.mjs?v=20261025-story-providers-1';
-import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261019-story-load-in-place-1';
+import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261103-story-frame-guides-1';
 import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=20261014-story-library-1';
 import { parseState, serialize } from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
 
@@ -365,7 +365,7 @@ class StoryHost {
       const samePair=graph._nodes.filter(node=>['H3C_Story','H3C_Timeline'].includes(node.type)).length===2;
       this.applyGeneration(content,content.renders&&samePair?{graphId:value.graph,revision:value.workflow_revision,libraryId:value.id}:{});
       this.openStudio();
-      this.panel.say(content.renders?'Story loaded into this workflow.':'Story loaded into this workflow. Saved renders were skipped because the wiring or settings differ.');
+      this.panel.say(content.renders?'Story loaded into this workflow.':'Story loaded into this workflow with its frame guides. Saved renders and still candidates were skipped because the wiring or settings differ.');
     } finally {resume();}
   }
 
