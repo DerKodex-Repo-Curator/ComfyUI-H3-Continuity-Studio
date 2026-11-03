@@ -9,7 +9,7 @@ from comfy_api.latest import io
 from comfy_execution.graph_utils import ExecutionBlocker
 
 from . import conditioning, latents, store, timing, shot_preview, refmods, audio_tracks, visual_memory, timed_text
-from . import box_checks, bridges, studio_pictures, voice_clips, reference_replacements, replacement_candidates
+from . import box_checks, bridges, dialogue, studio_pictures, voice_clips, reference_replacements, replacement_candidates
 from . import nodes as continuity
 from . import timeline as rules
 from .story_node import StoryType
@@ -139,12 +139,31 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
                                       store.sequence_seconds(manifest, spliced), done)
         if export_error and full_video is None:
             status["export_error"] = export_error
-        if parsed.bridges:
+        if parsed.all_bridges:
+            items = {}
             found = bridges.states(folder, parsed, manifest, done, known)
-            status["bridges"] = [_bridge_item(name, state) for state in found]
+            items.update((state.bridge["before"], _bridge_item(name, state)) for state in found)
             upcoming = next((state for state in found if state.status == "next"), None)
             if upcoming is not None:
                 status["message"] += f" The bridge before box {upcoming.index + 1} is next."
+            elif found_replacements:
+                upcoming = next((state for state in found_replacements if state.status == "next"), None)
+                if upcoming is not None:
+                    status["message"] += f" The replacement candidate before box {upcoming.index + 1} is next."
+            if found_replacements is None:
+                items.update((bridge["before"], {"box": bridge["before"], "mode": "replace", "status": "waiting",
+                                                 "note": "the node's context_frames is unknown, so the region can't "
+                                                         "be planned"}) for bridge in parsed.replacements)
+            else:
+                current_takes = replacement_candidates.takes(folder, parsed, manifest)
+                items.update((state.bridge["before"], replacement_candidates.item(
+                    state, parsed, known["context_frames"], lambda file, version: _view(name, file, version),
+                    current_takes)) for state in found_replacements)
+            status["bridges"] = [items[bridge["before"]] for bridge in parsed.all_bridges]
+        if parsed.dialogue is not None:
+            status["dialogue"] = {"cues": dialogue.summary(parsed)}
+        status["timing_conflicts"] = dialogue.lock_conflicts(parsed)
+        context = known.get("context_frames")
         checks = box_checks.load(folder)
         for index, (item, box) in enumerate(zip(status["boxes"], parsed.boxes)):
             entry = next((e for e in segments if (e.get("timeline") or {}).get("box") == box.id), None)
@@ -157,11 +176,18 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
                 item["check"] = check
             if reasons and index in reasons:
                 item["reason"] = reasons[index]
+            if parsed.dialogue is not None and context is not None:
+                try:
+                    problem = dialogue.box_problem(parsed, index, context, rules.assemble_prompt(parsed, index))
+                except ValueError as error:
+                    problem = str(error).removeprefix("H3 Timeline: ")
+                if problem:
+                    item["dialogue_problem"] = problem
         return status
 
 
 def _bridge_item(name, state):
-    item = {"box": state.bridge["before"], "status": state.status}
+    item = {"box": state.bridge["before"], "mode": "insert", "status": state.status}
     if state.note:
         item["note"] = state.note
     video = (state.entry or {}).get("video")

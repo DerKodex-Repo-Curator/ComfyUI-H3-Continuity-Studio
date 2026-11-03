@@ -145,16 +145,26 @@ def _schemas():
                    "cut": BOOL, "new_scene": BOOL, "exact": BOOL, "first": {"anyOf": [IMAGE, {"const": ""}]},
                    "last": {"anyOf": [IMAGE, {"const": ""}]}, "previews": _array(preview),
                    "plate_changes": _array(change), "memory": {"enum": ["off", "scene", "selected", "cast"]},
-                   "memories": _array(moment, maxItems=3), "schedule": {}, "source": {}, "cast": {"type": "object"}},
+                   "memories": _array(moment, maxItems=3), "schedule": {}, "source": {}, "cast": {"type": "object"},
+                   "dialogue": {"enum": ["cues", "manual"]}},
                   extra=True)
     box["anyOf"] = [{"required": ["frames"]}, {"required": ["seconds"]}]
-    bridge = _object({"before": ID, "frames": {"type": "integer", "enum": [12, 29, 46]},
-                      "seed": SEED, "prompt": TEXT}, ("before", "frames"), extra=True)
+    insertion = _object({"before": ID, "mode": {"const": "insert"}, "frames": {"type": "integer", "enum": [12, 29, 46]},
+                         "seed": SEED, "prompt": TEXT}, ("before", "frames"), extra=True)
+    # Native preparation checks that left + right is 12, 29 or 46.
+    coverage = {"type": "integer", "minimum": 0, "maximum": 46}
+    replacing = _object({"before": ID, "mode": {"const": "replace"}, "left": coverage, "right": coverage,
+                         "seed": SEED, "prompt": TEXT, "review": TEXT, "selected": TEXT},
+                        ("before", "mode", "left", "right"), extra=True)
+    replacing["not"] = {"required": ["frames"]}
+    bridge = {"oneOf": [insertion, replacing]}
     audio = _object({"slot": {"enum": ["audio1", "audio2", "audio3"]}, "file": FILE, "start": NONNEGATIVE,
                      "source_start": NONNEGATIVE, "duration": POSITIVE, "description": TEXT,
-                     "layer": {"enum": ["music", "soundscape", "shot"]}, "in_full_video": BOOL},
+                     "layer": {"enum": ["music", "soundscape", "shot"]}, "in_full_video": BOOL, "locked": BOOL},
                     ("slot", "start", "source_start", "duration"), extra=True)
     line = _object({"version": {"type": "integer", "const": 1}, "prompt": TEXT, "boxes": _array(box, minItems=1),
+                    "requires": _array({"type": "string", "minLength": 1}, uniqueItems=True),
+                    "dialogue": {"type": ["object", "null"]},
                     "bridges": _array(bridge), "still_requests": _array(receipt), "audio_clips": _array(audio, maxItems=3),
                     "pictures": _array(_object({"slot": IMAGE, "file": FILE, "title": TEXT}, ("slot",), extra=True)),
                     "voice_clips": _array(_object({"slot": REFMOD_SLOT, "file": FILE}, ("slot",), extra=True)),

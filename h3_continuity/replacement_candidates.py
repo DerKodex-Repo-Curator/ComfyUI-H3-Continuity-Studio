@@ -5,7 +5,7 @@ import hashlib
 import os
 from dataclasses import dataclass, field
 
-from . import bridges, replacement, store
+from . import bridges, dialogue, replacement, store
 from . import timeline as rules
 
 
@@ -124,6 +124,47 @@ def active(found):
             result[state.bridge["before"]] = next(item["entry"] for item in state.candidates
                                                   if item["entry"].get("candidate") == state.bridge["selected"])
     return result
+
+
+def region(timeline, shape):
+    """The region in sequence frames, with the frames it covers in each box's own delivered footage."""
+    before = timeline.boxes[shape.index - 1]
+    played = rules.played_frames(timeline, shape.index - 1)
+    return {"join": shape.join, "start": shape.start, "end": shape.end, "left": shape.left, "right": shape.right,
+            "frames": shape.frames, "context_frames": shape.context_frames, "ending_frames": shape.ending_frames,
+            "before": [before.id, played - shape.left, played], "after": [timeline.boxes[shape.index].id, 0, shape.right]}
+
+
+def _listed(entry, state, recipe, view):
+    record, created = entry.get("timeline") or {}, entry.get("created", "")
+    video, preview = entry.get("video"), entry.get("preview")
+    return {"candidate": entry.get("candidate"), "created": created, "seed": record.get("seed"), "state": state,
+            "recipe": record.get("recipe") == recipe, "left": record.get("left"), "right": record.get("right"),
+            "frames": entry.get("played"), "video": view(video["file"], created) if video else None,
+            "preview": None if not preview else {
+                "file": view(preview["file"], created), "original": view(preview["original"], created),
+                "frames": preview["frames"], "region": preview["region"], "fps": preview["fps"]}}
+
+
+def item(state, timeline, context, view, takes=None):
+    """What the Studio shows for replacement `state`: its exact region, what protects footage near it, the coverage
+    the region may take instead, and its candidates. `view(filename, version)` gives a candidate file's /view dict;
+    `takes` maps box ids to their take identity, as in `replacement.check`."""
+    bridge = state.bridge
+    projected = dialogue.projected(timeline)
+    choices = replacement.options(timeline, state.index, context, takes, projected)
+    proposal = replacement.proposal(timeline, state.index, context, takes, choices)
+    found = {"box": bridge["before"], "mode": "replace", "status": state.status,
+             "region": region(timeline, state.geometry), "region_key": state.region,
+             "reviewed": state.region is not None and bridge.get("review") == state.region,
+             "protected": replacement.protections(timeline, state.index, takes, projected),
+             "options": choices, "proposal": list(proposal) if proposal else None,
+             "candidates": [_listed(saved["entry"], saved["state"], state.recipe, view) for saved in state.candidates],
+             "selected": bridge.get("selected"), "selection": state.selected,
+             "plays": bridge["before"] in active([state])}
+    if state.note:
+        found["note"] = state.note
+    return found
 
 
 def selected_entries(folder, manifest, selections):

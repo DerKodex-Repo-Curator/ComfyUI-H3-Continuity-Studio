@@ -97,48 +97,64 @@ def _seconds(frames):
     return f"{frames / FPS:.2f} s"
 
 
-def _protection(timeline, shape, takes, projected):
-    index, region = shape.index, (shape.start, shape.end)
-    near = (shape.join - rules.played_frames(timeline, index - 1), shape.join + rules.played_frames(timeline, index))
+def _overlaps(mark, span):
+    return mark["start"] < span[1] and mark["end"] > span[0]
 
-    def overlaps(a, b, span):
-        return a < span[1] and b > span[0]
 
-    for item in projected:
+def protections(timeline, index, takes=None, projected=None):
+    """What lies in the two boxes beside box `index`'s join and may keep their footage, in sequence frames, in the
+    order `check` reads them: cue speech by portrayal ("on_screen", "voiceover", "unknown"), recordings that
+    "changed" under their cues, and "observed" marks, `current` while they were marked on the take in place."""
+    join = sequence_start(timeline, index)
+    near = (join - rules.played_frames(timeline, index - 1), join + rules.played_frames(timeline, index))
+    found = []
+    for item in dialogue.projected(timeline) if projected is None else projected:
         cue = item["cue"]
-        speaker = cue.get("speaker", "").strip() or "A speaker"
+        base = {"id": cue["id"], "speaker": cue.get("speaker", "").strip() or "A speaker", "text": cue["text"],
+                "slot": item["slot"], "checked": item["aligned"]}
         if item["state"] == "changed":
             clip = next(clip for clip in timeline.audio_clips if clip["slot"] == item["slot"])
-            span = (dialogue.frame_floor(clip["start"]), dialogue.frame_ceil(clip["start"] + clip["duration"]))
-            if overlaps(*span, near):
-                return (f"@{item['slot']} changed since its cues were written: check cue {cue['id']!r} against the "
-                        "new recording, or remove it")
-            continue
-        for a, b, portrayal in item["segments"]:
-            if portrayal == "voiceover":
-                continue
-            if overlaps(a, b, region):
-                what = "speaks on screen" if portrayal == "on_screen" else "has a line of unknown portrayal"
-                return (f"{speaker} {what} from {_seconds(a)} to {_seconds(b)}, inside the region "
-                        f"({_seconds(shape.start)} to {_seconds(shape.end)}): shorten or move the region, or mark "
-                        "that part of the line as off-screen voiceover")
-            if not item["aligned"] and overlaps(a, b, near):
-                return (f"check cue {cue['id']!r} ({speaker}: {cue['text']!r}) against the recording before "
-                        "replacing footage near it")
+            found.append({"kind": "changed", "start": dialogue.frame_floor(clip["start"]),
+                          "end": dialogue.frame_ceil(clip["start"] + clip["duration"]), **base})
+        else:
+            found.extend({"kind": portrayal, "start": a, "end": b, **base} for a, b, portrayal in item["segments"])
     positions = {box.id: i for i, box in enumerate(timeline.boxes)}
     for mark in dialogue.observed(timeline):
-        i = positions.get(mark["box"])
-        if i is None:
+        if mark["box"] in positions:
+            first = sequence_start(timeline, positions[mark["box"]])
+            found.append({"kind": "observed", "start": first + mark["start"], "end": first + mark["end"],
+                          "id": mark["id"], "label": mark.get("label") or "observed footage", "box": mark["box"],
+                          "current": takes is None or takes.get(mark["box"]) == mark["take"]})
+    return [mark for mark in found if _overlaps(mark, near)]
+
+
+def _protection(timeline, shape, takes, projected):
+    region = (shape.start, shape.end)
+    positions = {box.id: i for i, box in enumerate(timeline.boxes)}
+    for mark in protections(timeline, shape.index, takes, projected):
+        kind = mark["kind"]
+        if kind == "changed":
+            return (f"@{mark['slot']} changed since its cues were written: check cue {mark['id']!r} against the "
+                    "new recording, or remove it")
+        if kind == "observed":
+            number = positions[mark["box"]] + 1
+            if not mark["current"]:
+                return (f"observed protection {mark['label']!r} was marked on an earlier take of box {number}: mark "
+                        "it again on this take, or remove it")
+            if _overlaps(mark, region):
+                return (f"box {number} has observed protection {mark['label']!r} from {_seconds(mark['start'])} to "
+                        f"{_seconds(mark['end'])}, inside the region: shorten or move the region")
             continue
-        first = sequence_start(timeline, i)
-        span = (first + mark["start"], first + mark["end"])
-        label = mark.get("label") or "observed footage"
-        if overlaps(*span, near) and takes is not None and takes.get(mark["box"]) != mark["take"]:
-            return (f"observed protection {label!r} was marked on an earlier take of box {i + 1}: mark it again on "
-                    "this take, or remove it")
-        if overlaps(*span, region):
-            return (f"box {i + 1} has observed protection {label!r} from {_seconds(span[0])} to {_seconds(span[1])}, "
-                    "inside the region: shorten or move the region")
+        if kind == "voiceover":
+            continue
+        if _overlaps(mark, region):
+            what = "speaks on screen" if kind == "on_screen" else "has a line of unknown portrayal"
+            return (f"{mark['speaker']} {what} from {_seconds(mark['start'])} to {_seconds(mark['end'])}, inside the "
+                    f"region ({_seconds(shape.start)} to {_seconds(shape.end)}): shorten or move the region, or mark "
+                    "that part of the line as off-screen voiceover")
+        if not mark["checked"]:
+            return (f"check cue {mark['id']!r} ({mark['speaker']}: {mark['text']!r}) against the recording before "
+                    "replacing footage near it")
     return ""
 
 
@@ -158,9 +174,10 @@ def stand_in(timeline, index):
                 {"before": box_id, "mode": "replace", "left": 0, "right": 0, "seed": 0, "prompt": ""})
 
 
-def options(timeline, index, context, takes=None):
+def options(timeline, index, context, takes=None, projected=None):
     """[[N, [left coverage that geometry and protection allow]]] for each replacement length."""
-    bridge, projected = stand_in(timeline, index), dialogue.projected(timeline)
+    bridge = stand_in(timeline, index)
+    projected = dialogue.projected(timeline) if projected is None else projected
     return [[frames, [left for left in range(frames + 1)
                       if not check(timeline, {**bridge, "left": left, "right": frames - left}, context, takes, projected)]]
             for frames in rules.BRIDGE_FRAMES]

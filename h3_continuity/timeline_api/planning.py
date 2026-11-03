@@ -4,9 +4,34 @@ import copy
 import json
 from pathlib import Path
 
-from .. import bridges, nodes, store, timeline as rules, timeline_node
+from .. import bridges, nodes, replacement, store, timeline as rules, timeline_node
 from .assets import contained
 from .contracts import APIError, canonical, digest, validate
+
+STUDIO_ONLY = "Replacement regions are reviewed and selected in the Studio."
+
+
+def media_units(units):
+    """The units whose media the full video plays end to end; a replacement overlays them instead."""
+    return [unit for unit in units if unit["kind"] != "replacement"]
+
+
+def splice_ranges(units):
+    """([{unit_id, range}], total frames) on the full-video clock. A replacement's range overlays the end of the box
+    before its join and the start of the box after it, so it adds no frames."""
+    by_id, ranges, offset = {unit["id"]: unit for unit in units}, [], 0
+    for unit in [u for u in units if u["kind"] == "box"]:
+        bridge = by_id.get("bridge:" + unit["box_id"])
+        if bridge is not None:
+            ranges.append({"unit_id": bridge["id"], "range": [offset, offset + bridge["frames"]]})
+            offset += bridge["frames"]
+        swap = by_id.get("replacement:" + unit["box_id"])
+        if swap is not None:
+            ranges.append({"unit_id": swap["id"], "range": [offset - swap["left"], offset + swap["right"]],
+                           "overlay": True, "plays": bool(swap.get("plays"))})
+        ranges.append({"unit_id": unit["id"], "range": [offset, offset + unit["frames"]]})
+        offset += unit["frames"]
+    return ranges, offset
 
 
 def native_status(body):
@@ -79,6 +104,16 @@ class Planner:
             conflict = bridges.problem(parsed, bridge)
             if conflict: unit["blocked_reason"] = conflict
             units.append(unit)
+        for bridge in parsed.replacements:
+            index = replacement.position(parsed, bridge)
+            before, after = parsed.boxes[index - 1].id, bridge["before"]
+            units.append({"id": "replacement:" + after, "kind": "replacement", "box_id": after,
+                          "dependencies": ["box:" + before, "box:" + after], "left": bridge["left"],
+                          "right": bridge["right"], "replaced_frames": bridge["left"] + bridge["right"],
+                          "selected": bridge.get("selected"), "input_sha256": digest({**identity, "region": replacement.static_key(parsed, bridge, context),
+                              "recipe": replacement.recipe(parsed, bridge), "review": bridge.get("review"),
+                              "selected": bridge.get("selected"), "before": by_box[before]["input_sha256"],
+                              "after": by_box[after]["input_sha256"]})})
         return units
 
     def _record(self, project, unit):
@@ -105,11 +140,22 @@ class Planner:
         status = self.native_status({"name": project["sequence"], "timeline": canonical(prepared["timeline"]).decode("utf-8"),
                                      "settings": prepared["settings"]})
         native_states = {"box:" + item["id"]: item for item in status["boxes"]}
-        native_states.update({"bridge:" + item["box"]: item for item in status.get("bridges", [])})
+        native_states.update({("replacement:" if item.get("mode") == "replace" else "bridge:") + item["box"]: item
+                              for item in status.get("bridges", [])})
         forced = {"box:" + box_id for box_id in selected} if selection.get("rerender") else set()
         by_id = {}
         for unit in units:
             native = native_states.get(unit["id"], {})
+            if unit["kind"] == "replacement":
+                reasons = [STUDIO_ONLY] + ([native["note"]] if native.get("note") else [])
+                affected = [source for source in unit["dependencies"] if by_id[source]["action"] != "reuse"]
+                if affected and unit["selected"]:
+                    reasons.append("Rendering " + ", ".join(affected) + " makes the selected candidate stale; the "
+                                   "full video plays the original cut until a new candidate is selected in the Studio.")
+                unit.update(action="studio", reasons=reasons, plays=bool(native.get("plays")),
+                            native_sha256=status.get("unit_evidence", {}).get(unit["id"]))
+                by_id[unit["id"]] = unit
+                continue
             record = self._record(project, unit)
             evidence = status.get("unit_evidence", {}).get(unit["id"])
             reusable = (native.get("status") == "done" and record and record.get("verified")
@@ -134,15 +180,7 @@ class Planner:
                     else "Full video requires this missing or stale unit."))
             unit.update(action=action, reasons=reasons, native_sha256=evidence)
             by_id[unit["id"]] = unit
-        ranges, offset = [], 0
-        for unit in [u for u in units if u["kind"] == "box"]:
-            bridge_id = "bridge:" + unit["box_id"]
-            if bridge_id in by_id:
-                bridge = by_id[bridge_id]
-                ranges.append({"unit_id": bridge_id, "range": [offset, offset + bridge["frames"]]})
-                offset += bridge["frames"]
-            ranges.append({"unit_id": unit["id"], "range": [offset, offset + unit["frames"]]})
-            offset += unit["frames"]
+        ranges, offset = splice_ranges(units)
         result = {"api_version": 1, "project_id": project["id"], "revision": project["revision"],
                   "profile_sha256": project["profile_sha256"], "fingerprint": prepared["fingerprint"],
                   "assets_sha256": digest(project.get("assets", [])), "manifest_sha256": status.get("manifest_sha256", digest(status)),

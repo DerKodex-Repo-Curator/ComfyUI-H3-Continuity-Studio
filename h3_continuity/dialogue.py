@@ -182,6 +182,15 @@ def projected(timeline):
     return result
 
 
+def summary(timeline):
+    """What the Studio shows of each cue beyond what it wrote: its binding, check and sequence position."""
+    return [{"id": item["id"], "slot": item["slot"], "state": item["state"], "aligned": item["aligned"],
+             "placed": item["placed"], "cut": item["cut"],
+             "sequence": list(item["sequence"]) if item["sequence"] else None,
+             "frames": list(item["frames"]) if item["frames"] else None,
+             "segments": [list(segment) for segment in item["segments"]]} for item in projected(timeline)]
+
+
 def _milliseconds(seconds):
     return math.floor(seconds * 1000 + .5)
 

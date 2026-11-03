@@ -10,7 +10,7 @@ import sys
 
 from safetensors import SafetensorError, safe_open
 
-from . import bridges, store, timeline_node
+from . import bridges, replacement, store, timeline_node
 from . import nodes as continuity
 from .timing import tokens_for_frames
 
@@ -243,6 +243,11 @@ def warnings(sequence, index):
     for state in bridges.states(sequence.folder, sequence.parsed, sequence.manifest, done, sequence.bridge_known):
         if state.status == "done" and state.index in (index, index + 1):
             found.append(f"The bridge before box {state.index + 1} will need a new render.")
+    for bridge in sequence.parsed.replacements:
+        at = replacement.position(sequence.parsed, bridge)
+        if at in (index, index + 1) and (bridge.get("review") or bridge.get("selected")):
+            found.append(f"The replacement before box {at + 1} reads this box's footage: confirm its region "
+                         "again and select a new candidate; until then the full video plays the original cut.")
     return found
 
 
