@@ -1,8 +1,9 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
 import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
 
-const number = (shot) => Number(/\d+/.exec(shot.label)[0]);
-const start = (shot) => {
+export const number = (shot) => Number(/\d+/.exec(shot.label)[0]);
+// A later shot's cut time in milliseconds of generated video (replay included), or null when it has none.
+export const start = (shot) => {
   const m = /^At (\d+):(\d{2})\.(\d{3}),/i.exec(shot.value);
   return m ? (Number(m[1]) * 60 + Number(m[2])) * 1000 + Number(m[3]) : null;
 };
@@ -12,6 +13,10 @@ const clock = (ms) => `${String(Math.floor(ms / 60000)).padStart(2, '0')}:`
   + `${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${String(Math.round(ms) % 1000).padStart(3, '0')}`;
 const shift = (text, ms) => prose(text, (part) => part.replace(/\b(\d+):(\d{2})\.(\d{3})\b/g,
   (_, m, s, f) => clock(Math.max(0, Number(m) * 60000 + Number(s) * 1000 + Number(f) - ms))));
+
+// Round up to H3's grid (17k+5 fresh, 17k continuing): a split must not steal performance time.
+export const roundUp = (frames, fresh, context) => Math.max(limits(fresh, context).min,
+  Math.ceil((frames - (fresh ? 5 : 0) - 1e-6) / GRID) * GRID + (fresh ? 5 : 0));
 
 export function splitTiming(state, index, shotNumber, context) {
   const box = state.boxes[index];
@@ -37,16 +42,17 @@ export function splitTiming(state, index, shotNumber, context) {
     return { at, ms, cut: left, carry, left, right: box.frames - left, added: 0 };
   }
   // Round up both halves: a split must not steal performance time to fit H3's frame grid.
-  const round = (frames, isNew) => Math.max(limits(isNew, context).min,
-    Math.ceil((frames - (isNew ? 5 : 0) - 1e-6) / GRID) * GRID + (isNew ? 5 : 0));
-  const left = cut === 0 ? 0 : round(cut, fresh), right = round(box.frames - cut, true);
+  const left = cut === 0 ? 0 : roundUp(cut, fresh, context), right = roundUp(box.frames - cut, true, context);
   if (left > limits(fresh, context).max || right > limits(true, context).max) {
     throw new Error('This cut cannot fit both halves within H3’s clip limit.');
   }
   return { at, ms, cut, carry, left, right, added: left + right - box.frames };
 }
 
-function halfPrompt(parsed, kept, shared, offset, first, last, duration) {
+// One half's prompt from the kept shots. `offset` (ms) is subtracted from timestamps; `stripFirst` drops the first
+// kept shot's own cut time; `endpoint` marks a half that ends on a guide frame (a keyframe without a named slot).
+export function halfPrompt(parsed, kept, shared, offset, first, last, duration,
+  { stripFirst = !!offset, endpoint = false } = {}) {
   const { sections, style } = parsed;
   const fields = (key) => sections?.find((s) => s.key === key)?.fields ?? [];
   const body = (key) => fields(key).map((p) => p.value).join('\n') || 'N/A';
@@ -56,7 +62,7 @@ function halfPrompt(parsed, kept, shared, offset, first, last, duration) {
       .filter(Boolean).map((n) => `[Shot ${n}]`).join(', ')));
   const scene = kept.map((s, i) => {
     let text = shift(s.value, offset);
-    if (i === 0 && offset) text = text.replace(/^At \d+:\d+\.\d+, the camera cuts to (?:a new shot\.\s*)?/i, '')
+    if (i === 0 && stripFirst) text = text.replace(/^At \d+:\d+\.\d+, the camera cuts to (?:a new shot\.\s*)?/i, '')
       .replace(/^At \d+:\d+\.\d+,\s*/i, '');
     return `[Shot ${i + 1}] ${renumberShots(text)}`;
   }).join('\n');
@@ -92,7 +98,7 @@ function halfPrompt(parsed, kept, shared, offset, first, last, duration) {
   let prompt;
   if (defs.length) {
     const types = ['reference generation'];
-    if (first || last || defs.some((p) => /(?:first|last|key)[ -]frame/.test(p.value))) types.push('keyframe completion');
+    if (first || last || endpoint || defs.some((p) => /(?:first|last|key)[ -]frame/.test(p.value))) types.push('keyframe completion');
     if (defs.some((p) => /^@audio/.test(p.label) && /audio reuse/.test(p.value))) types.push('audio reuse');
     if (defs.some((p) => /^@audio/.test(p.label) && /voice|sound|music/.test(p.value))) types.push('audio reference');
     // The old summary describes the whole box and often lists all its cast. Rebuild it from these shots.
@@ -162,7 +168,13 @@ export function splitBox(state, index, shotNumber, context) {
         ? (preview.frame >= boundary ? 1 : 0) === side : shotMap.has(preview.shot);
       if (!belongs) continue;
       const saved = structuredClone(preview);
-      saved.shot = shotMap.get(preview.shot) ?? ++orphan;
+      if (saved.target) {
+        // A targeted record is found by its target, not a shot number: renumber the target with its shot.
+        if (saved.target.kind === 'shot' && shotMap.has(saved.target.shot)) {
+          const shot = shotMap.get(saved.target.shot);
+          saved.target = shot === 1 ? { kind: 'first' } : { kind: 'shot', shot };
+        }
+      } else saved.shot = shotMap.get(preview.shot) ?? ++orphan;
       const rebase = (frame) => Math.max(0, Math.min(last, Math.round(frame - (side ? boundary : 0))));
       saved.frame = preview.frame === original.frames - (timing.carry ? 0 : 1) && side ? last : rebase(preview.frame);
       if (saved.target_frame != null) saved.target_frame = rebase(saved.target_frame);
