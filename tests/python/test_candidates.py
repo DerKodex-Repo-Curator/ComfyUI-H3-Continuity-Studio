@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 import torch
 
@@ -19,6 +20,7 @@ def swap(**extra):
     return {"before": "b", "mode": "replace", "left": 14, "right": 15, "seed": 7, "prompt": "A turn.", **extra}
 
 
+@mock.patch.object(replacement, "UNAVAILABLE", "")
 class CandidateTest(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.mkdtemp(prefix="h3c-candidates-")
@@ -149,6 +151,18 @@ class CandidateTest(unittest.TestCase):
         self.assertIn("box 2", state.note)
         protected = self.timeline(cue(start=4.0, end=4.5))
         self.assertEqual(self.state(protected).status, "problem")
+
+    def test_nothing_renders_or_plays_while_replacement_is_unavailable(self):
+        state = self.state(self.timeline())
+        cid = self.add_candidate(state)
+        selected = self.timeline(review=state.region, selected=cid)
+        with mock.patch.object(replacement, "UNAVAILABLE", "switched off"):
+            found = self.state(selected)
+            waiting = self.state(self.timeline(), done=(0,))
+            protected = self.state(self.timeline(cue(start=4.0, end=4.5)))
+        self.assertEqual((found.status, found.note, found.selected), ("unavailable", "switched off", "current"))
+        self.assertEqual(candidates.active([found]), {})
+        self.assertEqual([waiting.status, protected.status], ["unavailable", "unavailable"])
 
     def test_adding_a_candidate_keeps_the_others(self):
         state = self.state(self.timeline())

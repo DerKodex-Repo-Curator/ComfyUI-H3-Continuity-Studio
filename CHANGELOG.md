@@ -6,9 +6,9 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ### Added
 
-- **Replacement bridges (experimental).** A bridge can now *replace around the cut*: H3 regenerates a reviewed region of the two clips with exactly as many frames, so the full video keeps its length and recordings stay in sync. You confirm the exact region, render candidates, compare them in context with the original cut, and select one; nothing plays until you do, and a stale, failed or missing candidate plays the original footage. Joins are not yet validated with real generations. See [Joins and bridges](guide/continuity/joins-and-bridges.md#replacement-bridges).
+- **Replacement bridges (unavailable).** A Timeline can describe a bridge that *replaces around the cut*: H3 regenerates a reviewed region of the two clips with exactly as many frames, so the full video keeps its length and recordings stay in sync. In tests with real generations every candidate still jumped at its joins, so this version ships them switched off: nothing renders or plays a replacement, the original cut plays, and the Studio only offers to remove one. See [Joins and bridges](guide/continuity/joins-and-bridges.md#replacement-bridges).
 - **Dialogue cues.** A recording's exact words at its own times, with speaker, on-screen or voiceover portrayal and a check against the recording. Import them from a timed transcript, take them from the Story or type them. Clips speak the cues in their window as `<d>` lines, and replacements keep on-screen speech and footage you mark. See [Dialogue cues](guide/sound/dialogue.md).
-- **Locked recordings.** An uploaded audio clip can be locked to the sequence clock: bridges inside it replace footage instead of adding time, and the Timeline names any inserted bridge or setting that would move the picture off it.
+- **Locked recordings.** An uploaded audio clip can be locked to the sequence clock: no bridge may add time inside it, so its cuts stay cuts, and the Timeline names any inserted bridge or setting that would move the picture off it.
 
 ### Changed
 

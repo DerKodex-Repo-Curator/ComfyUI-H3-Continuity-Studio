@@ -45,7 +45,7 @@ A **bridge** is a generated move between two rendered clips; see [Joins and brid
 :   The clip's seed, a button for a new random seed, and a **Seed mode**. The seed belongs to the clip, so changing it renders only that clip again.
 
 **Bridge**
-:   **Insert bridge** (extra frames outside Timeline time) or **Replace around the cut** (a reviewed region regenerated within it), shown on a join that cuts. See [Joins and bridges](../continuity/joins-and-bridges.md#bridges).
+:   **Insert bridge** (extra frames outside Timeline time) or **Replace around the cut** (a reviewed region regenerated within it, unavailable for now), shown on a join that cuts. See [Joins and bridges](../continuity/joins-and-bridges.md#bridges).
 
 **FLF2VA + cached RefMods**
 :   An experimental per-clip switch that converts first, last and reference images into reusable RefMods. It is off by default. Use it only with the matching example workflow.

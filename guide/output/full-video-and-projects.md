@@ -8,7 +8,7 @@ When the last current clip finishes, **H3 Save Segment** assembles one MP4 from 
 - Assembly copies compatible H.264 tracks and re-encodes on the CPU when encodings differ. All segments need the same size and frame rate; an incompatible or missing segment reports an export error instead of showing the older file.
 - Saved clip MP4s already exclude carried context. Audio comes from the saved decoded waveforms with the usual context trimming and overlap fade. Connect decoded images and audio to **H3 Save Segment** to include them; export generates no transitions or new soundtrack.
 - Rendered [bridges](../continuity/joins-and-bridges.md) are played between their clips, and ticked [audio clips](../sound/audio.md#in-the-full-video) replace H3's audio.
-- A selected, current [replacement candidate](../continuity/joins-and-bridges.md#replacement-bridges) plays in place of the footage it replaces, so the video keeps its length. When the clip after it then starts partway into its file, assembly re-encodes instead of copying.
+- Once [replacement bridges](../continuity/joins-and-bridges.md#replacement-bridges) are available, a selected, current candidate plays in place of the footage it replaces, so the video keeps its length. When the clip after it then starts partway into its file, assembly re-encodes instead of copying.
 
 ## Projects
 

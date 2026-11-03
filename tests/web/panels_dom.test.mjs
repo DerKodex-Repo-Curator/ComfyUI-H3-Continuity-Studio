@@ -144,6 +144,41 @@ test('a locked recording turns Insert off and Replace adds a replacement', () =>
     [{before: 'b', mode: 'replace', left: 14, right: 15}]);
 });
 
+const OFF = 'replacement bridges are switched off';
+
+test('while replacement is unavailable a locked recording keeps the cut', () => {
+  const value = state({audio_clips: [clip({locked: true, in_full_video: true})]});
+  const panel = new BridgePanel(editor(value, {ok: true, boxes: done, bridges: [], replacement_unavailable: OFF}));
+  panel.render();
+  assert.equal(panel.replaceButton.hidden, true);
+  assert.equal(panel.insertButton.disabled, true);
+  assert.match(panel.insertButton.title, /^A locked recording keeps its place, so this join stays a cut/);
+  assert.equal(panel.hint.hidden, false);
+  assert.equal(panel.hint.textContent, `${panel.insertButton.title}.`);
+});
+
+test('while replacement is unavailable an unlocked cut offers only insertion', () => {
+  const panel = new BridgePanel(editor(state(), {ok: true, boxes: done, bridges: [], replacement_unavailable: OFF}));
+  panel.render();
+  assert.equal(panel.replaceButton.hidden, true);
+  assert.equal(panel.insertButton.disabled, false);
+  assert.equal(panel.hint.hidden, true);
+});
+
+test('an unavailable replacement says why and leaves only removal', () => {
+  const value = state({bridges: [{...swap, selected: 'n1'}]});
+  const panel = new BridgePanel(editor(value, {ok: true, boxes: done, replacement_unavailable: OFF,
+    bridges: [replacementItem({status: 'unavailable', note: OFF, selected: 'n1', selection: 'current'})]}));
+  panel.render();
+  assert.equal(panel.stateEl.textContent, 'Replacement bridges are switched off.');
+  assert.equal(panel.renderButton.disabled, true);
+  assert.equal(panel.renderButton.title, 'Replacement bridges are switched off.');
+  assert.equal(panel.replaceRoot.hidden, true);
+  assert.equal(panel.modeSelect.options[1].disabled, true);
+  panel.removeButton.click();
+  assert.deepEqual(value.bridges, []);
+});
+
 test('an insertion keeps its controls and says why it waits', () => {
   const value = state();
   const panel = new BridgePanel(editor(value, {ok: true, boxes: [{id: 'a', status: 'done'}, {id: 'b', status: 'next'}], bridges: []}));

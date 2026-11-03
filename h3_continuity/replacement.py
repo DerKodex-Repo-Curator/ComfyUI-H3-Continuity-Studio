@@ -12,6 +12,9 @@ from . import dialogue
 from . import timeline as rules
 
 GRID = 17
+# Why no replacement renders or plays, or "" while they may.
+UNAVAILABLE = ("replacement bridges are unavailable because generated candidates still jump at their joins, so the "
+               "original cut plays")
 
 
 @dataclass

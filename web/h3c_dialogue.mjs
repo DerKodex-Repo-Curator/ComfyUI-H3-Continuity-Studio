@@ -206,8 +206,8 @@ export class DialoguePanel {
       + 'segments keep their speaker', () => this.upload.click());
     this.storyButton = button('From Story', "Add cues from the dialogue Story planned for each clip, placed through this recording's clip",
       () => this.fromStory());
-    this.lockButton = button('Lock recording', 'Keep this recording on the sequence clock: bridges then replace footage '
-      + 'instead of adding time', () => this.lock());
+    this.lockButton = button('Lock recording', 'Keep this recording on the sequence clock: no bridge may then add time '
+      + 'inside it', () => this.lock());
     this.message = el('span', 'h3ct-hint');
     this.message.setAttribute('role', 'status');
     const head = el('div', 'h3ct-row');

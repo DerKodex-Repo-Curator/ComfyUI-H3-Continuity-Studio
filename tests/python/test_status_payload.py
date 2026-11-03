@@ -81,6 +81,7 @@ class SavedBoxes(unittest.TestCase):
                                      known=known)
 
 
+@mock.patch.object(replacement, "UNAVAILABLE", "")
 class ReplacementItemTest(SavedBoxes):
     def test_an_unconfirmed_region_shows_its_exact_coverage_and_choices(self):
         item = self.item(self.timeline())
@@ -179,11 +180,25 @@ class StatusTest(SavedBoxes):
         self.assertIn("context_frames", item["note"])
         self.assertNotIn("region", item)
 
+    @mock.patch.object(replacement, "UNAVAILABLE", "")
     def test_a_reviewed_pending_replacement_is_announced_as_next(self):
         state = self.state(self.timeline())
         status = self.status(self.timeline(review=state.region))
         self.assertEqual(status["bridges"][0]["status"], "next")
         self.assertIn("The replacement candidate before box 2 is next.", status["message"])
+        self.assertNotIn("replacement_unavailable", status)
+
+    def test_replacements_ship_unavailable_and_keep_the_cut(self):
+        with mock.patch.object(replacement, "UNAVAILABLE", ""):
+            state = self.state(self.timeline())
+            cid = self.add_candidate(state)
+        status = self.status(self.timeline(review=state.region, selected=cid))
+        self.assertTrue(replacement.UNAVAILABLE)
+        self.assertEqual(status["replacement_unavailable"], replacement.UNAVAILABLE)
+        [item] = status["bridges"]
+        self.assertEqual((item["status"], item["note"], item["selection"], item["plays"]),
+                         ("unavailable", replacement.UNAVAILABLE, "current", False))
+        self.assertNotIn("replacement candidate", status["message"])
 
     def test_dialogue_cues_report_their_binding_and_position(self):
         moved = cue("c2", start=1.0, end=2.0, file={"type": "input", "filename": "old.wav", "subfolder": ""})

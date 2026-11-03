@@ -1,7 +1,8 @@
 import copy
 import unittest
+from unittest import mock
 
-from h3_continuity import dialogue
+from h3_continuity import dialogue, replacement
 
 from .helpers import box, clip, cue, parse, wav
 
@@ -151,6 +152,10 @@ class LockConflictTest(unittest.TestCase):
         [message] = dialogue.lock_conflicts(timeline)
         self.assertIn("box 2", message)
         self.assertIn("1.21 s", message)
+        self.assertTrue(message.endswith("remove the bridge, so the join plays as a cut."))
+        with mock.patch.object(replacement, "UNAVAILABLE", ""):
+            [message] = dialogue.lock_conflicts(timeline)
+        self.assertTrue(message.endswith("replace within the existing duration, or remove the bridge."))
 
     def test_bridge_before_the_recording_moves_with_it(self):
         boxes = [box("a", 107), box("b", 107, cut=True)]

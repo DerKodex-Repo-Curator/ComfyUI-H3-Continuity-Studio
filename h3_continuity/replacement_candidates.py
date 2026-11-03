@@ -13,7 +13,7 @@ from . import timeline as rules
 class State:
     bridge: dict
     index: int
-    # problem | waiting | review | pending | next | done
+    # unavailable | problem | waiting | review | pending | next | done
     status: str
     note: str
     geometry: replacement.Geometry
@@ -94,7 +94,9 @@ def states(folder, timeline, manifest, done, known, context):
             match = next((item for item in saved if item["entry"].get("candidate") == chosen), None)
             selected = match["state"] if match else "missing"
         waiting = [n for n in (index, index + 1) if n - 1 not in done]
-        if trouble:
+        if replacement.UNAVAILABLE:
+            status, note = "unavailable", replacement.UNAVAILABLE
+        elif trouble:
             status, note = "problem", trouble
         elif waiting or region is None:
             status, note = "waiting", f"render {' and '.join(f'box {n}' for n in waiting or (index, index + 1))} first"
@@ -120,7 +122,7 @@ def active(found):
     a region that is still the reviewed one."""
     result = {}
     for state in found:
-        if state.selected == "current" and state.status not in ("problem", "waiting", "review"):
+        if state.selected == "current" and state.status not in ("unavailable", "problem", "waiting", "review"):
             result[state.bridge["before"]] = next(item["entry"] for item in state.candidates
                                                   if item["entry"].get("candidate") == state.bridge["selected"])
     return result

@@ -1,6 +1,6 @@
 # Dialogue cues
 
-A **dialogue cue** holds a recording's exact words at the recording's own times: who speaks, whether they are seen speaking, and whether you have checked the cue against the recording. Clips speak the cues in their window as `<d>` lines, and [replacement bridges](../continuity/joins-and-bridges.md#replacement-bridges) keep the footage where someone speaks on screen.
+A **dialogue cue** holds a recording's exact words at the recording's own times: who speaks, whether they are seen speaking, and whether you have checked the cue against the recording. Clips speak the cues in their window as `<d>` lines, and [replacement bridges](../continuity/joins-and-bridges.md#replacement-bridges), unavailable for now, keep the footage where someone speaks on screen.
 
 Cues belong to a recording on an [audio lane](audio.md), not to a clip. Splitting, moving or re-rendering clips never rewrites them, and moving or trimming the recording's clip moves where they play.
 
@@ -60,12 +60,12 @@ Changing what a clip is asked to say, its words, times, speakers or portrayals, 
 
 **Locked to the sequence clock** in the recording's audio settings, or **Lock recording** in **Dialogue cues**, keeps the recording where it is in the full video. The picture then adapts to the recording:
 
-- every new bridge [replaces footage around the cut](../continuity/joins-and-bridges.md#replacement-bridges) instead of adding time, and **Insert bridge** is off;
+- no bridge may add time inside it, so **Insert bridge** is off and its cuts stay cuts. [Replacement bridges](../continuity/joins-and-bridges.md#replacement-bridges), which would bridge such a cut within the video's length, are unavailable for now;
 - the Timeline's hint line names a lock that can't hold, for example:
     - *@audio1 is locked to the sequence clock but isn't in the full video: turn on In the full video, or unlock it.*
-    - *@audio1 is locked to the sequence clock, but the bridge before box 4 inserts 1.21 s inside it, so the picture after it drifts from the recording: replace within the existing duration, or remove the bridge.*
+    - *@audio1 is locked to the sequence clock, but the bridge before box 4 inserts 1.21 s inside it, so the picture after it drifts from the recording: remove the bridge, so the join plays as a cut.*
 
-Locking never moves, cuts or re-renders anything, and it doesn't change an existing bridge: switch an inserted bridge inside the recording to **Replace around the cut**, or remove it. A confirmed replacement region asks to be confirmed again, because the recordings it plays with changed. All locked recordings share one clock; none is moved to fit another.
+Locking never moves, cuts or re-renders anything, and it doesn't change an existing bridge: remove an inserted bridge inside the recording. All locked recordings share one clock; none is moved to fit another.
 
 ## Limits
 

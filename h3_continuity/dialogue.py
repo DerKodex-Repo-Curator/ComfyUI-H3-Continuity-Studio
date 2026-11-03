@@ -306,7 +306,9 @@ def locked_clips(timeline):
 
 def lock_conflicts(timeline):
     """Why a locked recording and the picture would not stay together in the full video; [] when they do."""
-    from . import timeline as rules
+    from . import replacement, timeline as rules
+    advice = ("remove the bridge, so the join plays as a cut" if replacement.UNAVAILABLE
+              else "replace within the existing duration, or remove the bridge")
     messages = []
     positions = {box.id: index for index, box in enumerate(timeline.boxes)}
     for clip in locked_clips(timeline):
@@ -321,5 +323,5 @@ def lock_conflicts(timeline):
             if start < join < end:
                 messages.append(f"@{slot} is locked to the sequence clock, but the bridge before box {index + 1} "
                                 f"inserts {bridge['frames'] / FPS:.2f} s inside it, so the picture after it drifts "
-                                "from the recording: replace within the existing duration, or remove the bridge.")
+                                f"from the recording: {advice}.")
     return messages

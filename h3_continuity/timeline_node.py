@@ -10,6 +10,7 @@ from comfy_execution.graph_utils import ExecutionBlocker
 
 from . import conditioning, latents, store, timing, shot_preview, refmods, audio_tracks, visual_memory
 from . import box_checks, bridges, dialogue, studio_pictures, voice_clips, reference_replacements, replacement_candidates
+from . import replacement
 from . import nodes as continuity
 from . import timeline as rules
 from .story_node import StoryType
@@ -163,6 +164,8 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
         if parsed.dialogue is not None:
             status["dialogue"] = {"cues": dialogue.summary(parsed)}
         status["timing_conflicts"] = dialogue.lock_conflicts(parsed)
+        if replacement.UNAVAILABLE:
+            status["replacement_unavailable"] = replacement.UNAVAILABLE
         context = known.get("context_frames")
         checks = box_checks.load(folder)
         for index, (item, box) in enumerate(zip(status["boxes"], parsed.boxes)):
@@ -541,7 +544,7 @@ class H3C_Timeline(io.ComfyNode):
             found = replacement_candidates.states(folder, parsed, manifest, done, known, context)
             if replacing:
                 chosen = next(state for state in found if state.bridge["before"] == parsed.render_bridge)
-                if chosen.status in ("problem", "waiting", "review"):
+                if chosen.status in ("unavailable", "problem", "waiting", "review"):
                     raise ValueError(f"H3 Timeline: the replacement before box {chosen.index + 1}: {chosen.note}")
             else:
                 chosen = next((state for state in found if state.status == "next"), None)

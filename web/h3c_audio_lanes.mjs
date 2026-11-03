@@ -357,8 +357,8 @@ export class AudioLanes {
       const lock = node('label', 'h3ct-field', 'Locked to the sequence clock'), locked = node('input');
       locked.type = 'checkbox'; locked.checked = clip.locked === true;
       locked.setAttribute('aria-label', 'Locked to the sequence clock');
-      lock.title = 'Keep this recording at its place in the full video: a bridge across a cut inside it replaces '
-        + 'footage instead of adding time, so its dialogue stays in sync';
+      lock.title = 'Keep this recording at its place in the full video: no bridge may add time across a cut inside '
+        + 'it, so its dialogue stays in sync';
       locked.addEventListener('change', () => {
         if (locked.checked) clip.locked = true; else delete clip.locked;
         this.editor.commit();

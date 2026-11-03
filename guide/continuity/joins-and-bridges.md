@@ -10,7 +10,7 @@ Every clip after the first says how it meets the clip before it.
 | **Cut** | Tick **Cut** in **Settings → Join with previous clip**. | No carried frames: a new camera angle. With [visual memory](visual-memory.md), people, clothes and place can still hold. |
 | **New scene** | Tick **New scene**. | A cut to a new place, time or look. Visual memory keeps its history while the new prompt defines the new setting. |
 | **Transition** | Available through the [Story bible](../story/cast.md)'s **Join** selector (Continue, Transition, Cut, New scene, with an optional note). | A scene-driven transition generated *inside* H3 that grows out of the scene. It writes the same flags, so rendering is unchanged. |
-| **Bridge** | **Insert bridge** or **Replace around the cut** on a clip that cuts. | Generated frames on the join: added time, or a reviewed region regenerated within the video's length. See below. |
+| **Bridge** | **Insert bridge** on a clip that cuts. | Generated frames on the join, which add time. Regenerating a reviewed region within the video's length instead is [unavailable for now](#replacement-bridges). See below. |
 
 Story planning chooses between seamless continuation, an in-scene transition and a hard cut according to your story, rhythm and Guide. **Existing Timeline boundaries and Cut flags remain authoritative**: Story never overrides a join you set.
 
@@ -21,7 +21,7 @@ A **bridge** turns the hard cut between two *rendered* clips into a generated mo
 | Mode | What H3 renders | Use it when |
 | --- | --- | --- |
 | **Insert time** | New frames between the two clips. The full video gets longer. | Nothing under the cut has to stay in sync with the picture. |
-| **Replace around the cut** | A region you confirm, the end of the clip before and the start of the clip after, regenerated with exactly as many frames. The video keeps its length and every recording stays in place. *Experimental.* | A recording with dialogue or music plays across the cut. See [Replacement bridges](#replacement-bridges). |
+| **Replace around the cut** | A region you confirm, the end of the clip before and the start of the clip after, regenerated with exactly as many frames. The video keeps its length and every recording stays in place. | Unavailable for now: generated candidates still jump at their joins. See [Replacement bridges](#replacement-bridges). |
 
 ### Insert one
 
@@ -29,11 +29,11 @@ Select a clip after clip 1 that starts with **Cut** or **New scene**, and open *
 
 [![The bridge panel](../assets/screens/bridge.png){ align=right width=300 }](../assets/screens/bridge.png)
 
-**Insert bridge** is on when this clip and the one before it are rendered, and the one before plays every frame it generates. Otherwise it is off, and the line underneath says why, for example "Render box 3 first." or, after an exact clip that drops frames, "Box 3 drops 9 frames, so the bridge before box 4 can't start from its last frame: give box 3 a length on the grid." While a recording is [locked to the sequence clock](../sound/dialogue.md#lock-a-recording), **Insert bridge** is off and **Replace around the cut** is the way to bridge the cut.
+**Insert bridge** is on when this clip and the one before it are rendered, and the one before plays every frame it generates. Otherwise it is off, and the line underneath says why, for example "Render box 3 first." or, after an exact clip that drops frames, "Box 3 drops 9 frames, so the bridge before box 4 can't start from its last frame: give box 3 a length on the grid." While a recording is [locked to the sequence clock](../sound/dialogue.md#lock-a-recording), **Insert bridge** is off and the join stays a cut: *A locked recording keeps its place, so this join stays a cut: a bridge would add time, and replacement bridges are unavailable.*
 
 A new bridge has 29 frames, a new seed and a copy of the clip's prompt. Its panel has:
 
-- A **mode** selector: **Insert time** or **Replace around the cut**. Switching keeps the length; switching back to Insert time drops the confirmed region and any selected candidate.
+- A **mode** selector: **Insert time** or **Replace around the cut**, which is off while replacements are unavailable. Switching keeps the length; switching back to Insert time drops the confirmed region and any selected candidate.
 - **Length**: 12, 29 or 46 new frames, with their seconds.
 - **Seed**, with a button for a new one.
 - **Bridge prompt**: how the shot moves from the clip before into this one.
@@ -56,7 +56,7 @@ H3 gets the shared prompt and the bridge prompt, as text to video with audio. A 
 
 ### Only the full video gets longer
 
-An insertion bridge lives on the join, outside the clips. Clip starts, audio lanes, timed text, the seconds the Story writes for, the check, drift, memory and pins never see it. The full video plays each rendered bridge between its two clips, so after a 29-frame bridge before clip 4, everything from clip 4 on plays 1.2 s later in the full video than on the Timeline. A clip ticked [In the full video](../sound/audio.md#in-the-full-video) starts with its clip, after the bridges before it, then plays straight through: a bridge inserted *inside* a long recording moves the picture after it away from that recording. With a recording you need in sync, [lock it](../sound/dialogue.md#lock-a-recording) and replace around the cut instead.
+An insertion bridge lives on the join, outside the clips. Clip starts, audio lanes, timed text, the seconds the Story writes for, the check, drift, memory and pins never see it. The full video plays each rendered bridge between its two clips, so after a 29-frame bridge before clip 4, everything from clip 4 on plays 1.2 s later in the full video than on the Timeline. A clip ticked [In the full video](../sound/audio.md#in-the-full-video) starts with its clip, after the bridges before it, then plays straight through: a bridge inserted *inside* a long recording moves the picture after it away from that recording. With a recording you need in sync, [lock it](../sound/dialogue.md#lock-a-recording) and keep the cut.
 
 ### When a bridge needs a render
 
@@ -89,8 +89,8 @@ Earlier bridge takes are kept in `takes/`, and one that still joins both clips c
 
 An inserted bridge moves every later picture away from a recording that plays across the cut: the speech in the waveform and the mouths in the rendered clips can't move with it. A **replacement** makes room for the move inside the video instead. H3 regenerates a short region around the cut, the last frames of the clip before and the first frames of the clip after, and the full video plays the new frames in their place. The video keeps its length, every later clip keeps its start, and recordings are never cut, moved, stretched or padded with silence.
 
-!!! warning "Experimental"
-    Replacement joins are not yet validated with real generations. Watch both joins and the dialogue against the recording before selecting a candidate. Nothing plays until you select it, and the original clips and takes are never trimmed or overwritten.
+!!! warning "Unavailable"
+    Replacement bridges are switched off in this version. In tests with real generations, every candidate still jumped at its joins: the light and the faces snap from one clip's look to the other's instead of blending across the region. Until a construction passes, **Replace around the cut** is hidden and its mode is off. For a replacement already in a Timeline, the state line reads *Replacement bridges are unavailable because generated candidates still jump at their joins, so the original cut plays.* Nothing renders or plays it, and its panel offers only **Remove bridge**. The rest of this section describes replacements as they work once they are available.
 
 ### Add a replacement
 

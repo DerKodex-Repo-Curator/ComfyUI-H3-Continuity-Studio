@@ -44,4 +44,4 @@ The full video rebuilds on its own a moment after a ticked clip changes, with no
 
 ## Locked to the sequence clock
 
-An uploaded clip's settings also have **Locked to the sequence clock**. A locked recording keeps its place in the full video: bridges across cuts inside it replace footage instead of adding time, so its dialogue stays in sync, and the Timeline names any bridge or setting that would move the picture away from it. Lock a recording when its words or beats must line up with the clips. See [Dialogue cues](dialogue.md#lock-a-recording).
+An uploaded clip's settings also have **Locked to the sequence clock**. A locked recording keeps its place in the full video: no bridge may add time across a cut inside it, so those cuts stay cuts and its dialogue stays in sync, and the Timeline names any bridge or setting that would move the picture away from it. Lock a recording when its words or beats must line up with the clips. See [Dialogue cues](dialogue.md#lock-a-recording).

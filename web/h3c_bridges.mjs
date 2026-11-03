@@ -30,6 +30,8 @@ const ORIGINAL = ' The full video plays the original cut.';
 const EXPERIMENTAL = 'Experimental: replacement joins are not yet validated with real generations. Watch both joins '
   + 'and the dialogue against the recording before selecting a candidate.';
 const LOCKED = 'A locked recording keeps its place, so a bridge here replaces footage instead of adding time';
+const KEEP_CUT = 'A locked recording keeps its place, so this join stays a cut: a bridge would add time, and replacement '
+  + 'bridges are unavailable';
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -71,6 +73,7 @@ const span = (start, end) => `${clock(start)}–${clock(end)} s`;
 export function replacementLine(item, problem = '') {
   if (problem) return {text: problem, problem: true};
   if (!item) return {text: WAITING, problem: false};
+  if (item.status === 'unavailable') return {text: sentence(item.note), problem: true};
   const lost = item.selection === 'stale' ? ' The selected candidate is stale, so the full video plays the original cut.'
     : item.selection === 'missing' ? " The selected candidate's file is missing, so the full video plays the original cut." : '';
   if (['problem', 'waiting', 'review'].includes(item.status)) {
@@ -336,14 +339,19 @@ export class BridgePanel {
       detail: {box: this.editor.box().id, file, label}}));
   }
 
+  // Why the server renders no replacement bridges, or ''.
+  unavailable() {
+    return this.editor.status?.replacement_unavailable ?? '';
+  }
+
   // Why the Bridge field's buttons are off, or '' when they are on. An insertion needs both boxes rendered, and the one
   // before plays all it generates; a replacement waits for its region in the status instead.
   blocked(mode) {
     const editor = this.editor;
     if (editor.stale || !editor.status?.ok) return WAIT;
     const index = editor.selected;
-    if (mode === 'replace') return '';
-    if (model.lockedClips(editor.state).length) return LOCKED;
+    if (mode === 'replace') return this.unavailable() && sentence(this.unavailable());
+    if (model.lockedClips(editor.state).length) return this.unavailable() ? KEEP_CUT : LOCKED;
     const problem = model.bridgeProblem(editor.state, index);
     if (problem) return problem;
     const waiting = [index, index + 1].filter((n) => editor.statusOf(editor.state.boxes[n - 1])?.status !== 'done');
@@ -355,10 +363,12 @@ export class BridgePanel {
     this.insertButton.disabled = !!insert;
     this.insertButton.title = insert || `Add new frames that move from box ${index}'s end into this box's start. `
       + 'Both boxes keep their renders, and the full video gets longer';
+    this.replaceButton.hidden = !!this.unavailable();
     this.replaceButton.disabled = !!replace;
     this.replaceButton.title = replace || `Regenerate a reviewed region around this cut with exactly as many frames: the `
       + 'video keeps its length and recordings stay in place. Experimental';
-    const hint = replace || (insert && insert !== LOCKED ? `Insert bridge: ${insert}` : '');
+    const hint = !this.unavailable() ? replace || (insert && insert !== LOCKED ? `Insert bridge: ${insert}` : '')
+      : insert === KEEP_CUT ? `${KEEP_CUT}.` : insert && insert !== WAIT ? `Insert bridge: ${insert}` : insert;
     this.hint.textContent = hint;
     this.hint.hidden = !hint;
   }
@@ -447,12 +457,13 @@ export class BridgePanel {
     this.modeSelect.value = replacing ? 'replace' : 'insert';
     const locked = model.lockedClips(editor.state).length > 0;
     this.modeSelect.options[0].disabled = locked && replacing;
-    this.modeSelect.title = locked ? LOCKED : 'Insert time adds frames between the boxes; Replace around the cut keeps the '
-      + 'video length';
+    this.modeSelect.options[1].disabled = !!this.unavailable();
+    this.modeSelect.title = this.unavailable() ? sentence(this.unavailable()) : locked ? LOCKED
+      : 'Insert time adds frames between the boxes; Replace around the cut keeps the video length';
     this.lengthSelect.value = String(replacing ? bridge.left + bridge.right : bridge.frames);
     this.leftField.hidden = !replacing;
     this.suggestButton.hidden = !replacing;
-    this.replaceRoot.hidden = !replacing;
+    this.replaceRoot.hidden = !replacing || item?.status === 'unavailable';
     this.seedInput.value = bridge.seed ?? '';
     if (this.promptEl.value !== (bridge.prompt ?? '')) this.promptEl.value = bridge.prompt ?? '';
     this.stateEl.textContent = line.text;
@@ -467,7 +478,7 @@ export class BridgePanel {
     else if (replacing) {
       why = editor.host.projectAttached === true ? 'Replacement candidates render from the graph; this project renders '
         + 'through the API, which leaves replacements to the Studio.'
-        : ['problem', 'waiting', 'review'].includes(item.status) ? line.text : '';
+        : ['unavailable', 'problem', 'waiting', 'review'].includes(item.status) ? line.text : '';
     } else why = item.status === 'problem' || item.status === 'waiting' ? line.text : '';
     this.renderButton.disabled = !!why;
     this.renderButton.title = why || (replacing ? CANDIDATE : RENDER);
