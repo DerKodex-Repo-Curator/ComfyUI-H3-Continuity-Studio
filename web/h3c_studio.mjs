@@ -3,7 +3,7 @@
 // closes, opens another Timeline or the Timeline's Story changes. Its Story page edits the Story node's inputs.
 import { liveBadge, progressText } from './h3c_render_watch.mjs?v=20261004-studio-1';
 import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
-import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
+import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
 
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 
@@ -208,6 +208,8 @@ class Studio {
     this.bridgeBox = null;
     // The take Play chose on the Box page, {box, bridge, video, label}; Switch flips between it and the take in use.
     this.chosen = null;
+    // The replacement candidate a bridge panel played, {box, file, label}; it plays while its box is selected.
+    this.candidate = null;
     this.resumeAt = null;
     this.moving = false;
     this.borrowed = [];
@@ -270,6 +272,11 @@ class Studio {
       this.chosen = event.detail ?? null;
       this.setView('chosen');
     });
+    root.addEventListener('h3c-play-candidate', (event) => {
+      this.candidate = event.detail ?? null;
+      this.setView('candidate');
+    });
+    root.addEventListener('h3c-play-region', (event) => this.playRegion(event.detail));
     root.addEventListener('h3c-takes-listed', () => this.refresh());
     root.addEventListener('h3c-takes-changing', () => this.letGo());
     root.addEventListener('h3c-takes-changed', () => {
@@ -520,7 +527,7 @@ class Studio {
       this.focusPage = null;
       this.mobilePage = 'viewer';
       this.inspectorTarget = {kind:'clip', box:host.editor.box()?.id ?? null};
-      this.view = this.chosen = this.bridgeBox = this.resumeAt = null;
+      this.view = this.chosen = this.candidate = this.bridgeBox = this.resumeAt = null;
       this.moving = false;
       this.pinMenu.hidden = true;
       this.pinNote.textContent = '';
@@ -546,6 +553,7 @@ class Studio {
       tab:editor?.activeTab ?? 'prompt', selectedBoxId:editor?.box()?.id ?? null,
       selectedIndex:editor?.selected ?? 0, view:this.view,
       chosen:this.chosen ? {...this.chosen, video:{...this.chosen.video}} : null,
+      candidate:this.candidate ? {...this.candidate, file:{...this.candidate.file}} : null,
       bridgeBox:this.bridgeBox, resumeAt:video ? video.currentTime : this.resumeAt?.time ?? null,
     };
   }
@@ -579,10 +587,14 @@ class Studio {
       && (editor.status == null || editor.bridgeStatusOf(bridge)?.video) ? bridge : null;
     const chosen = snapshot.chosen;
     this.chosen = chosen?.box === box?.id && this.chosenAvailable(chosen) ? chosen : null;
-    this.view = ['full','take','chosen','bridge'].includes(snapshot.view) ? snapshot.view : null;
-    if ((this.view === 'chosen' && !this.chosen) || (this.view === 'bridge' && !this.bridgeBox)) this.view = 'take';
+    const candidate = snapshot.candidate;
+    this.candidate = candidate?.box === box?.id && this.candidateAvailable(candidate) ? candidate : null;
+    this.view = ['full','take','chosen','bridge','candidate'].includes(snapshot.view) ? snapshot.view : null;
+    if ((this.view === 'chosen' && !this.chosen) || (this.view === 'bridge' && !this.bridgeBox)
+      || (this.view === 'candidate' && !this.candidate)) this.view = 'take';
     const mediaValid = this.view === snapshot.view && (this.view === 'full' ? !editor.fullLink.hidden : this.view === 'chosen' ? !!this.chosen
-      : this.view === 'bridge' ? !!this.bridgeBox : box?.id === snapshot.selectedBoxId && !!editor.statusOf(box)?.video);
+      : this.view === 'bridge' ? !!this.bridgeBox : this.view === 'candidate' ? !!this.candidate
+      : box?.id === snapshot.selectedBoxId && !!editor.statusOf(box)?.video);
     this.resumeAt = mediaValid && Number.isFinite(snapshot.resumeAt) && snapshot.resumeAt >= 0
       ? {time:snapshot.resumeAt,playing:false} : null;
     editor.cast?.refresh({link});
@@ -834,6 +846,7 @@ class Studio {
     this.place(regions.lane, this.track);
     this.place(regions.hint, this.track);
     this.place(regions.audioSettings, this.pages.audio);
+    this.place(regions.dialogueSettings, this.pages.audio);
     this.place(regions.timedTextSettings, this.pages.text);
     regions.references.open = true;
     regions.refmods.open = true;
@@ -1007,9 +1020,42 @@ class Studio {
       && take.video?.subfolder === chosen.video.subfolder && take.video?.type === chosen.video.type);
   }
 
+  // A candidate stays playable while the status lists one of its files; before the status arrives it is kept.
+  candidateAvailable(candidate) {
+    const editor = this.host.editor;
+    if (!candidate?.file?.filename || !editor.state.bridges?.some(bridge => bridge.before === candidate.box)) return false;
+    if (editor.status == null) return true;
+    const same = file => file?.filename === candidate.file.filename && file?.subfolder === candidate.file.subfolder;
+    return (editor.bridgeStatusOf(candidate.box)?.candidates ?? []).some(item =>
+      [item.video, item.preview?.file, item.preview?.original].some(same));
+  }
+
+  // The full video from `start` to `end` seconds: a replacement's region with a second either side.
+  playRegion({start, end} = {}) {
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+    this.setView('full');
+    const video = this.screen.querySelector('video:not(.h3cx-live)');
+    if (!video) return;
+    const stop = () => {
+      if (video.currentTime < end) return;
+      video.pause();
+      video.removeEventListener('timeupdate', stop);
+    };
+    video.currentTime = start;
+    video.addEventListener('timeupdate', stop);
+    video.addEventListener('seeking', () => {
+      if (video.currentTime < start || video.currentTime > end) video.removeEventListener('timeupdate', stop);
+    });
+    video.play().catch(() => {});
+  }
+
   refreshPlayer(watch) {
     const {editor} = this.host;
     const box = editor.box();
+    if (this.candidate && (this.candidate.box !== box?.id || !this.candidateAvailable(this.candidate))) {
+      this.candidate = null;
+      if (this.view === 'candidate') this.view = 'take';
+    }
     if (this.chosen && !this.chosenAvailable(this.chosen)) {
       this.chosen = this.resumeAt = null;
       if (this.view === 'chosen') {
@@ -1024,7 +1070,8 @@ class Studio {
     const chosen = box && this.chosen?.box === box.id ? this.chosen : null;
     if (this.view === 'chosen' && !chosen) this.view = 'take';
     const entry = this.view === 'bridge' ? editor.bridgeStatusOf(this.bridgeBox) : box ? editor.statusOf(box) : null;
-    const take = this.view === 'chosen' ? chosen.video : entry?.video?.file ?? null;
+    const take = this.view === 'chosen' ? chosen.video : this.view === 'candidate' ? this.candidate.file
+      : entry?.video?.file ?? null;
     const takeUrl = take ? this.host.viewUrl(take) : null;
     const fullUrl = editor.fullLink.hidden ? null : editor.fullLink.getAttribute('href');
     const view = this.view ?? (fullUrl ? 'full' : 'take');
@@ -1072,7 +1119,8 @@ class Studio {
       const src = view === 'full' ? fullUrl : takeUrl;
       if (src) this.showVideo(src);
       else this.showMessage(view === 'full' ? 'No assembled full video is available yet.' : 'Not rendered yet');
-      this.badge.textContent = view === 'chosen' ? this.chosenLabel(chosen) : view === 'bridge'
+      this.badge.textContent = view === 'chosen' ? this.chosenLabel(chosen) : view === 'candidate' ? this.candidate.label
+        : view === 'bridge'
         ? `Bridge before clip ${editor.selected + 1}${!entry || entry.status === 'done' ? '' : ' · older take'}`
         : view === 'take' && takeUrl && entry.status !== 'done' ? OLDER_TAKE : '';
     }

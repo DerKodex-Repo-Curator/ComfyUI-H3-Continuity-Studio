@@ -1,5 +1,5 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import { isFresh, globalFrame, lookAt, assemblePrompt } from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
+import { isFresh, globalFrame, lookAt, assemblePrompt } from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
 
 import {framePrompt} from './h3c_still_scene.mjs?v=20261011-reference-preparation-1';
 import {preparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';

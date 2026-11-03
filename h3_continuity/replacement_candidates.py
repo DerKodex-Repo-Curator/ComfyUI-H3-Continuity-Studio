@@ -148,9 +148,11 @@ def _listed(entry, state, recipe, view):
 
 def item(state, timeline, context, view, takes=None):
     """What the Studio shows for replacement `state`: its exact region, what protects footage near it, the coverage
-    the region may take instead, and its candidates. `view(filename, version)` gives a candidate file's /view dict;
-    `takes` maps box ids to their take identity, as in `replacement.check`."""
+    the region may take instead, its candidates, and the take each endpoint box is on, which an observed protection
+    names. `view(filename, version)` gives a candidate file's /view dict; `takes` maps box ids to their take identity,
+    as in `replacement.check`."""
     bridge = state.bridge
+    ends = (timeline.boxes[state.index - 1].id, bridge["before"])
     projected = dialogue.projected(timeline)
     choices = replacement.options(timeline, state.index, context, takes, projected)
     proposal = replacement.proposal(timeline, state.index, context, takes, choices)
@@ -161,7 +163,8 @@ def item(state, timeline, context, view, takes=None):
              "options": choices, "proposal": list(proposal) if proposal else None,
              "candidates": [_listed(saved["entry"], saved["state"], state.recipe, view) for saved in state.candidates],
              "selected": bridge.get("selected"), "selection": state.selected,
-             "plays": bridge["before"] in active([state])}
+             "plays": bridge["before"] in active([state]),
+             "takes": {box_id: (takes or {}).get(box_id) for box_id in ends}}
     if state.note:
         found["note"] = state.note
     return found

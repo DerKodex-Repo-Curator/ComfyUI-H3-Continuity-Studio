@@ -1,5 +1,5 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
+import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
 
 const number = (shot) => Number(/\d+/.exec(shot.label)[0]);
 const start = (shot) => {

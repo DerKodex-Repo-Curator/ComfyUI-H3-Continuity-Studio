@@ -95,6 +95,12 @@ class ReplacementItemTest(SavedBoxes):
         self.assertEqual((item["selected"], item["selection"], item["plays"]), (None, "none", False))
         self.assertIn("confirm the region", item["note"])
 
+    def test_names_the_take_each_endpoint_box_is_on(self):
+        timeline = self.timeline()
+        current = candidates.takes(self.folder, timeline, self.manifest)
+        self.assertIsNotNone(current["a"])
+        self.assertEqual(self.item(timeline)["takes"], {"a": current["a"], "b": current["b"]})
+
     def test_protected_speech_is_listed_and_removes_choices(self):
         from h3_continuity import dialogue
         speech = cue(start=4.6, end=5.0)
