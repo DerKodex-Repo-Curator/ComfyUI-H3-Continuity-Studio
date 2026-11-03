@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as dialogue from '../../web/h3c_dialogue.mjs';
+import * as model from '../../web/h3c_timeline_model.mjs';
 
 const wav = {type: 'input', filename: 'line.wav', subfolder: ''};
 const clip = (extra = {}) => ({slot: 'audio1', file: wav, start: 0, source_start: 0, duration: 30, ...extra});
@@ -122,4 +123,37 @@ test('cue status lines read the server summary', () => {
   assert.match(dialogue.cueStatusLine({state: 'changed', placed: false, aligned: false, slot: 'audio1'}),
     /@audio1 has a different file/);
   assert.match(dialogue.cueStatusLine({state: 'missing', placed: false, aligned: false, slot: 'audio2'}), /@audio2/);
+});
+
+const cutState = (cues, second = {}) => ({prompt: '', audio_clips: [clip()], dialogue: {version: 1, cues}, boxes: [
+  {id: 'a', frames: 107, prompt: 'One.', cut: false, memory: 'scene'},
+  {id: 'b', frames: 107, prompt: 'Two.', cut: true, memory: 'scene', ...second}]});
+const whole = [{box: 'a', frame: 0, label: 'the previous shot before this cut', whole: true}];
+const before = {box: 'a', frame: 102, label: 'the moment before this cut'};
+const views = [{box: 'a', frame: 0, label: 'scene establishing view'}, before];
+
+test('a cut with speech on either side remembers views instead of the whole video, as timeline.memory_sources', () => {
+  assert.deepEqual(model.memorySources(cutState([]), 1), whole);
+  const after = cutState([cue({start: 5.6, end: 7.9})]);
+  assert.deepEqual([model.speaks(after, 0), model.speaks(after, 1)], [false, true]);
+  assert.deepEqual(model.memorySources(after, 1), views);
+  const earlier = cutState([cue({start: 0.5, end: 2.48})]);
+  assert.deepEqual([model.speaks(earlier, 0), model.speaks(earlier, 1)], [true, false]);
+  assert.deepEqual(model.memorySources(earlier, 1), views);
+  assert.deepEqual(model.memorySources(cutState([], {prompt: 'Mara says: <d>Hello.</d>'}), 1), views);
+});
+
+test('voiceover, manual boxes and unbound cues keep the whole video', () => {
+  assert.deepEqual(model.memorySources(cutState([cue({start: 5.6, end: 7.9, portrayal: 'voiceover'})]), 1), whole);
+  assert.deepEqual(model.memorySources(cutState([cue({start: 5.6, end: 7.9})], {dialogue: 'manual'}), 1), whole);
+  const changed = cutState([cue({start: 5.6, end: 7.9})]);
+  changed.audio_clips = [clip({file: {type: 'input', filename: 'take2.wav', subfolder: ''}})];
+  assert.deepEqual(model.memorySources(changed, 1), whole);
+});
+
+test('selected moments at a speaking cut add the moment before it', () => {
+  const chosen = {box: 'a', frame: 30, label: 'the envelope'};
+  assert.deepEqual(model.memorySources(cutState([cue({start: 5.6, end: 7.9})], {memory: 'selected', memories: [chosen]}), 1),
+    [chosen, before]);
+  assert.deepEqual(model.memorySources(cutState([cue({start: 5.6, end: 7.9})], {memory: 'selected'}), 1), [before]);
 });

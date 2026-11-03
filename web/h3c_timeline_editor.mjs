@@ -1337,8 +1337,8 @@ export class TimelineEditor {
     mode.value = box.memory ?? 'off';
     mode.addEventListener('change', () => { box.memory = mode.value; this.commit(); });
     root.append(field('Visual memory', mode), el('p', 'h3ct-hint', box.memory === 'cast'
-      ? "Cuts also receive the full preceding video for layout and movement, even when character pictures are supplied. Cast adds earlier character and place views. A new scene follows its new setting prompt; a clip without a schedule uses Same scene."
-      : 'Cuts receive the full preceding video for layout, object appearance and movement. Same scene also remembers its establishing view; a new scene follows its new setting prompt. Selected moments add chosen earlier views. Off disables visual memory.'));
+      ? "Cuts also receive the full preceding video for layout and movement, even when character pictures are supplied. When someone speaks on either side of the cut, they remember the moment before it instead, because H3 would copy the earlier lip movement. Cast adds earlier character and place views. A new scene follows its new setting prompt; a clip without a schedule uses Same scene."
+      : 'Cuts receive the full preceding video for layout, object appearance and movement. When someone speaks on either side of the cut, they remember the moment before it instead, because H3 would copy the earlier lip movement. Same scene also remembers its establishing view; a new scene follows its new setting prompt. Selected moments add chosen earlier views. Off disables visual memory.'));
     const sources = model.memorySources(this.state, this.selected);
     const listed = sources.map(source =>
       `Clip ${this.state.boxes.findIndex(item => item.id === source.box) + 1} · ${source.whole ? 'Full video' : model.seconds(source.frame) + ' s'} · ${source.label}`).join(' / ');
@@ -1348,7 +1348,7 @@ export class TimelineEditor {
       return;
     }
     if (box.memory !== 'selected') return;
-    if (sources.some(source => source.whole)) root.append(el('p', 'h3ct-hint', listed));
+    if (sources.some(source => !(box.memories ?? []).includes(source))) root.append(el('p', 'h3ct-hint', listed));
     for (const [index, memory] of (box.memories ?? []).entries()) {
       const row = el('div', 'h3ct-row');
       const source = el('select', 'h3ct-select');

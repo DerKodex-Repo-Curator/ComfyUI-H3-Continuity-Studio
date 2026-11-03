@@ -513,11 +513,22 @@ def memory_sources(timeline, index):
             if item["frame"] >= played_frames(timeline, source):
                 raise _error(f"box {index + 1} memory is past the end of box {source + 1}; choose an earlier moment")
             result.append((source, item["frame"], item.get("label") or "visual continuity"))
-    if index and box.cut:
+    if replays_previous(timeline, index):
         # The full preceding video covers its individual moments, independently of Cast's picture/budget filters.
         return [(index - 1, 0, "the previous shot before this cut"),
                 *(item for item in result if box.memory == "selected" or item[0] != index - 1)]
+    if index and box.cut:
+        before = (index - 1, max(0, played_frames(timeline, index - 1) - 5), "the moment before this cut")
+        return result + [before] if not any(item[:2] == before[:2] for item in result) else result
     return result
+
+
+def replays_previous(timeline, index):
+    """Whether cut box `index`'s memory starts with the whole preceding video. H3 replays that video's lip movement
+    onto the new shot, so not when either side of the cut speaks."""
+    from . import dialogue
+    return (bool(index) and timeline.boxes[index].cut
+            and not (dialogue.speaks(timeline, index) or dialogue.speaks(timeline, index - 1)))
 
 
 def scene_sources(timeline, index):

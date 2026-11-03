@@ -54,7 +54,9 @@ A line that crosses a cut is one line. The clip it starts in is told it's still 
 
 A clip that has typed `<d>` lines *and* cues covering it stops with *box 3 has typed <d> dialogue and dialogue cues from the recording also cover it*, so you choose: remove the typed lines, or set the clip to **Typed in the prompt**. Clips with no cues keep typed `<d>` lines as before.
 
-Changing what a clip is asked to say, its words, times, speakers or portrayals, makes it need a render. Ticking **Checked** doesn't. A cue can't retime a clip that is already rendered: the words in the render move only when the clip renders again.
+At a cut where either clip speaks, [Visual memory](../continuity/visual-memory.md) leaves out the full preceding video, whose lip movement H3 would otherwise copy over the new clip's lines. The new clip remembers the five frames before the cut instead.
+
+Changing what a clip is asked to say, its words, times, speakers or portrayals, makes it need a render. So does the clip after a cut, when the change decides whether either side speaks. Ticking **Checked** doesn't. A cue can't retime a clip that is already rendered: the words in the render move only when the clip renders again.
 
 ## Lock a recording
 

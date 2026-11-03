@@ -26,20 +26,7 @@ export async function isChecked(cue) {
   return !!cue.aligned && cue.aligned === await alignmentKey(cue);
 }
 
-// The file `slot` plays now, as reference_replacements.file_for resolves it: a replacement's own file or its source
-// slot's, else the slot's own picture or clip. null when nothing plays there or the replacements form a cycle.
-export function recordingFile(state, slot) {
-  const replacements = state.reference_replacements ?? {}, seen = new Set();
-  let name = slot;
-  while (replacements[name]) {
-    if (seen.has(name)) return null;
-    seen.add(name);
-    if (replacements[name].file) return replacements[name].file;
-    name = replacements[name].source;
-  }
-  return [...state.pictures ?? [], ...state.voice_clips ?? [], ...state.audio_clips ?? []]
-    .find((entry) => entry.slot === name)?.file ?? null;
-}
+export const recordingFile = model.recordingFile;
 
 // Checking says the words and times match the recording as `state` plays it now, so the cue binds to that file.
 export async function setChecked(cue, checked, state) {

@@ -33,7 +33,7 @@ def records(timeline, index, folder, entries, is_done, width=None, height=None):
         record = {"box": timeline.boxes[source].id, "index": source + 1, "frame": raw, "label": label,
                   "created": entry.get("created"), "layout": (entry.get("timeline") or {}).get("layout"),
                   "file_stamp": store.latent_stamp(folder, entry)}
-        if index and timeline.boxes[index].cut and number == 0:
+        if number == 0 and rules.replays_previous(timeline, index):
             # Retain replay to preserve the original phase and the group containing the played endpoint.
             # That last group can encode up to three padding frames; CLIP presentation stops at delivered.
             delivered = entry.get("context_frames", 0) + store.played_frames(entry)

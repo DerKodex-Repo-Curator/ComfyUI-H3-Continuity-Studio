@@ -459,15 +459,70 @@ export function setJoin(state, index, kind, note, context) {
   else delete box.join;
 }
 
+// The file `slot` plays now, as reference_replacements.file_for resolves it: a replacement's own file or its source
+// slot's, else the slot's own picture or clip. null when nothing plays there or the replacements form a cycle.
+export function recordingFile(state, slot) {
+  const replacements = state.reference_replacements ?? {}, seen = new Set();
+  let name = slot;
+  while (replacements[name]) {
+    if (seen.has(name)) return null;
+    seen.add(name);
+    if (replacements[name].file) return replacements[name].file;
+    name = replacements[name].source;
+  }
+  return [...state.pictures ?? [], ...state.voice_clips ?? [], ...state.audio_clips ?? []]
+    .find((entry) => entry.slot === name)?.file ?? null;
+}
+
+// Cue and clip times are decimal seconds; an edge within this of a frame edge is on it, as dialogue.EPSILON.
+const CUE_EPSILON = 1e-6;
+
+// [first frame, end frame, portrayal] of each part of `cue` its bound recording plays, rounded outward as
+// dialogue.placed rounds them; [] when the cue is unbound or outside its clip's window.
+function cueFrames(state, cue) {
+  const slot = cue.recording?.slot, file = recordingFile(state, slot), wanted = cue.recording?.file;
+  const clip = (state.audio_clips ?? []).find((item) => item.slot === slot);
+  if (!clip || (state.disabled_refs ?? []).includes(slot) || !file || !wanted
+      || ['type', 'subfolder', 'filename'].some((key) => (file[key] ?? '') !== (wanted[key] ?? ''))) return [];
+  const start = Math.max(cue.start, clip.source_start), end = Math.min(cue.end, clip.source_start + clip.duration);
+  const parts = [];
+  let cursor = cue.start;
+  for (const span of [...cue.spans ?? []].sort((one, other) => one.start - other.start)) {
+    if (span.start > cursor) parts.push([cursor, span.start, cue.portrayal]);
+    parts.push([span.start, span.end, span.portrayal]);
+    cursor = span.end;
+  }
+  if (cursor < cue.end) parts.push([cursor, cue.end, cue.portrayal]);
+  const frame = (seconds) => (clip.start + seconds - clip.source_start) * FPS;
+  return parts.map(([first, last, portrayal]) => [Math.max(first, start), Math.min(last, end), portrayal])
+    .filter(([first, last]) => last - first > CUE_EPSILON)
+    .map(([first, last, portrayal]) => [Math.floor(frame(first) + CUE_EPSILON), Math.ceil(frame(last) - CUE_EPSILON), portrayal]);
+}
+
+// Whether box `index` asks H3 for speech someone may say on screen, as dialogue.speaks: typed <d>, or a bound cue
+// over its frames that isn't all voiceover.
+export function speaks(state, index) {
+  const box = state.boxes[index];
+  if ([state.prompt, box.prompt].some((text) => String(text ?? '').includes('<d>'))) return true;
+  if (box.dialogue === 'manual') return false;
+  const start = state.boxes.slice(0, index).reduce((sum, item) => sum + item.frames, 0), end = start + box.frames;
+  return (state.dialogue?.cues ?? []).some((cue) => cueFrames(state, cue)
+    .some(([first, last, portrayal]) => portrayal !== 'voiceover' && first < end && last > start));
+}
+
 export function memorySources(state, index) {
   const box = state.boxes[index];
   if (!box || !box.memory || box.memory === 'off') return [];
   const sources = box.memory === 'scene' ? sceneSources(state, index)
     : box.memory === 'cast' ? castSources(state, index) : box.memories ?? [];
   if (!index || !box.cut) return sources;
-  const previous = state.boxes[index - 1].id;
-  return [{box: previous, frame: 0, label: 'the previous shot before this cut', whole: true},
-    ...sources.filter(item => box.memory === 'selected' || item.box !== previous)];
+  const previous = state.boxes[index - 1];
+  if (speaks(state, index) || speaks(state, index - 1)) {
+    const before = {box: previous.id, frame: Math.max(0, previous.frames - 5), label: 'the moment before this cut'};
+    return sources.some((item) => item.box === before.box && item.frame === before.frame) ? sources : [...sources, before];
+  }
+  return [{box: previous.id, frame: 0, label: 'the previous shot before this cut', whole: true},
+    ...sources.filter(item => box.memory === 'selected' || item.box !== previous.id)];
 }
 
 function sceneSources(state, index) {

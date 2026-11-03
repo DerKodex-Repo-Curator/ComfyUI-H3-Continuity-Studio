@@ -236,6 +236,20 @@ def box_events(timeline, index, context):
     return events
 
 
+def speaks(timeline, index):
+    """Whether box `index` asks H3 for speech someone may say on screen: typed <d>, or a bound cue over its frames
+    that isn't all voiceover. Independent of carried context, so the Studio can show the same answer."""
+    from . import timeline as rules
+    if "<d>" in timeline.prompt or "<d>" in timeline.boxes[index].prompt:
+        return True
+    if index < len(timeline.manual_dialogue) and timeline.manual_dialogue[index]:
+        return False
+    start = sum(rules.played_frames(timeline, i) for i in range(index))
+    end = start + rules.played_frames(timeline, index)
+    return any(portrayal != "voiceover" and first < end and last > start
+               for item in projected(timeline) for first, last, portrayal in item["segments"])
+
+
 def _speech(event, number):
     speaker = event["speaker"].strip() or "A speaker"
     who = f"{speaker} (S{number})"

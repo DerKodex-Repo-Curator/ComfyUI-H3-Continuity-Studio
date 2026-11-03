@@ -104,5 +104,67 @@ class PlanTest(unittest.TestCase):
                          rules.layout_key(parse([box("a", 107)], audio_clips=[clip()]), 0))
 
 
+WHOLE = [(0, 0, "the previous shot before this cut")]
+VIEWS = [(0, 0, "scene establishing view"), (0, 102, "the moment before this cut")]
+
+
+class MemoryTest(unittest.TestCase):
+    """At a cut, H3 replays the whole preceding video's lip movement onto the new shot, so speech on either side of
+    the cut gets five-frame views instead."""
+
+    def cut(self, *items, first="A quiet street.", second="A quiet street.", memory="scene", **extra):
+        return cued([box("a", 107, prompt=first), box("b", 107, prompt=second, cut=True, memory=memory, **extra)],
+                    *items)
+
+    def test_a_cut_without_speech_replays_the_whole_preceding_video(self):
+        self.assertEqual(rules.memory_sources(self.cut(), 1), WHOLE)
+        self.assertEqual(rules.memory_sources(self.cut(cue(start=20.0, end=21.0)), 1), WHOLE)
+
+    def test_speech_after_the_cut_remembers_views(self):
+        timeline = self.cut(cue(start=5.6, end=7.9))
+        self.assertTrue(dialogue.speaks(timeline, 1))
+        self.assertFalse(dialogue.speaks(timeline, 0))
+        self.assertEqual(rules.memory_sources(timeline, 1), VIEWS)
+
+    def test_speech_before_the_cut_remembers_views(self):
+        timeline = self.cut(cue(start=0.5, end=2.48))
+        self.assertTrue(dialogue.speaks(timeline, 0))
+        self.assertFalse(dialogue.speaks(timeline, 1))
+        self.assertEqual(rules.memory_sources(timeline, 1), VIEWS)
+
+    def test_typed_dialogue_speaks(self):
+        self.assertEqual(rules.memory_sources(self.cut(second="Mara says: <d>Hello.</d>"), 1), VIEWS)
+
+    def test_voiceover_and_manual_boxes_keep_the_whole_video(self):
+        self.assertEqual(rules.memory_sources(self.cut(cue(start=5.6, end=7.9, portrayal="voiceover")), 1), WHOLE)
+        self.assertEqual(rules.memory_sources(self.cut(cue(start=5.6, end=7.9), dialogue="manual"), 1), WHOLE)
+
+    def test_selected_moments_still_see_the_moment_before_the_cut(self):
+        timeline = self.cut(cue(start=5.6, end=7.9), memory="selected",
+                            memories=[{"box": "a", "frame": 30, "label": "the envelope"}])
+        self.assertEqual(rules.memory_sources(timeline, 1),
+                         [(0, 30, "the envelope"), (0, 102, "the moment before this cut")])
+        self.assertEqual(rules.memory_sources(self.cut(cue(start=5.6, end=7.9), memory="selected"), 1),
+                         [(0, 102, "the moment before this cut")])
+
+    def records(self, timeline):
+        from unittest import mock
+        from h3_continuity import store, visual_memory
+        entries = {1: {"timeline": {"box": "a"}, "frames": 107, "context_frames": 0}}
+        with mock.patch.object(store, "has_segment_latents", return_value=True), \
+                mock.patch.object(store, "latent_stamp", return_value=""), \
+                mock.patch.object(store, "played_frames", return_value=107):
+            return [(item["frame"], item.get("tokens", 2), item.get("whole", False))
+                    for item in visual_memory.records(timeline, 1, "", entries, lambda source, entry: True)]
+
+    def test_records_read_the_whole_video_only_when_it_is_remembered(self):
+        self.assertEqual(self.records(self.cut()), [(0, 32, True)])
+        self.assertEqual(self.records(self.cut(cue(start=5.6, end=7.9))), [(0, 2, False), (102, 2, False)])
+
+    def test_layout_follows_the_memory_choice(self):
+        # Box 1's line compiles nothing into box 2, so only box 2's memory differs.
+        self.assertNotEqual(rules.layout_key(self.cut(cue(start=0.5, end=2.48)), 1), rules.layout_key(self.cut(), 1))
+
+
 if __name__ == "__main__":
     unittest.main()
