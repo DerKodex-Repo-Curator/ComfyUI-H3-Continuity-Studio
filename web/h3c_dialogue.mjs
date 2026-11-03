@@ -26,7 +26,25 @@ export async function isChecked(cue) {
   return !!cue.aligned && cue.aligned === await alignmentKey(cue);
 }
 
-export async function setChecked(cue, checked) {
+// The file `slot` plays now, as reference_replacements.file_for resolves it: a replacement's own file or its source
+// slot's, else the slot's own picture or clip. null when nothing plays there or the replacements form a cycle.
+export function recordingFile(state, slot) {
+  const replacements = state.reference_replacements ?? {}, seen = new Set();
+  let name = slot;
+  while (replacements[name]) {
+    if (seen.has(name)) return null;
+    seen.add(name);
+    if (replacements[name].file) return replacements[name].file;
+    name = replacements[name].source;
+  }
+  return [...state.pictures ?? [], ...state.voice_clips ?? [], ...state.audio_clips ?? []]
+    .find((entry) => entry.slot === name)?.file ?? null;
+}
+
+// Checking says the words and times match the recording as `state` plays it now, so the cue binds to that file.
+export async function setChecked(cue, checked, state) {
+  const file = checked && state ? recordingFile(state, cue.recording.slot) : null;
+  if (file) cue.recording = {...cue.recording, file: structuredClone(file)};
   if (checked) cue.aligned = await alignmentKey(cue);
   else delete cue.aligned;
 }
@@ -120,7 +138,8 @@ const span = (sequence) => `${sequence[0].toFixed(2)}–${sequence[1].toFixed(2)
 export function cueStatusLine(item) {
   if (!item) return "Waiting for the Timeline's status.";
   if (item.state === 'changed') {
-    return `@${item.slot} has a different file than this cue was written for: check its words and times against it, or remove it.`;
+    return `@${item.slot} has a different file than this cue was written for: play it, fix the words and times, then `
+      + 'tick Checked to bind the cue to it, or remove the cue.';
   }
   if (item.state === 'missing') return `@${item.slot} isn't in the Timeline or is turned off, so no box speaks this cue.`;
   const checked = item.aligned ? 'Checked' : 'Not checked';
@@ -295,18 +314,18 @@ export class DialoguePanel {
     portrayal.addEventListener('change', () => this.edit(index, (copy) => { copy.portrayal = portrayal.value; }));
     const checked = el('input');
     checked.type = 'checkbox';
-    checked.checked = item ? item.aligned : !!cue.aligned;
+    checked.checked = item ? item.aligned && item.state !== 'changed' : !!cue.aligned;
     checked.setAttribute('aria-label', `Cue ${cue.id} checked against the recording`);
     checked.addEventListener('change', async () => {
       const copy = structuredClone(cue);
-      await setChecked(copy, checked.checked);
+      await setChecked(copy, checked.checked, this.editor.state);
       if (this.cues[index] !== cue) return;
       this.editor.state.dialogue.cues[index] = copy;
       this.editor.commit(false);
       this.render(true);
     });
     const checkField = labelled('Checked', checked);
-    checkField.title = 'The words and times match the recording; editing them clears the check';
+    checkField.title = 'The words and times match the recording this slot plays now; editing them clears the check';
     top.append(button('▶', 'Play this cue from the recording', () => this.audition(cue)),
       this.timeInput(`Cue ${cue.id} start`, cue.start, (value) => this.edit(index, (copy) => { copy.start = value; })),
       el('span', 'h3ct-hint', '–'),

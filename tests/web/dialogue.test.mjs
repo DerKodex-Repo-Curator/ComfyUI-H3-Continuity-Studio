@@ -25,6 +25,30 @@ test('checking a cue writes its alignment key; unchecking removes it', async () 
   assert.equal('aligned' in item, false);
 });
 
+test('a recording file resolves as reference_replacements.file_for does', () => {
+  const fresh = {type: 'input', filename: 'take2.wav', subfolder: ''};
+  const other = {type: 'input', filename: 'other.wav', subfolder: 'h3_audio'};
+  assert.deepEqual(dialogue.recordingFile({audio_clips: [clip({file: fresh})]}, 'audio1'), fresh);
+  assert.deepEqual(dialogue.recordingFile({audio_clips: [clip()], reference_replacements: {audio1: {file: other}}}, 'audio1'),
+    other);
+  assert.deepEqual(dialogue.recordingFile({audio_clips: [clip(), clip({slot: 'audio2', file: fresh})],
+    reference_replacements: {audio1: {source: 'audio2'}}}, 'audio1'), fresh);
+  assert.equal(dialogue.recordingFile({audio_clips: [clip()],
+    reference_replacements: {audio1: {source: 'audio2'}, audio2: {source: 'audio1'}}}, 'audio1'), null);
+  assert.equal(dialogue.recordingFile({audio_clips: []}, 'audio1'), null);
+});
+
+test('checking a cue binds it to the file its slot plays now', async () => {
+  const fresh = {type: 'input', filename: 'take2.wav', subfolder: ''};
+  const item = cue({aligned: 'an older key'});
+  await dialogue.setChecked(item, true, {audio_clips: [clip({file: fresh})]});
+  assert.deepEqual(item.recording, {slot: 'audio1', file: fresh});
+  assert.equal(item.aligned, await dialogue.alignmentKey(cue({recording: {slot: 'audio1', file: fresh}})));
+  const gone = cue();
+  await dialogue.setChecked(gone, true, {audio_clips: []});
+  assert.deepEqual(gone.recording, {slot: 'audio1', file: wav});
+});
+
 test('a transcript becomes unchecked cues of unknown portrayal that keep their speakers', () => {
   const data = {segments: [{start: 1.25, end: 2.5, text: ' Hello there. ', speaker: 'SPEAKER_00'},
     {start: 3, end: 3, text: 'empty interval'}, {start: 4, end: 5, text: '   '}, {start: 6, end: 7.5, text: 'Bye.'}]};

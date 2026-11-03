@@ -176,3 +176,23 @@ test('the dialogue panel lists cues with the server check and locks a recording'
   buttonNamed(panel.draftEl, 'Add cue').click();
   assert.deepEqual(value.dialogue.cues.map((item) => [item.id, item.text]), [['c1', 'Hello there.'], ['c2', 'Over here.']]);
 });
+
+test('checking a cue whose recording changed binds it to the new file', async () => {
+  const fresh = {type: 'input', filename: 'take2.wav', subfolder: ''};
+  const cue = {id: 'c1', recording: {slot: 'audio1', file: wav}, start: 1, end: 2, text: 'Hello there.', speaker: 'Mara',
+    portrayal: 'on_screen', aligned: 'an older key'};
+  const value = state({audio_clips: [clip({file: fresh})], dialogue: {version: 1, cues: [cue]}});
+  const target = editor(value, {ok: true, boxes: done, dialogue: {cues: [
+    {id: 'c1', slot: 'audio1', state: 'changed', aligned: true, placed: false, cut: false, sequence: null, frames: null,
+      segments: []}]}});
+  const panel = new DialoguePanel(target);
+  panel.render();
+  const checkbox = () => findAll(panel.list, (node) => node.getAttribute('aria-label') === 'Cue c1 checked against the recording')[0];
+  assert.equal(checkbox().checked, false);
+  checkbox().checked = true;
+  checkbox().fire('change');
+  for (let tries = 0; tries < 100 && !target.commits; tries += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(target.commits, 1);
+  assert.deepEqual(value.dialogue.cues[0].recording, {slot: 'audio1', file: fresh});
+  assert.notEqual(value.dialogue.cues[0].aligned, 'an older key');
+});
