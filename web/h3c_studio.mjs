@@ -17,7 +17,6 @@ const NO_STORY = 'Link an H3 Story node to this Timeline’s story input to writ
 const STYLE_ID = 'h3cx-style';
 const LAYOUT_KEY = 'h3cx-layout';
 const TRACK_MIN = 250;
-const ROW_SPAN = 190; // the lane's rows grow by this much for each 1x of vertical scale
 const ZOOM_MAX = 16;
 const MOBILE_QUERY = '(max-width:600px), (max-width:1100px) and (max-height:500px)';
 const CSS = `
@@ -522,8 +521,7 @@ class Studio {
   }
 
   applyLaneView() {
-    const height = Math.max(TRACK_MIN, Math.min(this.layout.track ?? TRACK_MIN, this.paneLimits('track').max));
-    this.host?.editor.setLaneView({zoom: this.layout.zoom, scale: 1 + (height - TRACK_MIN) / ROW_SPAN});
+    this.host?.editor.setLaneView({zoom: this.layout.zoom});
   }
 
   splitter(name, axis, label) {

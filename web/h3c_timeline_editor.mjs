@@ -36,14 +36,14 @@ const CSS = `
 .h3ct-link[hidden] { display: none; }
 .h3ct-lane { overflow-x: auto; flex-shrink: 0; background: #101218; border: 1px solid var(--border-color, #333); border-radius: 6px; }
 .h3ct-lane > .h3ct-stills, .h3ct-lane > .h3ct-ruler, .h3ct-lane > .h3ct-track, .h3ct-lane > .h3ct-audio { width: calc(100% * var(--h3ct-zoom, 1)); }
-.h3ct-stills { position: relative; height: calc(74px * var(--h3ct-vs, 1)); }
+.h3ct-stills { position: relative; height: 74px; }
 .h3ct-still { position: absolute; padding: 0; text-align: left; overflow: hidden; white-space: normal; }
-.h3ct-still img, .h3ct-still-empty { width: 100%; height: calc(42px * var(--h3ct-vs, 1)); object-fit: contain; display: block; background: #181c25; }
+.h3ct-still img, .h3ct-still-empty { width: 100%; height: 42px; object-fit: contain; display: block; background: #181c25; }
 .h3ct-still .h3ct-still-empty { display: grid; place-items: center; font-size: 20px; color: #aab1bd; }
 .h3ct-still-caption { display: flex; justify-content: space-between; gap: 3px; font-size: 11px; padding: 1px 4px; white-space: nowrap; }
 .h3ct-still-caption > * { overflow: hidden; text-overflow: ellipsis; font-weight: normal; }
 .h3ct-still-caption small { color: #aab1bd; font-size: inherit; }
-.h3ct-still.interior img, .h3ct-still.interior .h3ct-still-empty { height: calc(32px * var(--h3ct-vs, 1)); }
+.h3ct-still.interior img, .h3ct-still.interior .h3ct-still-empty { height: 32px; }
 .h3ct-still.interior .h3ct-still-caption, .h3ct-targets.interior .h3ct-still-caption { display: grid; gap: 0; }
 .h3ct-still.accepted { border-color: #66bc90; }
 .h3ct-still.selected { outline: 2px solid #7aa2f7; outline-offset: -2px; }
@@ -62,11 +62,11 @@ const CSS = `
 .h3ct-ruler { position: relative; height: 16px; overflow: hidden; background: #171a21; border-bottom: 1px solid #262a33; }
 .h3ct-tick { position: absolute; top: 0; height: 16px; padding-left: 3px; border-left: 1px solid #3a414d;
   font-size: 11px; line-height: 16px; color: #aab1bd; pointer-events: none; }
-.h3ct-track { position: relative; height: calc(54px * var(--h3ct-vs, 1)); cursor: crosshair; touch-action: none; user-select: none; }
+.h3ct-track { position: relative; height: 54px; cursor: crosshair; touch-action: none; user-select: none; }
 .h3ct-audio { display: flex; flex-direction: column; gap: 4px; }
-.h3ct-audio-lane { position: relative; height: calc(40px * var(--h3ct-vs, 1)); overflow: hidden; background: #171e21; border-bottom: 1px solid #344548; }
+.h3ct-audio-lane { position: relative; height: 40px; overflow: hidden; background: #171e21; border-bottom: 1px solid #344548; }
 .h3ct-audio-video { position: absolute; inset: 0 auto 0 0; border-right: 1px dashed #aaa; background: #283339; }
-.h3ct-audio-clip { position: absolute; height: calc(100% - 4px); top: 2px; min-width: 4px; border: 1px solid #72b8ad;
+.h3ct-audio-clip { position: absolute; height: 36px; top: 2px; min-width: 4px; border: 1px solid #72b8ad;
   background: #205d54; border-radius: 3px; cursor: grab; touch-action: none; user-select: none; overflow: hidden; }
 .h3ct-audio-clip.disabled { opacity: .4; }
 .h3ct-audio-clip svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: #80d3c2; opacity: .65; pointer-events: none; }
@@ -1233,13 +1233,11 @@ export class TimelineEditor {
     this.audioLanes.render(span);
   }
 
-  // The Studio sets how wide (zoom, 1 = fit the panel) and how tall (scale, 1 = the original rows) the lane draws.
-  setLaneView({zoom = 1, scale = 1} = {}) {
-    if (zoom === this.zoom && scale === this.laneScale) return;
+  // The Studio sets how wide the lane draws (zoom, 1 = fit the panel).
+  setLaneView({zoom = 1} = {}) {
+    if (zoom === this.zoom) return;
     this.zoom = zoom;
-    this.laneScale = scale;
     this.laneEl.style.setProperty('--h3ct-zoom', String(zoom));
-    this.laneEl.style.setProperty('--h3ct-vs', String(scale));
     this.renderTrack();
   }
 
@@ -1588,10 +1586,10 @@ export class TimelineEditor {
         if(target.kind==='shot') {
           // Keep timing gaps where possible; late or coincident shots fit inside their clip.
           mark.classList.add('interior');mark.style.left=percent(positions.get(target.shot)/width);
-          mark.style.top='calc(76px * var(--h3ct-vs, 1))';mark.style.width=`${shotWidth}px`;mark.style.height='calc(66px * var(--h3ct-vs, 1))';
+          mark.style.top='76px';mark.style.width=`${shotWidth}px`;mark.style.height='66px';
         } else {
           mark.style.left=`calc(${percent((start+(target.kind==='last'?box.frames/2:0))/span)} + 2px)`;
-          mark.style.top='4px';mark.style.width=`calc(${percent(box.frames/2/span)} - 4px)`;mark.style.height='calc(66px * var(--h3ct-vs, 1))';
+          mark.style.top='4px';mark.style.width=`calc(${percent(box.frames/2/span)} - 4px)`;mark.style.height='66px';
         }
         mark.addEventListener('pointerdown',event=>event.stopPropagation());
         mark.addEventListener('click',event=>event.stopPropagation());
@@ -1604,7 +1602,7 @@ export class TimelineEditor {
         this.stillsEl.append(mark);
       }
     }
-    this.stillsEl.style.height=`calc(${clips.some(clip=>clip.shots.length)?146:74}px * var(--h3ct-vs, 1))`;
+    this.stillsEl.style.height=`${clips.some(clip=>clip.shots.length)?146:74}px`;
     this.stillsEl.hidden=!this.state.boxes.length;
   }
 
