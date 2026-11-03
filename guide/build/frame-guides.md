@@ -24,6 +24,7 @@ The panel offers:
 | **Still instructions** | The reusable instruction used for stills. |
 | **Candidates (N)** | Each candidate keeps its prompt, exact seed and source. **Use as guide** assigns it; click a thumbnail for a large preview (**Esc** closes). |
 | **Remove guide** | Removes the assignment. The image stays in your candidates. |
+| **Split at guide** | On a **Shot** marker with an accepted guide: splits the clip there, so the guide becomes this clip's Last and a new clip's First. See [Split a clip at a Shot guide](#split-a-clip-at-a-shot-guide). |
 
 After you accept a guide the panel reads **Guide in use**, and the marker above shows its thumbnail. A guide never changes a render until you accept it.
 
@@ -68,6 +69,19 @@ Select models you have installed; nothing is downloaded. Other pixel generators 
 - If either neighbour has rendered material, accepting a replacement at B's First sets B to **Cut** and leaves A alone.
 - When a verified saved predecessor ending exists, the First panel offers **Use saved predecessor ending**, which reuses that exact ending and restores **Continue**.
 - Last targets the last *delivered* frame, including [exact-length](exact-lengths.md) trimming. Guides can use individual frames, not just the 17-frame grid.
+
+## Split a clip at a Shot guide
+
+A guide on a **Shot** marker pins one frame in the middle of a generation. H3 doesn't build up to that frame, so the image tends to appear as an insert. **Split at guide** makes the guide a real endpoint instead:
+
+- The clip now ends on the guide (its **Last**), and a new clip continues from it (its **First**) with a **Continue** join, so motion and sound carry through.
+- Both clips are rounded up to H3's frame grid, so no performance time is lost. The guide can land a few frames later; the button's tooltip and the note after the split give the lengths and the time added. An [exact-length](exact-lengths.md) clip keeps its second half exact.
+- **Prompt.** A guide on a shot's start splits before that shot. A guide inside a shot (an older saved guide with only a frame) keeps that shot's text in both clips, so edit the first to end at the guide and the second to start from it. Later timestamps are re-based to the new clip.
+- **References.** A half that still mentions references gets **FLF2VA + cached RefMods**, so the references don't turn it back into REF2VA. This needs H3's VAE loaded from a file (**VAELoader**). A half with raw audio or video references, or a fresh half with references but no First, still runs as REF2VA; the note after the split names it.
+- The new clip gets a new seed. Other guides, plate changes, pinned cast moments and chosen memories after the guide move to it. Earlier takes stay in `takes/`, and both clips render again.
+- The split is one undo step. It is refused for a guide at the clip's First or Last frame, when the first clip would be shorter than the frames the next clip carries from it, or when either half would pass the clip limit.
+
+An older guide that has no marker offers the same button in the **Shots** tab's list of saved stills.
 
 ## Optional reusable images for Cast
 

@@ -2,6 +2,17 @@
 
 All notable changes to H3 Continuity Studio are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Split at guide.** A Shot marker with an accepted guide can split its clip there. The guide becomes the first clip's Last and the second clip's First, joined by Continue, so H3 generates toward the image instead of inserting it. Both halves round up to the frame grid. Later timestamps, guides, plate changes, pinned cast moments and chosen memories move to the second clip. A half that still mentions references gets FLF2VA + cached RefMods.
+- **Tests.** `node tests/run.mjs` runs the browser-module tests and the package tests. A server-agreement test checks that the render code reads a browser split the way the browser intends.
+
+### Fixed
+
+- **Split before Shot N keeps Shot guides.** A guide accepted on a Shot marker now moves to its shot's new number in the second half. Before, it pointed at a shot that no longer existed and was dropped from the render.
+
 ## [0.2.1] - 2026-11-03
 
 ### Added
