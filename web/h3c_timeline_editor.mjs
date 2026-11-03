@@ -35,6 +35,7 @@ const CSS = `
 .h3ct-link { color: #8fbcff; white-space: nowrap; }
 .h3ct-link[hidden] { display: none; }
 .h3ct-lane { overflow-x: auto; flex-shrink: 0; background: #101218; border: 1px solid var(--border-color, #333); border-radius: 6px; }
+.h3ct-lane > .h3ct-stills, .h3ct-lane > .h3ct-ruler, .h3ct-lane > .h3ct-track, .h3ct-lane > .h3ct-audio { width: calc(100% * var(--h3ct-zoom, 1)); }
 .h3ct-stills { position: relative; height: 74px; }
 .h3ct-still { position: absolute; padding: 0; text-align: left; overflow: hidden; white-space: normal; }
 .h3ct-still img, .h3ct-still-empty { width: 100%; height: 42px; object-fit: contain; display: block; background: #181c25; }
@@ -1232,10 +1233,18 @@ export class TimelineEditor {
     this.audioLanes.render(span);
   }
 
+  // The Studio sets how wide the lane draws (zoom, 1 = fit the panel).
+  setLaneView({zoom = 1} = {}) {
+    if (zoom === this.zoom) return;
+    this.zoom = zoom;
+    this.laneEl.style.setProperty('--h3ct-zoom', String(zoom));
+    this.renderTrack();
+  }
+
   renderRuler(span) {
     this.rulerEl.textContent = '';
     const total = span / model.FPS;
-    const step = [1, 2, 5, 10, 15, 30, 60, 120].find((s) => total / s <= 10) ?? 300;
+    const step = [1, 2, 5, 10, 15, 30, 60, 120].find((s) => total / (this.zoom ?? 1) / s <= 10) ?? 300;
     for (let t = 0; t < total; t += step) {
       const tick = el('span', 'h3ct-tick', `${t}s`);
       tick.style.left = percent((t * model.FPS) / span);

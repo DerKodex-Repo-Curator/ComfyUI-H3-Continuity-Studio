@@ -2,6 +2,14 @@
 
 All notable changes to H3 Continuity Studio are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-03
+
+### Added
+
+- **Resizable Studio panes.** Drag the handles between References, the center and the Inspector, and above the Timeline (arrow keys work on a focused handle; double-click resets a pane). The original fixed sizes are the minimums. A taller Timeline pane shows more lanes without scrolling; rows keep their height.
+- **Timeline zoom.** `−`, `+` and `Fit` in the Timeline toolbar, or Ctrl+scroll over the lane to zoom around the pointer, from 100% (fit) to 1600%.
+- **Layout memory.** Pane sizes and zoom are saved in the browser and restored on refresh.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added
