@@ -20,12 +20,35 @@ def pixel_size(video):
     return video.shape[4] * 16, video.shape[3] * 16
 
 
+def context_noise_strengths(count, amplitude=0.4):
+    """Pixel-noise strength per carried frame: a cosine from `amplitude` down to 0 at the last frame."""
+    if count <= 1:
+        return torch.zeros(count)
+    return amplitude / 2 * (1 + torch.cos(torch.pi * torch.arange(count) / (count - 1)))
+
+
+def context_noise_delta(vae, source_video, context_frames, amplitude=0.4, seed=0):
+    """E(noisy) - E(clean) of the source's last `context_frames` decoded frames, after PrefixStream's paired context
+    noise: adding it to the carried latent changes it by the noise's effect alone, without the VAE's round-trip error.
+    The noise is seeded, so the same source gives the same delta."""
+    images = vae.decode(source_video[:1])
+    clean = images.reshape(-1, *images.shape[-3:])[-context_frames:, ..., :3].float()
+    noise = torch.randn(clean.shape, generator=torch.Generator().manual_seed(seed)).to(clean)
+    strengths = context_noise_strengths(clean.shape[0], amplitude).to(clean).view(-1, 1, 1, 1)
+    noisy = (clean + strengths * noise).clamp(0, 1)
+    delta = vae.encode(noisy).float() - vae.encode(clean).float()
+    expected = tokens_for_frames(context_frames)
+    if delta.shape[2] != expected or tuple(delta.shape[3:]) != tuple(source_video.shape[3:]):
+        raise ValueError(f"context noise needs the H3 video VAE: got {tuple(delta.shape)} for {expected} carried steps")
+    return delta
+
+
 def build_continuation(latent, source_video, source_audio, context_frames, carry_audio, node="H3 Continue", *, audio_context_frames=0,
-                       soft_prefix=0.0):
+                       soft_prefix=0.0, noise_vae=None):
     """Write the source's last `context_frames` frames into the start of `latent` and freeze them.
 
     Returns (latent, carried_video, carried_audio, carried_ticks); carried_audio is None and
-    carried_ticks is 0 when `carry_audio` is off.
+    carried_ticks is 0 when `carry_audio` is off. With `noise_vae`, the carried video gets the paired context noise.
     """
     if not 0 <= soft_prefix <= 1:
         raise ValueError(f"{node}: soft_prefix must be from 0 to 1")
@@ -44,6 +67,9 @@ def build_continuation(latent, source_video, source_audio, context_frames, carry
 
     tokens = tokens_for_frames(context_frames)
     carried_video = source_video[:1, :, -tokens:].to(device=video.device, dtype=video.dtype)
+    if noise_vae is not None:
+        delta = context_noise_delta(noise_vae, source_video, context_frames)
+        carried_video = (carried_video.float() + delta.to(carried_video.device)).to(video.dtype)
     video = video.clone()
     video[:, :, :tokens] = carried_video
     video_mask = torch.ones((1, 1) + tuple(video.shape[2:]), device=video.device)

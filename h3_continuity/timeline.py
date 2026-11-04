@@ -94,6 +94,7 @@ class Timeline:
     # Continuing boxes only: video carry noise-mask value (0 freezes) and the guide at the first new frame.
     soft_prefix: float = 0.0
     continuation_guide: bool = True
+    context_noise: bool = False
 
 
 @dataclass
@@ -309,6 +310,9 @@ def parse(text):
     parsed.continuation_guide = data.get("continuation_guide", True)
     if not isinstance(parsed.continuation_guide, bool):
         raise _error("continuation_guide must be true or false")
+    parsed.context_noise = data.get("context_noise", False)
+    if not isinstance(parsed.context_noise, bool):
+        raise _error("context_noise must be true or false")
     parsed.plates = data.get("plates", [])
     if not isinstance(parsed.plates, list):
         raise _error("plates must be a list")
@@ -1122,6 +1126,8 @@ def layout_key(timeline, index, context=39):
         value["soft_prefix"] = timeline.soft_prefix
     if not fresh and not timeline.continuation_guide:
         value["continuation_guide"] = False
+    if not fresh and timeline.context_noise:
+        value["context_noise"] = True
     if timeline.reference_replacements:
         value['reference_replacements'] = timeline.reference_replacements
     dropped = dropped_frames(timeline, index)
