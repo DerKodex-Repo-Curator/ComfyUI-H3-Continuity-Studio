@@ -11,7 +11,7 @@ Texture is the finest-detail energy of each clip against clip 1 (1.00 = no chang
 | Setting | Clip 6 texture | Joins | Result |
 | --- | --- | --- | --- |
 | None (default) | 2.04 | 2.5–4.2 | Burn builds steadily. |
-| `context_noise` | **1.75** | 2.6–3.2 | Least burn; same framing; about 10% slower per continuing clip. |
+| `context_noise` | **1.75** | 2.6–3.2 | Much less burn; same framing; about 10% slower per continuing clip. |
 | H3 Sigmas Tail, 3 steps, 0.5 | 1.93 | 2.4–3.2 | A little less burn. |
 | `context_noise` and Sigmas Tail together | **1.67** | 2.7–3.3 | The least burn of all; same framing. |
 | `continuation_guide: false` | 2.19 | 4.1–5.8 | See below: removes a hitch in moving shots. |
