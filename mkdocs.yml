@@ -86,6 +86,7 @@ nav:
       - Writing prompts: build/prompts.md
       - References and pictures: build/references.md
       - First and last frames: build/frame-guides.md
+      - Stills with P-H3-Image: build/p-h3-image-stills.md
       - Exact lengths and long edits: build/exact-lengths.md
       - Long clips with context windows: build/long-clips.md
   - Continuity:

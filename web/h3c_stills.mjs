@@ -1,4 +1,7 @@
 import {ImageJobClient} from './h3c_image_jobs.mjs?v=20261011-reference-preparation-1';
+// h3_continuity/ph3_image_nodes.py describes the same recipe; keep the two in step.
+export const SELF_RECIPE_CLASS = 'H3C_PH3ImageStill';
+const SELF_RECIPE = {version:2, adapter:'pixels', label:'P-H3-Image', reference_limit:8, reference_label:'<Picture {index}>'};
 // Resolve explicit local locators against this snapshot, never against saved execution IDs.
 export function captureRecipe({workflow, output}, timelineId) {
   const fail = message => {throw new Error(`Still recipe: ${message}`);};
@@ -19,10 +22,12 @@ export function captureRecipe({workflow, output}, timelineId) {
     if (typeof selected!=='boolean') fail('recipe switch must use a literal boolean or native PrimitiveBoolean control');
     link=inputs[selected?'on_true':'on_false'];
   }
-  if (!Array.isArray(link) || link.length!==2 || typeof link[0]!=='string' || link[1]!==0) fail('still_recipe must connect to H3 Still Recipe');
+  // The P-H3-Image node is its own generator: its still_recipe output (slot 1) addresses its own inputs.
+  const own = Array.isArray(link) && link.length===2 && typeof link[0]==='string' && link[1]===1 && output[link[0]]?.class_type===SELF_RECIPE_CLASS;
+  if (!own && (!Array.isArray(link) || link.length!==2 || typeof link[0]!=='string' || link[1]!==0)) fail('still_recipe must connect to H3 Still Recipe or P-H3-Image Still');
   const adapter = output[link[0]];
-  if (adapter?.class_type !== 'H3C_StillRecipe') fail('still_recipe must connect to H3 Still Recipe');
-  const image = adapter.inputs.image;
+  if (!own && adapter?.class_type !== 'H3C_StillRecipe') fail('still_recipe must connect to H3 Still Recipe or P-H3-Image Still');
+  const image = own ? [link[0], 0] : adapter.inputs.image;
   if (!Array.isArray(image) || image.length!==2 || typeof image[0]!=='string' || !Number.isInteger(image[1]) || image[1]<0 || !output[image[0]]) fail('image output is missing or muted');
   const definitions = new Map((workflow.definitions?.subgraphs ?? []).map(g=>[g.id,g]));
   function locate(path) {
@@ -35,6 +40,11 @@ export function captureRecipe({workflow, output}, timelineId) {
     return {node, graph};
   }
   let ownerPath = String(link[0]).split(':'), input = 'image', originPath;
+  if (own) {
+    if (!locate(ownerPath)) fail('image output is missing or muted');
+    originPath = ownerPath;
+    ownerPath = [];
+  }
   // Native grouping may put the adapter behind one or more subgraph input boundaries.
   while (ownerPath.length) {
     const found = locate(ownerPath);
@@ -55,7 +65,12 @@ export function captureRecipe({workflow, output}, timelineId) {
   // The connected subgraph defines the local namespace; a flat recipe uses its containing graph.
   const base = definitions.has(generator?.type) ? originPath : originPath.slice(0,-1);
   let bindings;
-  try {bindings=JSON.parse(adapter.inputs.bindings);} catch {fail('bindings must be valid JSON');}
+  if (own) {
+    const self = {node:[originPath.at(-1)]}, at = input => ({...self, input});
+    bindings = {...SELF_RECIPE, prompt:at('prompt'), instruction:at('instruction'), seed:at('seed'),
+      size:{width:[at('width')], height:[at('height')]},
+      references:Array.from({length:SELF_RECIPE.reference_limit}, (_, i)=>at(`images.image_${i+1}`))};
+  } else try {bindings=JSON.parse(adapter.inputs.bindings);} catch {fail('bindings must be valid JSON');}
   if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings)) fail('bindings must be an object');
   function resolve(locator, label, isOutput=false) {
     const port = isOutput ? `output ${locator?.output}` : locator?.input;

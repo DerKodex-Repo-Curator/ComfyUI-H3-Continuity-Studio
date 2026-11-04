@@ -17,7 +17,7 @@ import { referenceFile, referenceSource, referencePools, referenceType, effectiv
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
 import { voiceRefs } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
-import {captureRecipe,captureTimelineId,captureStillBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=20261022-recipe-switch-1';
+import {captureRecipe,captureTimelineId,captureStillBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=20261104-ph3-image-1';
 import {boundarySnapshot} from './h3c_frame_images.mjs?v=20261104-studio-ux-1';
 import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
 import { TakesClient } from './h3c_takes.mjs?v=20261104-take-marks-2';

@@ -7,6 +7,8 @@ import uuid
 
 from . import timeline as rules, timeline_prepare
 
+PH3_IMAGE_CLASS = 'H3C_PH3ImageStill'
+
 REFERENCE_USE = {
     'identity': 'Use this for the named person identity only; ignore its background and clothing unless requested.',
     'additional identity': 'Use this additional view to reinforce the matching subject identity. Do not introduce another person or copy its pose, clothing or background; follow the requested scene.',
@@ -165,16 +167,20 @@ def prepare(recipe, workflow, request, references):
     if len(unique)>limit:
         raise ValueError(f'Still reference capacity {limit} cannot fit {len(unique)} required references: '+', '.join('/'.join(ref['roles']) for ref in unique))
     qwen = any(graph[loc['node']]['class_type'] == 'TextEncodeQwenImage21' for loc in ports)
+    ph3 = any(graph[loc['node']]['class_type'] == PH3_IMAGE_CLASS for loc in ports)
+    scene = qwen or ph3
     canvas = None
-    if qwen:
+    if scene:
+        owner = 'Qwen' if qwen else 'P-H3-Image'
         if len({loc['node'] for loc in ports}) != 1:
-            raise ValueError('Qwen scene references must bind directly to one TextEncodeQwenImage21 node')
+            raise ValueError(owner + ' scene references must bind directly to one ' + ('TextEncodeQwenImage21' if qwen else PH3_IMAGE_CLASS) + ' node')
         undeclared = [name for name, value in graph[ports[0]['node']]['inputs'].items()
                       if name.startswith('images.image_') and value is not None]
         if undeclared:
-            raise ValueError('Qwen recipe has undeclared reference inputs: ' + ', '.join(undeclared) + '; add them to the recipe reference bindings')
+            raise ValueError(owner + ' recipe has undeclared reference inputs: ' + ', '.join(undeclared) + '; add them to the recipe reference bindings')
         ports = sorted(ports, key=lambda loc: int(loc['input'].rsplit('_', 1)[-1]))
-        label = '<image{index}>'
+        if qwen:
+            label = '<image{index}>'
         canvas = next((ref for role in ('scene_layout', 'location', 'scene anchor', 'current action state') for ref in unique if role in _roles(ref)), None)
         priority = {'scene_layout': 0, 'location': 1, 'identity': 2, 'additional identity': 2, 'appearance': 3, 'prop': 4,
                     'scene anchor': 5, 'current action state': 6}
@@ -201,7 +207,7 @@ def prepare(recipe, workflow, request, references):
         text_label = 'the reference image' if qwen and len(unique) == 1 else ref['label']
         tags.update({slot:text_label for slot in ref['slots']})
         roles=['visual reference' if re.fullmatch(r'image[1-9]\d*',role) else role for role in ref['roles']]
-        reference_use = QWEN_REFERENCE_USE if qwen else REFERENCE_USE
+        reference_use = QWEN_REFERENCE_USE if scene else REFERENCE_USE
         usage = list(dict.fromkeys(reference_use[role.split(':',1)[0].strip()] for role in roles
                                    if role.split(':',1)[0].strip() in reference_use))
         descriptions.append(text_label+': '+', '.join(roles)+('. '+' '.join(usage) if usage else ''))
@@ -209,8 +215,12 @@ def prepare(recipe, workflow, request, references):
     prompt=re.sub(r'@(image[1-9]\d*|still[1-9]\d*)\b|(?<![\w@<>])(image[1-9]\d*)(?![\w>])',
                   lambda m:tags.get((m[1] or m[2]).lower(),m[0]),body['prompt'],flags=re.I)
     if descriptions:
-        if qwen:
-            prompt = _qwen_prompt(prompt, descriptions, ('the reference image' if len(unique) == 1 else canvas['label']) if canvas else None)
+        if scene:
+            named = ('the reference image' if qwen and len(unique) == 1 else canvas['label']) if canvas else None
+            prompt = _qwen_prompt(prompt, descriptions, named)
+            # P-H3-Image edits <Picture 1>; saying so keeps the scene text from being read as a bare request.
+            if ph3:
+                prompt = 'Edit <Picture 1>. ' + prompt
         else:
             prompt='Reference roles:\n'+'\n'.join(descriptions)+'\nUse each reference only for its assigned role. Follow the requested camera, pose and action; preserve the approved environment across viewpoints.\n\nRequested frame:\n'+prompt
     bind(bindings['prompt'],prompt)
@@ -225,6 +235,7 @@ def prepare(recipe, workflow, request, references):
     provenance['prompt']=original_prompt
     provenance.update(recipe_sha256=digest,adapter='pixels',generator=recipe.get('label','Image generator'),frame=frame,
                       effective_prompt=prompt,seed=_scalar(graph,graph[bindings['seed']['node']]['inputs'][bindings['seed']['input']]),width=width,height=height,references=unique)
-    if qwen and unique:
-        provenance.update(prompt_policy='qwen-image-2.1-scene-v1', canvas_reference=canvas['label'] if canvas else None)
+    if scene and unique:
+        provenance.update(prompt_policy='qwen-image-2.1-scene-v1' if qwen else 'p-h3-image-scene-v1',
+                          canvas_reference=canvas['label'] if canvas else None)
     return {'ok':True,'prompt_id':str(uuid.uuid4()),'prompt':graph,'outputs':['h3c_still_output'],'provenance':provenance}

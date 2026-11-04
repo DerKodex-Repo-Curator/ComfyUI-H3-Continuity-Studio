@@ -276,6 +276,9 @@ def _template(value):
     return found
 
 
+PH3_IMAGE_CLASS = "H3C_PH3ImageStill"
+
+
 def renderer_for(prompt, timeline_id):
     """A pixel-only Story uses image writing; a video output downstream keeps video writing."""
     settings = (prompt.get(str(timeline_id)) or {}).get("inputs") or {}
@@ -299,16 +302,21 @@ def renderer_for(prompt, timeline_id):
         if type(selected) is not bool:
             return "video"
         link = inputs.get("on_true" if selected else "on_false")
-        if not _link(link) or link[1] != 0:
+        node = (prompt.get(str(link[0])) or {}) if _link(link) else {}
+        if not _link(link) or link[1] != (1 if node.get("class_type") == PH3_IMAGE_CLASS else 0):
             return "video"
-        node = prompt.get(str(link[0])) or {}
-    raw = (node.get("inputs") or {}).get("bindings")
-    try:
-        bindings = json.loads(raw) if isinstance(raw, str) else raw
-    except ValueError:
-        return "video"
-    if node.get("class_type") != "H3C_StillRecipe" or not isinstance(bindings, dict) or bindings.get("adapter") != "pixels":
-        return "video"
+    if node.get("class_type") == PH3_IMAGE_CLASS:
+        # The P-H3-Image node is its own pixel generator; its recipe output is slot 1.
+        if link[1] != 1:
+            return "video"
+    else:
+        raw = (node.get("inputs") or {}).get("bindings")
+        try:
+            bindings = json.loads(raw) if isinstance(raw, str) else raw
+        except ValueError:
+            return "video"
+        if node.get("class_type") != "H3C_StillRecipe" or not isinstance(bindings, dict) or bindings.get("adapter") != "pixels":
+            return "video"
     def reaches(key, seen):
         key = str(key)
         if key == str(timeline_id):

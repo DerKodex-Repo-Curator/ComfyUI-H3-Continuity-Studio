@@ -4,6 +4,14 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-04
+
+### Added
+
+- **P-H3-Image Still node.** One node generates Timeline stills with Pruna AI's P-H3-Image (derived from MiniMax H3). Select the installed `p-h3-image` model, text encoder and VAE, connect its `still_recipe` output to the Timeline, and generate First, Last and Shot candidates in the Studio; no sampler graph or bindings to write. It expands into the official ComfyUI workflow (8 steps, euler, no CFG), takes up to 8 reference pictures as `<Picture N>` with the scene placed first, and has an optional prompt upsampler (off by default, not with references yet). A video render never runs it. Missing files, an old ComfyUI, bad sizes and too many references give messages that say what to fix. New: `examples/ph3_image_story_studio.json` and the guide page *Stills with P-H3-Image*, which also covers the license (the weights exclude the EU, UK, South Korea and the US without a separate MiniMax license). Existing Still Recipe setups are unchanged.
+
+[Changes since v0.10.1](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.10.1...v0.11.0).
+
 ## [0.10.1] - 2026-11-04
 
 ### Changed
