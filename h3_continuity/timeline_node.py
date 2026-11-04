@@ -200,6 +200,26 @@ def _bridge_item(name, state):
     return item
 
 
+def slice_videos(images, audios, slots, start, count, label):
+    """`images` and `audios` with each slot in `slots` (and its same-numbered soundtrack) cut to frames
+    start..start + count at 24 fps."""
+    images, audios = dict(images), dict(audios)
+    for slot in slots:
+        if slot not in images:
+            continue
+        frames = images[slot]
+        if frames.shape[0] < start + count:
+            raise ValueError(f"H3 Timeline: {slot} has {frames.shape[0]} frames, but {label} needs frames {start} to "
+                             f"{start + count - 1} of it; connect a longer video or remove {slot} from video_slices")
+        images[slot] = frames[start:start + count]
+        sound = audios.get(slot.replace("video", "video_audio"))
+        if sound is not None:
+            rate = sound["sample_rate"]
+            first, last = timing.sample_at_frame(start, rate), timing.sample_at_frame(start + count, rate)
+            audios[slot.replace("video", "video_audio")] = {**sound, "waveform": sound["waveform"][..., first:last]}
+    return images, audios
+
+
 def read_request(body):
     """(parsed Timeline, sequence folder, known settings, context frames or None) from a status-style request."""
     parsed = rules.parse(body.get("timeline") or EMPTY_TIMELINE)
@@ -487,6 +507,9 @@ class H3C_Timeline(io.ComfyNode):
                 if parsed.voice_clips:
                     box_audios.update(voice_clips.load(parsed, index, voices))
                 box_images = {**images, **studio_pictures.load(parsed, index, loaded)} if parsed.pictures else images
+                if parsed.video_slices:
+                    box_images, box_audios = slice_videos(box_images, box_audios, parsed.video_slices,
+                                                          *rules.video_window(parsed, index, context), f"box {index + 1}")
                 effective_images[index] = shot_preview.plate_images(parsed, index, box_images, context=context)
                 effective_audios[index] = box_audios
                 hashes[index] = MediaHashes(effective_images[index], effective_audios[index])

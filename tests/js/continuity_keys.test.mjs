@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseState, serialize } from '../../web/h3c_timeline_model.mjs?v=20261104-continuity-keys-2';
+import { parseState, serialize } from '../../web/h3c_timeline_model.mjs?v=20261104-continuity-keys-3';
 
 const boxes = [{id: 'a', frames: 124, prompt: 'p'}];
 
 test('the Studio keeps context_noise, continuation_guide and audio_feather through an edit', () => {
-  const saved = JSON.parse(serialize(parseState(JSON.stringify({version: 1, boxes, context_noise: true, continuation_guide: false, audio_feather: 4}))));
+  const saved = JSON.parse(serialize(parseState(JSON.stringify({version: 1, boxes, context_noise: true, continuation_guide: false, audio_feather: 4, video_slices: ['video1']}))));
+  assert.deepEqual(saved.video_slices, ['video1']);
   assert.equal(saved.context_noise, true);
   assert.equal(saved.audio_feather, 4);
   assert.equal(saved.continuation_guide, false);

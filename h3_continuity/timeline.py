@@ -95,6 +95,8 @@ class Timeline:
     continuation_guide: bool = True
     context_noise: bool = False
     audio_feather: int = 0
+    # Reference video slots each box receives only its own time of, as audio clips are cut by Timeline time.
+    video_slices: list = field(default_factory=list)
 
 
 @dataclass
@@ -312,6 +314,10 @@ def parse(text):
     parsed.audio_feather = data.get("audio_feather", 0)
     if type(parsed.audio_feather) is not int or not 0 <= parsed.audio_feather <= 16:
         raise _error("audio_feather must be a whole number of audio ticks from 0 to 16")
+    parsed.video_slices = data.get("video_slices", [])
+    if (not isinstance(parsed.video_slices, list) or len(set(map(str, parsed.video_slices))) != len(parsed.video_slices)
+            or any(slot not in VIDEO_SLOTS for slot in parsed.video_slices)):
+        raise _error(f"video_slices must list distinct reference video slots ({VIDEO_SLOTS[0]} to {VIDEO_SLOTS[-1]})")
     parsed.plates = data.get("plates", [])
     if not isinstance(parsed.plates, list):
         raise _error("plates must be a list")
@@ -393,6 +399,13 @@ def picture_file(value):
 
 def box_start(timeline, index):
     return sum(played_frames(timeline, i) for i in range(index)) / FPS
+
+
+def video_window(timeline, index, context):
+    """(first frame, frames) of the Timeline's time box `index` generates: it starts the frames it carries before the
+    box's own start, as timed audio clips do, and covers every frame H3 generates for it."""
+    frames, carried = box_length(timeline, index, context)
+    return round(box_start(timeline, index) * FPS) - carried, frames + carried + dropped_frames(timeline, index)
 
 
 def active_audio_clips(timeline, index):
