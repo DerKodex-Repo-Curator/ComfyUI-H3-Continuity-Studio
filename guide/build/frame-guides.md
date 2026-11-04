@@ -79,9 +79,10 @@ A guide steers a frame within the same clip. It does not split the clip or rewri
 
 A Shot marker sits at the time its `[Shot N]` line gives (`At 0:02.500, …`). To guide a frame without adding a shot, open the clip's **Shots** tab and use the list under the markers:
 
-- **Guide another frame**: enter the **Frame** (0 is the clip's first frame), then press **Upload guide…** or drop an image on the row. The row is then listed as **Frame guide · guides frame N**.
+- **Guide another frame**: enter the **Frame** (0 is the clip's first frame), then press **Upload guide…** or drop an image on the box. The guide is then listed as **Frame guide** with its frame.
 - To move a guide, change its **Frame**. Moving a Shot marker's guide takes it off the marker; the marker keeps its candidates.
-- A guide whose Shot marker was removed reads **Removed Shot N · unused** and does not affect renders. Give it a frame to use it again.
+- A guide from an older project that kept its frame when its shot was removed is listed as a **Frame guide** too.
+- A guide whose Shot marker was removed reads **Removed Shot N** with **Unused** under it and does not affect renders. Give it a frame to use it again.
 
 Each frame can hold one guide.
 

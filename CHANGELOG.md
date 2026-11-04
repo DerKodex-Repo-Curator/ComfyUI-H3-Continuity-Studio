@@ -4,6 +4,14 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-04
+
+### Fixed
+
+- **Frame guide list layout.** Each guide in the Shots tab is a card with its thumbnail, name, **Frame** field and **Remove**. **Guide another frame** is its own drop box. A guide from an older project that still renders at its saved frame after its shot was removed reads **Frame guide** instead of **Removed Shot N**.
+
+[Changes since v0.8.0](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.8.0...v0.8.1).
+
 ## [0.8.0] - 2026-11-04
 
 ### Added
