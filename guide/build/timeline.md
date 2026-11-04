@@ -50,10 +50,9 @@ A **bridge** is a generated move between two rendered clips; see [Joins and brid
 **FLF2VA + cached RefMods**
 :   An experimental per-clip switch that converts first, last and reference images into reusable RefMods. It is off by default. Use it only with the matching example workflow.
 
-    A clip that runs as REF2VA shows **Convert to FLF2VA** under its mode line. The button turns this switch on: the clip's First and Last frames, and accepted guides at those frames, become its start and end frames, and the images it mentions become cached image RefMods. The button is disabled, with the reason beside it, when the clip cannot convert:
+    A clip that runs as REF2VA shows **Convert to FLF2VA** under its mode line. The button turns this switch on: the clip's First and Last frames, and accepted guides at those frames, become its start and end frames, and the images it mentions become cached image RefMods. Audio it mentions (`@audio1`, or an audio clip in the audio lane under this clip) stays an audio reference, encoded by the H3 audio VAE exactly as REF2VA encodes it and numbered before any audio RefMods. The button is disabled, with the reason beside it, when the clip cannot convert:
 
     - **Raw video** (`@video1`, `@video_audio1`): the Studio cannot convert a video to a RefMod. Create a video RefMod with RefForge's **Create H3 RefMod** node, assign it on the **RefMods** page, and mention that slot instead.
-    - **Raw audio** (`@audio1`, or an audio clip in the audio lane under this clip): create an audio RefMod with RefForge and assign it to the same slot on the **RefMods** page.
     - **No First frame** on a fresh clip: choose one under **First & last frame** or accept a First guide.
 
 **Visual memory**

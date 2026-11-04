@@ -1,4 +1,4 @@
-import * as model from './h3c_timeline_model.mjs?v=20261104-studio-ux-1';
+import * as model from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import { importWhisper, validateTimedText, setTextSync, textClock, projectTimedText } from './h3c_timed_text.mjs?v=20261011-reference-preparation-1';
 
 const node = (tag, cls, text) => {
