@@ -6,7 +6,7 @@ import dataclasses
 import json
 import re
 
-from . import image_descriptions, reference_replacements, story_bible, story_bible_write, story_context, story_prompts, story_vision, stills, timeline as rules
+from . import image_descriptions, reference_replacements, story_bible, story_bible_write, story_context, story_instructions, story_prompts, story_vision, stills, timeline as rules
 from .timing import FPS
 
 COMPONENTS = ('subject', 'setting', 'style', 'lighting', 'color', 'camera')
@@ -343,7 +343,11 @@ async def convert(job, chat):
     references = [dict(name=ref.name, description=described.get(ref.name, ''))
                   for ref in job.ctx.references if ref.name in wanted]
     pictures = [dict(label=ref.label, path=ref.path) for ref in job.ctx.references if ref.name in wanted and ref.path]
-    messages = [dict(role='system', content=DEFAULT_INSTRUCTIONS),
+    system = DEFAULT_INSTRUCTIONS
+    model_instructions = story_instructions.image_model_instructions(job.ctx.image_model)
+    if model_instructions:
+        system += '\n\n' + model_instructions
+    messages = [dict(role='system', content=system),
                 dict(role='user', content=json.dumps(dict(instructions=prepared['source']['instructions'],
                      references=references, targets=contexts), ensure_ascii=False), pictures=pictures)]
     reply = await chat.ask(messages, response_format(prepared))

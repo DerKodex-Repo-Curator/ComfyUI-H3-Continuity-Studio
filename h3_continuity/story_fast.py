@@ -216,7 +216,7 @@ def messages(ctx, plan, index, final, context, subjects, neighbors, bible=False,
     if ctx.shared.strip():
         lines += ["Shared direction (inserted by code; do not repeat):", ctx.shared.strip()]
     if ctx.renderer == "image":
-        system = story_instructions.image_writer(ctx.template)
+        system = story_instructions.image_writer(ctx.template, model=ctx.image_model)
     elif bible:
         system = story_instructions.writer(context.mode == "Ref2VA" or summary, ctx.template, staged=stages is not None)
     else:

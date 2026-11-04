@@ -45,6 +45,10 @@ The node's own prompt, seed, width and height are filled in by the Studio for ea
 - **Sizes** must be multiples of 32, as everywhere in the Studio. Text to image is best near 8 megapixels and edits near 4 or 8; smaller stills work, and the examples here were rendered at 1024 × 576 and 1280 × 704.
 - **Prompt upsampler** is off by default. The Studio's *Prepare all still prompts* already writes long prompts, and the upsampler adds a model load. Select an upsampler file in the node to expand short prompts instead; it is not available together with reference images yet.
 
+Story and **Prepare all still prompts** tailor their image instructions to P-H3-Image when this node is selected, including through the still-generator switch. Prepared prompts name the requested image medium, describe one concrete instant with framing and directional light, and make reference edits explicit about what stays and changes. They avoid hype words and excessive length, and quote exact requested lettering. Saved prose keeps logical `@imageN` references; the Studio assigns `<Picture N>` labels at generation time. The still converter uses this guidance even when Story also writes H3 video. Existing saved prompts and edited conversion instructions stay editable; regenerate prepared prompts to use the new guidance.
+
+These instructions follow Pruna's [P-H3-Image prompting and editing guide](https://huggingface.co/PrunaAI/P-H3-Image#prompting).
+
 [![One P-H3-Image still made from a room picture and a portrait](../assets/screens/ph3-image-references.jpg){ width=480 }](../assets/screens/ph3-image-references.jpg)
 
 The picture above came from two reference pictures, a living room as `<Picture 1>` and a portrait as `<Picture 2>`, and the prompt "the young woman from Picture 2 stands by the window". It kept the room's window, couch and framed picture and the person's hair and coat. As with other generators, inspect each candidate; references guide the image but do not guarantee geometry.
