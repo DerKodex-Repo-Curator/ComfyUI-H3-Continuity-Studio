@@ -2,7 +2,7 @@
 
 from comfy_api.latest import ComfyExtension, io
 
-from .nodes import H3C_Continue, H3C_ContinuationModel, H3C_SaveSegment, H3C_Sequence
+from .nodes import H3C_Continue, H3C_ContinuationModel, H3C_SigmasTail, H3C_SaveSegment, H3C_Sequence, H3C_SigmasTail
 from .story_node import H3C_Story, H3C_StoryTurn
 from .timeline_node import H3C_Timeline
 from .timeline_images import H3C_TimelineImage

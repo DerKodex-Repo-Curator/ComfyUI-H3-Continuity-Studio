@@ -231,6 +231,41 @@ class H3C_ContinuationModel(io.ComfyNode):
         return io.NodeOutput(continuation_model if continues and continuation_model is not None else model)
 
 
+class H3C_SigmasTail(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="H3C_SigmasTail",
+            display_name="H3 Sigmas Tail",
+            category=CATEGORY,
+            description="Experimental. Raises (or lowers) the last noise levels before zero, so a distilled model "
+                        "settles less fine detail in its final step. With segment, only continuing boxes change.",
+            inputs=[
+                io.Sigmas.Input("sigmas"),
+                io.Int.Input("tail_steps", default=3, min=1, max=20, tooltip="Levels before the final zero to move."),
+                io.Float.Input("strength", default=0.5, min=-0.9, max=3.0, step=0.05,
+                               tooltip="Above 0 raises the tail toward the level before it; 0 changes nothing."),
+                SegmentType.Input("segment", optional=True,
+                                  tooltip="From H3 Timeline: fresh and cut boxes keep their schedule."),
+            ],
+            outputs=[io.Sigmas.Output(display_name="sigmas")],
+        )
+
+    @classmethod
+    def execute(cls, sigmas, tail_steps, strength, segment=None) -> io.NodeOutput:
+        values = [float(value) for value in sigmas]
+        end = len(values) - 1 if values and values[-1] == 0 else len(values)
+        start = max(1, end - int(tail_steps))
+        if not strength or (segment is not None and segment.carried_video is None) or start >= end:
+            return io.NodeOutput(sigmas)
+        # each moved level keeps its ratio to the level above the tail, raised to 1 / (1 + strength)
+        anchor = values[start - 1]
+        for index in range(start, end):
+            values[index] = min(anchor * (values[index] / anchor) ** (1 / (1 + strength)),
+                                values[index - 1] * 0.999)
+        return io.NodeOutput(torch.tensor(values, dtype=sigmas.dtype, device=sigmas.device))
+
+
 class H3C_SaveSegment(io.ComfyNode):
     @classmethod
     def define_schema(cls):
