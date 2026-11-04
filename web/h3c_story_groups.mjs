@@ -4,8 +4,12 @@
 
 const UNTITLED='Untitled story';
 
+// A trailing revision tag such as " · r2" (or " · r3 · r3") marks a revision of the same story, not another story.
+const REVISION_TAG=/(?:\s*[·•]\s*r\d+)+$/i;
+
 export function groupKey(title) {
-  return String(title||UNTITLED).normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase();
+  const text=String(title||UNTITLED).normalize('NFKC').trim().replace(/\s+/g,' ');
+  return (text.replace(REVISION_TAG,'').trim()||text).toLocaleLowerCase();
 }
 
 // rows: library listing entries ({id,title,updated,...}); names: {groupKey: name} the user gave. Returns groups
@@ -22,7 +26,8 @@ export function groupStories(rows,names={}) {
   for(const group of result) {
     group.versions.sort((a,b)=>b.updated-a.updated||String(a.id).localeCompare(String(b.id)));
     group.versions=group.versions.map((row,index)=>({...row,version:group.versions.length-index}));
-    group.title=String(group.versions[0].title||'').trim().replace(/\s+/g,' ')||UNTITLED;
+    const title=String(group.versions[0].title||'').trim().replace(/\s+/g,' ')||UNTITLED;
+    group.title=title.replace(REVISION_TAG,'').trim()||title;
     group.name=typeof names?.[group.key]==='string'&&names[group.key].trim()?names[group.key].trim():'';
     group.label=group.name||group.title;
     group.updated=group.versions[0].updated;

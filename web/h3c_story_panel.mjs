@@ -1,7 +1,7 @@
 // The H3 Story face: Write, Check all, Cancel and Undo, Open Studio, and the API keys in a closed section. The Studio
 // places the story of the last Write and the export and import row on its Story page.
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
-import {groupLabel,groupStories,initialSelection,versionLabel} from './h3c_story_groups.mjs?v=20261104-story-groups-1';
+import {groupLabel,groupStories,initialSelection,versionLabel} from './h3c_story_groups.mjs?v=20261104-story-groups-2';
 import {ideaImagesRow} from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 
 const STYLE_ID = 'h3cs-style';
