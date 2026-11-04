@@ -58,8 +58,8 @@ export function checkGroups(check, bible, schedule) {
     items: problems.filter((problem) => problem.about === about).map(problemText)})).filter((group) => group.items.length);
 }
 
-// The check's state line and the lines under it: "No problems found." or the error, and the drift against the
-// scene's first box, numbered by `numberOf(id)`. `retake` is whether the current check found something.
+// The check's state line and the lines under it: "No problems found." or the error, the drift against the scene's
+// first box, numbered by `numberOf(id)`, and any still holds. `retake` is whether the current check found something.
 export function checkState(check, numberOf = () => null) {
   if (!check) return {state: 'Not checked yet.', lines: [], retake: false};
   if (check.stale) return {state: 'The last check was of an earlier render.', lines: [], retake: false};
@@ -74,7 +74,12 @@ export function checkState(check, numberOf = () => null) {
     const number = numberOf(check.drift.box);
     lines.push(`Drift: ${words} than ${number == null ? "the scene's first box" : `box ${number}`}.`);
   }
-  return {state, lines, retake: !!(check.problems?.length || check.error || words)};
+  const holds = Array.isArray(check.holds) ? check.holds : [];
+  for (const hold of holds) {
+    const where = hold.join ? 'at the join' : `at ${(hold.start_ms / 1000).toFixed(1)} s`;
+    lines.push(`Holds still: ${hold.frames} frames ${where}.`);
+  }
+  return {state, lines, retake: !!(check.problems?.length || check.error || words || holds.length)};
 }
 
 export class CheckPanel {
