@@ -347,6 +347,9 @@ class H3C_SaveSegment(io.ComfyNode):
             }
             if segment.carried_audio_start:
                 entry['audio_pin'] = {'start_tick': segment.carried_audio_start, 'ticks': segment.carried_ticks}
+            if segment.carried_video is not None and (sequence.base or {}).get("created"):
+                # the render this box continued, for takes and lineage
+                entry["carried_from"] = sequence.base["created"]
             if segment.timeline:
                 entry["timeline"] = {key: value for key, value in segment.timeline.items() if key not in UNSAVED}
             # A box that drops generated frames plays only its first `played` new frames; its latent keeps them all.
