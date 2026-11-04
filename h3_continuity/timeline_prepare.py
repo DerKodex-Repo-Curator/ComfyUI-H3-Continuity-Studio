@@ -39,7 +39,7 @@ def instructions():
     entry = "h3-continuity-video"
     names = sorted((path.parent.name for path in (root / "skills").glob("*/SKILL.md")), key=lambda name: (name != entry, name))
     skills = [dict(name=name, body=(root / "skills" / name / "SKILL.md").read_text(encoding="utf-8")) for name in names]
-    result = dict(ok=True, version=1, instructions_revision="external-instructions-v8",
+    result = dict(ok=True, version=1, instructions_revision="external-instructions-v9",
                   revisions=dict(preparation=REVISION, schema=ir.VERSION, guidance=ir.GUIDELINE_REVISION),
                   skill=skills[0]["body"], skills=skills,
                   guides=guides,
