@@ -1,5 +1,5 @@
 // The Timeline face and native advanced widgets share the Studio editor's saved state.
-import {joinKind} from './h3c_timeline_model.mjs?v=20261104-continuity-keys-1';
+import {joinKind} from './h3c_timeline_model.mjs?v=20261104-continuity-keys-2';
 export const FACE_HEIGHT = 120;
 const STYLE_ID = 'h3ct-face-style';
 const CSS = `

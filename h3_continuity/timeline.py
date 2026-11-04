@@ -94,6 +94,7 @@ class Timeline:
     # Continuing boxes only: the guide at the first new frame and paired context noise.
     continuation_guide: bool = True
     context_noise: bool = False
+    audio_feather: int = 0
 
 
 @dataclass
@@ -308,6 +309,9 @@ def parse(text):
     parsed.context_noise = data.get("context_noise", False)
     if not isinstance(parsed.context_noise, bool):
         raise _error("context_noise must be true or false")
+    parsed.audio_feather = data.get("audio_feather", 0)
+    if type(parsed.audio_feather) is not int or not 0 <= parsed.audio_feather <= 16:
+        raise _error("audio_feather must be a whole number of audio ticks from 0 to 16")
     parsed.plates = data.get("plates", [])
     if not isinstance(parsed.plates, list):
         raise _error("plates must be a list")
@@ -1121,6 +1125,8 @@ def layout_key(timeline, index, context=39):
         value["continuation_guide"] = False
     if not fresh and timeline.context_noise:
         value["context_noise"] = True
+    if not fresh and timeline.audio_feather:
+        value["audio_feather"] = timeline.audio_feather
     if timeline.reference_replacements:
         value['reference_replacements'] = timeline.reference_replacements
     dropped = dropped_frames(timeline, index)

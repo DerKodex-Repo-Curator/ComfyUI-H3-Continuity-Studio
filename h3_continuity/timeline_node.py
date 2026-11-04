@@ -606,7 +606,7 @@ class H3C_Timeline(io.ComfyNode):
         positive = shot_preview.add_guides(positive, latent, vae, internal_guides)
         latent, positive, negative, segment, _ = continuity.prepare_segment(
             sequence, latent, context, carry_audio, positive, negative, node="H3 Timeline", audio_context_frames=audio_context_frames,
-            noise_vae=vae if parsed.context_noise else None)
+            noise_vae=vae if parsed.context_noise else None, audio_feather=parsed.audio_feather)
         segment.preserve_following = True
         following = by_index.get(next_index + 2)
         ending = 0
