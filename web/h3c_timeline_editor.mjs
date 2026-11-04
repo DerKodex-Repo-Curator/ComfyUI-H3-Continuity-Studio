@@ -191,7 +191,18 @@ const CSS = `
 .h3ct-candidate > .h3ct-button { white-space: normal; }
 .h3ct-candidate > details { margin-top: auto; }
 @media(max-width:600px) { .h3ct-image-hero .h3ct-image-thumbnail img { max-height: 160px; } }
-.h3ct-saved-still img { width: 96px; height: auto; }
+.h3ct-saved-guides { display: flex; flex-direction: column; gap: 6px; }
+.h3ct-saved-still { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px;
+  border: 1px solid #2c313c; border-radius: 5px; }
+.h3ct-saved-thumb { width: 64px; height: 64px; overflow: hidden; border-radius: 3px; background: #171a21; }
+.h3ct-saved-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 3px; }
+.h3ct-saved-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.h3ct-saved-body > strong { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.h3ct-saved-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.h3ct-saved-controls .h3ct-number { width: 72px; }
+.h3ct-saved-still .h3ct-saved-controls > .h3ct-button:last-child { margin-left: auto; }
+.h3ct-guide-add { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px dashed #465066; border-radius: 5px; }
+.h3ct-guide-add > strong { font-size: 12px; font-weight: 600; }
 .h3ct-subject-grid, .h3ct-linked-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; }
 .h3ct-subject-card, .h3ct-linked-card { min-width: 0; padding: 5px; border: 1px solid #465066; border-radius: 5px; background: rgba(0,0,0,.12); }
 .h3ct-subject-card img, .h3ct-linked-card img { display: block; width: 100%; height: 72px; object-fit: contain; background: #171a21; border-radius: 3px; }
@@ -1725,33 +1736,39 @@ export class TimelineEditor {
 
   savedStills(shots) {
     const box = this.box();
-    const list = el('div');
+    const list = el('div', 'h3ct-saved-guides');
     for (const saved of box.previews ?? []) {
-      const row = el('div', 'h3ct-row h3ct-saved-still');
+      const row = el('div', 'h3ct-saved-still'), thumb = el('div', 'h3ct-saved-thumb'), body = el('div', 'h3ct-saved-body');
+      const controls = el('div', 'h3ct-saved-controls');
       const image = saved.guide ?? saved.image ?? saved.images?.[0]?.file;
       if (image) {
-        const thumb = el('img');
-        thumb.src = this.host.viewUrl(image);
-        thumb.alt = `Saved still for clip ${this.selected + 1}, ${saved.target ? targetLabel(saved.target) : 'shot '+saved.shot}`;
-        row.append(thumb);
+        const img = el('img');
+        img.src = this.host.viewUrl(image);
+        img.alt = `Saved still for clip ${this.selected + 1}, ${saved.target ? targetLabel(saved.target) : 'shot '+saved.shot}`;
+        thumb.append(img);
       }
+      row.append(thumb, body);
       const active = saved.target ? frameTargets(this.state,this.selected,this.host.context())
         .some(item=>item.target.kind===saved.target.kind&&item.target.shot===saved.target.shot) : shots.some(s=>s.shot===saved.shot);
-      const label = saved.target ? targetLabel(saved.target) : saved.shot >= FREE_GUIDE ? 'Frame guide' : `Shot ${saved.shot}`;
-      const where = active || saved.shot >= FREE_GUIDE ? label : `Removed ${label}`;
+      // An untargeted guide renders at its saved frame whether or not its shot still exists.
+      const free = !saved.target && saved.guide && (saved.shot >= FREE_GUIDE || !active);
+      const label = free ? 'Frame guide' : saved.target ? targetLabel(saved.target) : `Shot ${saved.shot}`;
+      const where = active || free ? label : `Removed ${label}`;
       // A removed marker's guide is not rendered; an untargeted guide keeps its saved frame.
-      row.append(el('span', null, !saved.guide ? `${where} · saved still, not a guide`
-        : saved.target && !active ? `${where} · unused (was frame ${saved.frame})` : `${where} · guides frame ${saved.frame}`));
+      body.append(el('strong', null, where));
+      if (!saved.guide) body.append(el('span', 'h3ct-hint', 'Saved still, not a guide'));
+      else if (saved.target && !active) body.append(el('span', 'h3ct-hint', 'Unused: its Shot marker was removed. Set a frame to use it again.'));
+      body.append(controls);
       const managed = saved.target && active; // The marker panel has separate guide and candidate controls.
       if (managed && !(saved.guide && saved.target.kind === 'shot')) continue;
       if (saved.guide) {
         const frame = this.guideFrameInput(saved.frame, 'Move this guide to another frame of the clip');
         frame.addEventListener('change', async () => {
-          if (!await this.placeGuide(row, Number(frame.value), {saved, managed})) frame.value = String(saved.frame);
+          if (!await this.placeGuide(body, Number(frame.value), {saved, managed})) frame.value = String(saved.frame);
         });
-        row.append(field('Frame', frame));
+        controls.append(field('Frame', frame));
       }
-      if (!managed) row.append(button('Remove', saved.guide ? 'Stop guiding this frame and remove the saved still' : 'Remove this saved still', () => {
+      if (!managed) controls.append(button('Remove', saved.guide ? 'Stop guiding this frame and remove the saved still' : 'Remove this saved still', () => {
         box.previews = box.previews.filter((p) => p !== saved);
         this.commit();
       }));
@@ -1760,17 +1777,19 @@ export class TimelineEditor {
     if (!list.children.length) {
       list.append(el('p', 'h3ct-hint', 'Choose a First, Last or Shot marker to copy its prompt, upload a guide or generate candidates.'));
     }
-    const add = el('div', 'h3ct-row h3ct-saved-still');
+    const add = el('div', 'h3ct-guide-add'), controls = el('div', 'h3ct-saved-controls');
     const frame = this.guideFrameInput(Math.floor(this.lastGuideFrame() / 2), 'The clip frame the new guide steers');
     const upload = (file) => this.placeGuide(add, Number(frame.value), {file});
-    add.append(el('span', null, 'Guide another frame'), field('Frame', frame), button('Upload guide…',
-      'Upload a picture that guides this frame without adding a shot. You can also drop an image here.', () => {
+    controls.append(field('Frame', frame), button('Upload guide…',
+      'Upload a picture that guides this frame without adding a shot', () => {
         const input = el('input'); input.type = 'file'; input.accept = 'image/*';
         input.addEventListener('change', () => { if (input.files[0]) upload(input.files[0]); });
         input.click();
       }));
+    add.append(el('strong', null, 'Guide another frame'), controls,
+      el('span', 'h3ct-hint', `Or drop an image here. Frames 0–${this.lastGuideFrame()}; the prompt doesn't change.`));
     imageDrop(add, upload);
-    list.append(add, el('p', 'h3ct-hint', `Frames count from 0 to ${this.lastGuideFrame()} in this clip. A frame guide steers that frame without changing the prompt; move a guide by changing its frame.`));
+    list.append(add);
     return list;
   }
 
