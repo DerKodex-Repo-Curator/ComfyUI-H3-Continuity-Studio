@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {groupKey, groupLabel, groupStories, initialSelection, versionLabel} from '../../web/h3c_story_groups.mjs?v=20261104-story-groups-1';
+import {groupKey, groupLabel, groupStories, initialSelection, versionLabel} from '../../web/h3c_story_groups.mjs?v=20261104-story-groups-2';
 
 const row = (id, title, updated, extra = {}) => ({id, title, updated, boxes: 4, status: 'saved', ...extra});
 
@@ -68,4 +68,19 @@ test('a name the user gave replaces the title, but the story is still found by i
   assert.equal(groupLabel(group), 'Gravity short · 2 versions');
   const [plain] = groupStories(rows, {other: 'x', [group.key]: '   '});
   assert.equal(plain.label, 'heavy things fall up');
+});
+
+test('a trailing revision tag does not make a different story', () => {
+  const groups = groupStories([
+    row('a', 'Heavy Things Fall Up v07 (one story) · r1', 1),
+    row('b', 'Heavy Things Fall Up v07 (one story) · r2', 2),
+    row('c', 'Heavy Things Fall Up v07 (one story) · r3 · r3', 3),
+    row('d', 'Heavy Things Fall Up v07 (one story)', 0),
+    row('e', 'Heavy Things Fall Up P4 - final q1 (Quality) · r1', 4),
+  ]);
+  assert.deepEqual(groups.map(group => [group.title, group.versions.length]),
+    [['Heavy Things Fall Up P4 - final q1 (Quality)', 1], ['Heavy Things Fall Up v07 (one story)', 4]]);
+  assert.equal(groupKey('Story · r2'), groupKey('story'));
+  assert.notEqual(groupKey('Story r2 final'), groupKey('Story'));
+  assert.equal(groupKey('· r2'), '· r2');
 });

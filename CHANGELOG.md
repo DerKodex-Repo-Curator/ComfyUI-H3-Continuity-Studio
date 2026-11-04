@@ -4,6 +4,14 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-04
+
+### Fixed
+
+- **Revision tags no longer split a saved story.** A trailing revision tag such as ` · r2` or ` · r3 · r3` is ignored when saved stories are grouped, so "Heavy Things Fall Up v07 (one story) · r1" and "· r2" are versions of one story. Before, each tag made a group of its own.
+
+[Changes since v0.12.0](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.0...v0.12.1).
+
 ## [0.12.0] - 2026-11-04
 
 ### Changed
