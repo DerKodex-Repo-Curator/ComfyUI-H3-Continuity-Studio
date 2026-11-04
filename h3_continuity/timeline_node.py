@@ -289,7 +289,7 @@ class H3C_Timeline(io.ComfyNode):
                 io.Int.Input("width", default=1344, min=32, max=MAX_RESOLUTION, step=32),
                 io.Int.Input("height", default=768, min=32, max=MAX_RESOLUTION, step=32),
                 io.Combo.Input("context_frames", options=list(timing.CONTEXT_OPTIONS), default="39",
-                               tooltip="Frames each box carries from the box before it: 39 = 1.6 s, 90 = 3.75 s, "
+                               tooltip="Frames each box carries from the box before it: 22 = 0.9 s, 39 = 1.6 s, 90 = 3.75 s, "
                                        "141 = 5.9 s."),
                 io.Boolean.Input("carry_audio", default=True, tooltip="Also carry and freeze the matching audio."),
                 io.Combo.Input("ref_image_size", options=["match", "max"], default="match",

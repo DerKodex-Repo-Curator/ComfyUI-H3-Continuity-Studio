@@ -2,11 +2,13 @@
 
 All notable changes to H3 Continuity Studio are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0] - 2026-11-04
 
 ### Added
 
 - **Agent skill pack.** `skills/` now holds seven skills that work together. `h3-continuity-video` is the entry, and six scoped skills cover joins and visual memory, timing, references and guides, sound and text, Story and Cast, and the API. Together they describe every feature, including visual memory, plates, RefMods, takes, the continuity check, long clips and voice clips, which the earlier single skill did not mention. `GET /h3c/timeline/instructions` serves the whole pack as `skills` (`instructions_revision` `external-instructions-v8`), and `python skills/install.py` links it into the agent skill folders on this computer.
+- **22-frame context.** `context_frames` now offers 22 (0.9 s) next to 39, 90 and 141, in the node combos, the Timeline API schema and limits, and external Timeline preparation (`instructions_revision` `external-instructions-v9`). A continuing box adds the same new frames at 22 as at 39 and generates 17 fewer, so sampling is slightly cheaper; 39 stays the default because 0.9 s carries less motion into fast action.
+- **Comparison tools.** `tools/side_by_side.py` lays clips out in a row on one clock with labels and one audio track per clip, and `tools/render_scene.py` renders a scene file box by box on a ComfyUI server with a time cap. `examples/prefixstream_scenes/` holds the memory and continuation test scenes they were used with.
 
 ## [0.4.0] - 2026-11-03
 

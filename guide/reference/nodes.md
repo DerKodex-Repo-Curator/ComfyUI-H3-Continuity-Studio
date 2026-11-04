@@ -10,7 +10,7 @@ The heart of the pack. Draw clips in the Studio; each queued run renders the nex
 | --- | --- | --- |
 | `name` | string | Folder under `output/h3_sequences`. |
 | `width`, `height` | int | Output size. |
-| `context_frames` | 39, 90, 141 | Frames each clip carries from the clip before (1.6 s, 3.75 s, 5.9 s). |
+| `context_frames` | 22, 39, 90, 141 | Frames each clip carries from the clip before (0.9 s, 1.6 s, 3.75 s, 5.9 s). |
 | `carry_audio` | boolean | Also carry and freeze the matching audio. |
 | `ref_image_size` | `match` or `max` | Reference image sizing, as in MiniMax H3 Reference to Video. |
 | `audio_context_frames` | int | Incoming audio context in 24 fps frames; 0 follows video. |

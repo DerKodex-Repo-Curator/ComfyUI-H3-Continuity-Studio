@@ -60,8 +60,8 @@ texts are under `docs/` and the user guide is under `guide/`.
   and every bridge's), `pictures`, `audio_clips`, `voice_clips`, `timed_text`,
   `bible`, `refmods`, `plates`, `disabled_refs`, `reference_replacements`,
   `bridges` and `max_frames`.
-- **Node settings**: `width` and `height` (multiples of 32), `context_frames` (39,
-  90 or 141: the frames a continuing box carries), `carry_audio`,
+- **Node settings**: `width` and `height` (multiples of 32), `context_frames` (22,
+  39, 90 or 141: the frames a continuing box carries), `carry_audio`,
   `ref_image_size` (`match` or `max`) and `audio_context_frames`.
 - **Mode.** Each box runs as `t2va`, `flf2va` or `ref2va`, decided by what it uses.
   The mode changes how first and last frames behave, so read

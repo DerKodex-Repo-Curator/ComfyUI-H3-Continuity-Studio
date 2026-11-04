@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from jsonschema import Draft202012Validator
 
-from .. import h3_prompt_schema
+from .. import h3_prompt_schema, timing
 
 API_VERSION = 1
 
@@ -117,7 +117,7 @@ def _semantic_schema():
 def _schemas():
     settings = _object({"width": {"type": "integer", "minimum": 32, "maximum": 16384, "multipleOf": 32},
                         "height": {"type": "integer", "minimum": 32, "maximum": 16384, "multipleOf": 32},
-                        "context_frames": {"type": "integer", "enum": [39, 90, 141]},
+                        "context_frames": {"type": "integer", "enum": [int(c) for c in timing.CONTEXT_OPTIONS]},
                         "carry_audio": BOOL, "ref_image_size": {"enum": ["match", "max"]},
                         'audio_context_frames': {'type': 'integer', 'minimum': 0}})
     target = {"oneOf": [

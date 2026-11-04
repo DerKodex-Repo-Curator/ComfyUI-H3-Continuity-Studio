@@ -12,7 +12,7 @@ from pathlib import Path
 import folder_paths
 
 from . import timeline as rules, h3_prompt_ir as ir, h3_prompt_compile as compiler, timed_text
-from . import reference_replacements
+from . import reference_replacements, timing
 from .story_bible import is_story_source
 from .store import validate_name
 
@@ -39,7 +39,7 @@ def instructions():
     entry = "h3-continuity-video"
     names = sorted((path.parent.name for path in (root / "skills").glob("*/SKILL.md")), key=lambda name: (name != entry, name))
     skills = [dict(name=name, body=(root / "skills" / name / "SKILL.md").read_text(encoding="utf-8")) for name in names]
-    result = dict(ok=True, version=1, instructions_revision="external-instructions-v8",
+    result = dict(ok=True, version=1, instructions_revision="external-instructions-v9",
                   revisions=dict(preparation=REVISION, schema=ir.VERSION, guidance=ir.GUIDELINE_REVISION),
                   skill=skills[0]["body"], skills=skills,
                   guides=guides,
@@ -49,7 +49,7 @@ def instructions():
                               body=(root / "examples/external_timeline.py").read_text(encoding="utf-8")),
                   clients=[dict(filename="timeline_api.py", language="python", api_version=1,
                                 body=(root / "examples/timeline_api.py").read_text(encoding="utf-8"))],
-                  limits=dict(fps=24, generated_frame_grid="17k+5", context_frames=[39, 90, 141],
+                  limits=dict(fps=24, generated_frame_grid="17k+5", context_frames=[int(c) for c in timing.CONTEXT_OPTIONS],
                               image_slots=rules.IMAGE_SLOTS, saved_picture_slots="image17 and up",
                               exact_frames=dict(fresh=[1, rules.MAX_FRAMES],
                                                 continuing=[1, f"{rules.MAX_FRAMES} minus context_frames"]),
@@ -196,10 +196,10 @@ def setting(key, value):
         if type(value) is not int or not 32 <= value <= 16384 or value % 32:
             fail(path, "must be an integer multiple of 32 between 32 and 16384 (cannot resolve another type)")
     elif key == "context_frames":
-        if type(value) is str and value in ("39", "90", "141"):
+        if type(value) is str and value in timing.CONTEXT_OPTIONS:
             value = int(value)
-        if type(value) is not int or value not in (39, 90, 141):
-            fail(path, "must be 39, 90 or 141")
+        if type(value) is not int or str(value) not in timing.CONTEXT_OPTIONS:
+            fail(path, "must be " + ", ".join(timing.CONTEXT_OPTIONS[:-1]) + " or " + timing.CONTEXT_OPTIONS[-1])
     elif key == "carry_audio":
         if type(value) is not bool:
             fail(path, "must be a boolean")
@@ -577,7 +577,7 @@ def _prepare(body):
         node = ui_node(ui, target, "H3C_Timeline")
         values = node.get("widgets_values")
         if (not isinstance(values, list) or len(values) not in (7, 8) or not isinstance(values[0], str)
-                or type(values[1]) is not int or type(values[2]) is not int or values[3] not in ("39", "90", "141")
+                or type(values[1]) is not int or type(values[2]) is not int or values[3] not in timing.CONTEXT_OPTIONS
                 or type(values[4]) is not bool or values[5] not in ("match", "max") or not isinstance(values[6], str)
                 or (len(values) == 8 and (type(values[7]) is not int or values[7] < 0))):
             fail(f"workflow.ui.nodes.{target}", "unsupported Timeline widget layout; expected seven widgets or optional audio context")
