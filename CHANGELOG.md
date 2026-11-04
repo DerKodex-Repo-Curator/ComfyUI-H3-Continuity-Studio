@@ -2,16 +2,13 @@
 
 All notable changes to H3 Continuity Studio are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [0.5.0] - 2026-11-04
+## [0.6.0] - 2026-11-04
 
 ### Added
 
 - **Replacement bridges (unavailable).** A Timeline can describe a bridge that *replaces around the cut*: H3 regenerates a reviewed region of the two clips with exactly as many frames, so the full video keeps its length and recordings stay in sync. In tests with real generations every candidate still jumped at its joins, so this version ships them switched off: nothing renders or plays a replacement, the original cut plays, and the Studio only offers to remove one. See [Joins and bridges](guide/continuity/joins-and-bridges.md#replacement-bridges).
 - **Dialogue cues.** A recording's exact words at its own times, with speaker, on-screen or voiceover portrayal and a check against the recording. Import them from a timed transcript, take them from the Story or type them. Clips speak the cues in their window as `<d>` lines, and replacements keep on-screen speech and footage you mark. See [Dialogue cues](guide/sound/dialogue.md).
 - **Locked recordings.** An uploaded audio clip can be locked to the sequence clock: no bridge may add time inside it, so its cuts stay cuts, and the Timeline names any inserted bridge or setting that would move the picture off it.
-- **Agent skill pack.** `skills/` now holds seven skills that work together. `h3-continuity-video` is the entry, and six scoped skills cover joins and visual memory, timing, references and guides, sound and text, Story and Cast, and the API. Together they describe every feature, including visual memory, plates, RefMods, takes, the continuity check, long clips and voice clips, which the earlier single skill did not mention. `GET /h3c/timeline/instructions` serves the whole pack as `skills` (`instructions_revision` `external-instructions-v8`), and `python skills/install.py` links it into the agent skill folders on this computer.
-- **22-frame context.** `context_frames` now offers 22 (0.9 s) next to 39, 90 and 141, in the node combos, the Timeline API schema and limits, and external Timeline preparation (`instructions_revision` `external-instructions-v9`). A continuing box adds the same new frames at 22 as at 39 and generates 17 fewer, so sampling is slightly cheaper; 39 stays the default because 0.9 s carries less motion into fast action.
-- **Comparison tools.** `tools/side_by_side.py` lays clips out in a row on one clock with labels and one audio track per clip, and `tools/render_scene.py` renders a scene file box by box on a ComfyUI server with a time cap. `examples/prefixstream_scenes/` holds the memory and continuation test scenes they were used with.
 
 ### Fixed
 
@@ -23,6 +20,19 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 - **Visual memory at a cut with speech.** When someone speaks on either side of a cut, the clip after it remembers the five frames before the cut instead of the full preceding video. H3 copied that video's lip movement onto the new shot, so the new clip's lines went out of sync. Such clips need a render. See [Visual memory](guide/continuity/visual-memory.md#how-it-works).
 - Timelines that use replacements, cues or locks list them in `requires`. From this version on, a reader that doesn't know a listed feature stops with *this Timeline needs a newer H3 Continuity* instead of misreading the file. Existing bridges keep their meaning: a bridge without `mode` still inserts time.
+
+### Known limits
+
+- Replacement bridges are shipped switched off: every real candidate still jumped at its joins, so the original cut plays.
+- An inserted bridge does not move dialogue cues. A recording that plays in the full video and is not locked drifts from the picture after the bridge by the bridge's length; a locked recording only gets a warning. Lock the recording and keep the cut.
+
+## [0.5.0] - 2026-11-04
+
+### Added
+
+- **Agent skill pack.** `skills/` now holds seven skills that work together. `h3-continuity-video` is the entry, and six scoped skills cover joins and visual memory, timing, references and guides, sound and text, Story and Cast, and the API. Together they describe every feature, including visual memory, plates, RefMods, takes, the continuity check, long clips and voice clips, which the earlier single skill did not mention. `GET /h3c/timeline/instructions` serves the whole pack as `skills` (`instructions_revision` `external-instructions-v8`), and `python skills/install.py` links it into the agent skill folders on this computer.
+- **22-frame context.** `context_frames` now offers 22 (0.9 s) next to 39, 90 and 141, in the node combos, the Timeline API schema and limits, and external Timeline preparation (`instructions_revision` `external-instructions-v9`). A continuing box adds the same new frames at 22 as at 39 and generates 17 fewer, so sampling is slightly cheaper; 39 stays the default because 0.9 s carries less motion into fast action.
+- **Comparison tools.** `tools/side_by_side.py` lays clips out in a row on one clock with labels and one audio track per clip, and `tools/render_scene.py` renders a scene file box by box on a ComfyUI server with a time cap. `examples/prefixstream_scenes/` holds the memory and continuation test scenes they were used with.
 
 ## [0.4.0] - 2026-11-03
 
