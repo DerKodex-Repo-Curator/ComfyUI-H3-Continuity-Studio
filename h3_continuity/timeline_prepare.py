@@ -463,7 +463,7 @@ def normalize(line):
         line["timed_text"] = dict(line["timed_text"], **parsed.timed_text)
     for key in ("plates", "audio_clips", "refmods", "disabled_refs", "reference_descriptions", "bridges"):
         if key in line:
-            line[key] = copy.deepcopy(getattr(parsed, key))
+            line[key] = copy.deepcopy(parsed.all_bridges if key == "bridges" else getattr(parsed, key))
     return parsed
 
 

@@ -101,6 +101,7 @@ nav:
       - Cast and the Story bible: story/cast.md
   - Sound and text:
       - Audio lanes: sound/audio.md
+      - Dialogue cues: sound/dialogue.md
       - Timed text: sound/timed-text.md
   - Output:
       - Full video and projects: output/full-video-and-projects.md

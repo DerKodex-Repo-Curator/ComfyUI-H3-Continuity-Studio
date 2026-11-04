@@ -4,9 +4,9 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
 import {
   FPS, isFresh, limits, newId, newSeed, mentions, assemblePrompt, effectiveRefmods, activeAudioClips, referenceEnabled,
-} from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
+} from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
 import { frameTargets, acceptedGuideFrames } from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
-import { halfPrompt, roundUp, number, start } from './h3c_shot_split.mjs?v=20261103-guide-split-1';
+import { halfPrompt, roundUp, number, start } from './h3c_shot_split.mjs?v=20261103-bridges-guide-split-1';
 
 const canonical = (target) => target?.kind === 'shot' && target.shot === 1 ? { kind: 'first' } : target;
 const sameTarget = (a, b) => a?.kind === b?.kind && a?.shot === b?.shot;

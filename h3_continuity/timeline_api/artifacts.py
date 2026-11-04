@@ -12,7 +12,7 @@ import av
 from .. import nodes, store
 from .assets import contained, file_hash
 from .contracts import APIError, digest
-from .planning import native_status
+from .planning import media_units, native_status
 
 
 class Artifacts:
@@ -145,7 +145,7 @@ class Artifacts:
         with nodes.SEQUENCE_LOCK:
             status = native_status(self._body(project))
             artifacts = []
-            for unit in job["plan"]["units"]:
+            for unit in media_units(job["plan"]["units"]):
                 descriptor = self._unit(project, unit, status)
                 provenance = self.records.get_blob_record("unit",project["id"]+":"+unit["id"])
                 if (not provenance.get("verified") or provenance["input_sha256"] != unit["input_sha256"]
@@ -171,7 +171,7 @@ class Artifacts:
                 rate = self.records.get_blob_record("asset",asset["asset_id"])["media"]["sample_rate"]
             fps = project.get("profile_snapshot", {}).get("output_fps", 24)
             descriptor = {**descriptor,"audio_sample_rate": rate,
-                          "output_frames": sum(round(unit["frames"] * fps / 24) for unit in job["plan"]["units"])}
+                          "output_frames": sum(round(unit["frames"] * fps / 24) for unit in media_units(job["plan"]["units"]))}
             artifacts.append(self.snapshot(project,job,descriptor,expected_frames=job["plan"]["total_frames"],kind="full_video"))
             return artifacts
 

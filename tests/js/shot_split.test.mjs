@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseState } from '../../web/h3c_timeline_model.mjs?v=20261013-node-settings-1';
-import { splitBox } from '../../web/h3c_shot_split.mjs?v=20261103-guide-split-1';
+import { parseState } from '../../web/h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
+import { splitBox } from '../../web/h3c_shot_split.mjs?v=20261103-bridges-guide-split-1';
 import { syncTargets, acceptedGuideFrames } from '../../web/h3c_shot_preview.mjs?v=20261012-still-prompts-1';
 import { CONTEXT, guideFile, shotGuideTimeline } from './guide_split_fixtures.mjs';
 

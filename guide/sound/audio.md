@@ -40,4 +40,8 @@ With at least one clip ticked, the full video plays **only** the ticked clips:
 - the sample rate is the first ticked clip's (in slot order) and the audio is stereo if any ticked clip is;
 - there are no fades.
 
-The full video rebuilds on its own a moment after a ticked clip changes, with nothing re-rendered, and the Full video view names the clips it plays. Ticking never puts a rendered clip out of date. If a ticked clip's file is missing the full video isn't rebuilt and the Studio names the file. Clip and bridge takes keep H3's audio, and unticking every clip brings H3's audio back. With [bridges](../continuity/joins-and-bridges.md#only-the-full-video-gets-longer), a ticked clip starts with its clip after the bridges before it, then plays straight through.
+The full video rebuilds on its own a moment after a ticked clip changes, with nothing re-rendered, and the Full video view names the clips it plays. Ticking never puts a rendered clip out of date. If a ticked clip's file is missing the full video isn't rebuilt and the Studio names the file. Clip and bridge takes keep H3's audio, and unticking every clip brings H3's audio back. With [inserted bridges](../continuity/joins-and-bridges.md#only-the-full-video-gets-longer), a ticked clip starts with its clip after the bridges before it, then plays straight through. [Replacement bridges](../continuity/joins-and-bridges.md#replacement-bridges) add no time, so a ticked clip plays at its own place across them.
+
+## Locked to the sequence clock
+
+An uploaded clip's settings also have **Locked to the sequence clock**. A locked recording keeps its place in the full video: no bridge may add time across a cut inside it, so those cuts stay cuts and its dialogue stays in sync, and the Timeline names any bridge or setting that would move the picture away from it. Lock a recording when its words or beats must line up with the clips. See [Dialogue cues](dialogue.md#lock-a-recording).

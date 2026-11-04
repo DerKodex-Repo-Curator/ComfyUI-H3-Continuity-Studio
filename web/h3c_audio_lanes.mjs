@@ -1,4 +1,4 @@
-import * as model from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
+import * as model from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
 import { importWhisper, validateTimedText, setTextSync, textClock, projectTimedText } from './h3c_timed_text.mjs?v=20261011-reference-preparation-1';
 
 const node = (tag, cls, text) => {
@@ -265,7 +265,7 @@ export class AudioLanes {
         }
         item.append(svg);
       }
-      item.append(node('span', 'h3ct-audio-label', `@${clip.slot} · ${title} · ${clip.duration.toFixed(2)} s${reference?.replaced ? ' · Replaced source' : ''}`));
+      item.append(node('span', 'h3ct-audio-label', `@${clip.slot} · ${title} · ${clip.duration.toFixed(2)} s${reference?.replaced ? ' · Replaced source' : ''}${clip.locked === true && clip.file ? ' · locked' : ''}`));
       for (const edge of ['left', 'right']) {
         const handle = node('div', `h3ct-audio-handle ${edge}`);
         handle.title = `Drag to trim the ${edge} edge`;
@@ -354,6 +354,16 @@ export class AudioLanes {
         this.editor.commit();
       });
       field.append(input); row.append(field);
+      const lock = node('label', 'h3ct-field', 'Locked to the sequence clock'), locked = node('input');
+      locked.type = 'checkbox'; locked.checked = clip.locked === true;
+      locked.setAttribute('aria-label', 'Locked to the sequence clock');
+      lock.title = 'Keep this recording at its place in the full video: no bridge may add time across a cut inside '
+        + 'it, so its dialogue stays in sync';
+      locked.addEventListener('change', () => {
+        if (locked.checked) clip.locked = true; else delete clip.locked;
+        this.editor.commit();
+      });
+      lock.append(locked); row.append(lock);
     } else row.append(node('span', 'h3ct-hint', 'Upload this audio’s file to play it in the full video.'));
     this.settings.append(row);
     const timing = node('div', 'h3ct-row');

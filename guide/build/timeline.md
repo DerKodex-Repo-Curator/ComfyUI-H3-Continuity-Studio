@@ -44,8 +44,8 @@ A **bridge** is a generated move between two rendered clips; see [Joins and brid
 **Seed**
 :   The clip's seed, a button for a new random seed, and a **Seed mode**. The seed belongs to the clip, so changing it renders only that clip again.
 
-**Bridge · extra frames outside Timeline time**
-:   **Insert bridge**, shown on a join that cuts. See [Joins and bridges](../continuity/joins-and-bridges.md#bridges).
+**Bridge**
+:   **Insert bridge** (extra frames outside Timeline time) or **Replace around the cut** (a reviewed region regenerated within it, unavailable for now), shown on a join that cuts. See [Joins and bridges](../continuity/joins-and-bridges.md#bridges).
 
 **FLF2VA + cached RefMods**
 :   An experimental per-clip switch that converts first, last and reference images into reusable RefMods. It is off by default. Use it only with the matching example workflow.
@@ -74,4 +74,4 @@ Renders are written to `output/h3_sequences/<name>/`: one MP4, one latent file (
 
 ## Status you can read
 
-The head of the Studio reads like **6 clips · 30.8 s · 1 bridge, +1.9 s · All 6 boxes are rendered.** The *+1.9 s* is the time bridges add to the *full video only*; the Timeline's own time, audio lanes and timed text do not include it.
+The head of the Studio reads like **6 clips · 30.8 s · 1 bridge, +1.9 s · All 6 boxes are rendered.** The *+1.9 s* is the time inserted bridges add to the *full video only*; the Timeline's own time, audio lanes and timed text do not include it. [Replacements](../continuity/joins-and-bridges.md#replacement-bridges) are counted after it, for example *· 2 replacements*, and add no time.

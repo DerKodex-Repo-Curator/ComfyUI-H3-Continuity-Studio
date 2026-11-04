@@ -1,5 +1,5 @@
 // H3 Story's saved state, applying a Write result to the Timeline, and Undo. Pure: no DOM and no ComfyUI.
-import { FPS, normalize, totalFrames } from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
+import { FPS, normalize, totalFrames } from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
 import { validateTimedText, textClock } from './h3c_timed_text.mjs?v=20261011-reference-preparation-1';
 
 export const VERSION = 1;

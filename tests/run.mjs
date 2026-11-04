@@ -11,7 +11,7 @@ const portable = join(homedir(), 'ComfyUI', 'ComfyUI_windows_portable', 'python_
 const python = process.env.H3_PYTHON || (existsSync(portable) ? portable : 'python');
 const run = (command, args) => spawnSync(command, args, { cwd: root, stdio: 'inherit' }).status;
 
-const js = run(process.execPath, ['--test', 'tests/js/*.test.mjs']);
+const js = run(process.execPath, ['--test', 'tests/js/*.test.mjs', 'tests/web/*.test.mjs']);
 // `discover -t .` puts the checkout on sys.path, which ComfyUI's embedded Python does not do for `-m`.
 const py = run(python, ['-m', 'unittest', 'discover', '-s', 'tests', '-t', '.', '-p', 'test_*.py']);
 if (py == null) console.error(`Could not start ${python}; set H3_PYTHON to ComfyUI's Python.`);

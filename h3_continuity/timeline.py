@@ -32,6 +32,8 @@ MENTION = re.compile(r"(?<![\w@])@(image|audio|video_audio|video)(\d+)(?!\w)", r
 RAW_TAG = re.compile(r"<(?:Picture|Audio|Video) \d+>")
 IMAGE_SLOT = re.compile(r"@?image(\d+)", re.IGNORECASE)
 MEMORY_MODES = ("off", "scene", "selected", "cast")
+# Reader features a Timeline can name in "requires"; an editor writes them when the file depends on them.
+REQUIRES = ("dialogue-cues-1", "replacement-bridges-1")
 
 
 @dataclass
@@ -70,8 +72,14 @@ class Timeline:
     story: list = field(default_factory=list)
     # Whether each box plays exactly its frames; empty without `parse`. Not on Box either.
     exact: list = field(default_factory=list)
-    # The bridges on cuts, each {"before", "frames", "seed", "prompt"}; outside the boxes, which never see them.
+    # The bridges on cuts that insert time, each {"before", "frames", "seed", "prompt"}; outside the boxes, which never
+    # see them.
     bridges: list = field(default_factory=list)
+    # The bridges that replace a reviewed region instead, each {"before", "mode": "replace", "left", "right", "seed",
+    # "prompt"} with optional "review" and "selected"; see replacement.py.
+    replacements: list = field(default_factory=list)
+    # Both kinds in the Timeline's order, as the JSON keeps them.
+    all_bridges: list = field(default_factory=list)
     render_bridge: str | None = None
     still_requests: list = field(default_factory=list)
     continuity: dict | None = None
@@ -79,6 +87,10 @@ class Timeline:
     still_prompt_preparation: dict | None = None
     # Most frames a box can generate: 362 unless the JSON asks for more (windowed sampling).
     max_frames: int = MAX_FRAMES
+    # Cues bound to recordings and observed protections: {"version", "cues", "observed"}; see dialogue.py.
+    dialogue: dict | None = None
+    # Whether each box keeps its own typed dialogue instead of the cues; empty without `parse`. Not on Box either.
+    manual_dialogue: list = field(default_factory=list)
 
 
 @dataclass
@@ -154,6 +166,12 @@ def parse(text):
         raise _error("the timeline must be a JSON object")
     if data.get("version", 1) != 1:
         raise _error(f"timeline version {data['version']!r} is not supported; this node reads version 1")
+    requires = data.get("requires", [])
+    if not isinstance(requires, list) or any(not isinstance(item, str) for item in requires):
+        raise _error("requires must be a list of feature names")
+    unknown = [item for item in requires if item not in REQUIRES]
+    if unknown:
+        raise _error(f"this Timeline needs a newer H3 Continuity ({', '.join(unknown)}); update the node pack")
     boxes = data.get("boxes") or []
     if not isinstance(boxes, list):
         raise _error("'boxes' must be a list")
@@ -162,6 +180,10 @@ def parse(text):
         raise _error("render_box must be the number of a box in this timeline")
     parsed = Timeline(_text(data.get("prompt"), "the shared prompt"), [_box(raw, n) for n, raw in enumerate(boxes, 1)], target)
     parsed.exact = [_exact(raw, n, box) for n, (raw, box) in enumerate(zip(boxes, parsed.boxes), 1)]
+    for n, raw in enumerate(boxes, 1):
+        if raw.get("dialogue", "cues") not in ("cues", "manual"):
+            raise _error(f"box {n} dialogue must be cues or manual")
+    parsed.manual_dialogue = [raw.get("dialogue") == "manual" for raw in boxes]
     from . import still_scene, reference_assets
     parsed.reference_preparation = reference_assets.validate(data["reference_preparation"]) if "reference_preparation" in data else None
     if "still_prompt_preparation" in data:
@@ -172,6 +194,8 @@ def parse(text):
     if not isinstance(parsed.still_requests, list) or any(not isinstance(item, dict) for item in parsed.still_requests):
         raise _error("still_requests must be a list of request receipts")
     parsed.timed_text = timed_text.validate(data.get("timed_text"))
+    from . import dialogue
+    parsed.dialogue = dialogue.validate(data.get("dialogue"))
     parsed.bible = data.get("bible")
     parsed.story = [{"schedule": raw.get("schedule"), "source": raw.get("source"),
                      "cast": raw["cast"] if isinstance(raw.get("cast"), dict) else {}} for raw in boxes]
@@ -184,8 +208,6 @@ def parse(text):
             if not isinstance(item, dict) or type(item.get("frame")) is not int or item["frame"] < 0:
                 raise _error(f"box {index + 1} memories need a source box and a nonnegative frame")
             _text(item.get("label"), "memory description")
-        if box.memory != "cast":
-            memory_sources(parsed, index)
     parsed.audio_clips = data.get("audio_clips", [])
     if not isinstance(parsed.audio_clips, list):
         raise _error("audio_clips must be a list")
@@ -208,6 +230,11 @@ def parse(text):
                 raise _error("audio clip in_full_video must be true or false")
             if clip["in_full_video"] and "file" not in clip:
                 raise _error("only an uploaded audio clip can play in the full video")
+        if "locked" in clip:
+            if type(clip["locked"]) is not bool:
+                raise _error("audio clip locked must be true or false")
+            if clip["locked"] and "file" not in clip:
+                raise _error("only an uploaded audio clip can be locked to the sequence clock")
     parsed.pictures = data.get("pictures", [])
     if not isinstance(parsed.pictures, list):
         raise _error("pictures must be a list")
@@ -304,10 +331,16 @@ def parse(text):
                 raise _error(f"box {n} needs a plate revision or an empty string for the original")
             if revision and (revision not in revisions or revisions[revision]["slot"] != slot or not revisions[revision].get("image")):
                 raise _error(f"box {n} has a missing accepted plate for {slot}")
-    parsed.bridges = _bridges(data.get("bridges", []), parsed)
+    # After the audio lanes, disabled references and dialogue are parsed: whether a box speaks decides what it remembers.
+    for index, box in enumerate(parsed.boxes):
+        if box.memory != "cast":
+            memory_sources(parsed, index)
+    parsed.all_bridges = _bridges(data.get("bridges", []), parsed)
+    parsed.bridges = [bridge for bridge in parsed.all_bridges if bridge.get("mode") != "replace"]
+    parsed.replacements = [bridge for bridge in parsed.all_bridges if bridge.get("mode") == "replace"]
     target = data.get("render_bridge")
     if target is not None:
-        if not isinstance(target, str) or target not in {bridge["before"] for bridge in parsed.bridges}:
+        if not isinstance(target, str) or target not in {bridge["before"] for bridge in parsed.all_bridges}:
             raise _error("render_bridge must be the box id of one of this Timeline's bridges")
         if parsed.render_box is not None:
             raise _error("a run renders one box or one bridge: drop render_box or render_bridge")
@@ -414,11 +447,26 @@ def _bridges(raw, parsed):
                                      "a bridge needs a box that starts with Cut or New scene")
         if before in taken:
             raise BridgeError(index, f"bridges {taken[before] + 1} and {n} both lead into box {position + 1}")
-        frames = item.get("frames")
-        if type(frames) is not int:
-            raise BridgeError(index, f"bridge {n} frames must be 12, 29 or 46")
-        if frames not in BRIDGE_FRAMES:
-            raise BridgeError(index, f"bridge {n} has {frames} frames; a bridge has 12, 29 or 46")
+        mode = item.get("mode", "insert")
+        if mode not in ("insert", "replace"):
+            raise BridgeError(index, f"bridge {n} mode must be insert or replace")
+        if mode == "replace":
+            if "frames" in item:
+                raise BridgeError(index, f"bridge {n} replaces footage, so it has left and right coverage, not frames")
+            left, right = item.get("left"), item.get("right")
+            if type(left) is not int or type(right) is not int or left < 0 or right < 0:
+                raise BridgeError(index, f"bridge {n} left and right must be whole numbers of frames")
+            if left + right not in BRIDGE_FRAMES:
+                raise BridgeError(index, f"bridge {n} replaces {left + right} frames; a replacement covers 12, 29 or 46")
+            for key in ("review", "selected"):
+                if key in item and not isinstance(item[key], str):
+                    raise BridgeError(index, f"bridge {n} {key} must be text")
+        else:
+            frames = item.get("frames")
+            if type(frames) is not int:
+                raise BridgeError(index, f"bridge {n} frames must be 12, 29 or 46")
+            if frames not in BRIDGE_FRAMES:
+                raise BridgeError(index, f"bridge {n} has {frames} frames; a bridge has 12, 29 or 46")
         seed = item.get("seed")
         if seed is None:
             seed = zlib.crc32(f"bridge:{before}".encode("utf-8"))
@@ -428,7 +476,12 @@ def _bridges(raw, parsed):
         if prompt is not None and not isinstance(prompt, str):
             raise BridgeError(index, f"bridge {n} prompt must be text")
         taken[before] = index
-        bridges.append({"before": before, "frames": frames, "seed": seed, "prompt": prompt or ""})
+        if mode == "replace":
+            bridges.append({"before": before, "mode": "replace", "left": left, "right": right, "seed": seed,
+                            "prompt": prompt or "", **{key: item[key] for key in ("review", "selected") if key in item}})
+        else:
+            bridges.append({"before": before, "frames": frames, "seed": seed, "prompt": prompt or "",
+                            **({"mode": "insert"} if "mode" in item else {})})
     return bridges
 
 
@@ -462,11 +515,22 @@ def memory_sources(timeline, index):
             if item["frame"] >= played_frames(timeline, source):
                 raise _error(f"box {index + 1} memory is past the end of box {source + 1}; choose an earlier moment")
             result.append((source, item["frame"], item.get("label") or "visual continuity"))
-    if index and box.cut:
+    if replays_previous(timeline, index):
         # The full preceding video covers its individual moments, independently of Cast's picture/budget filters.
         return [(index - 1, 0, "the previous shot before this cut"),
                 *(item for item in result if box.memory == "selected" or item[0] != index - 1)]
+    if index and box.cut:
+        before = (index - 1, max(0, played_frames(timeline, index - 1) - 5), "the moment before this cut")
+        return result + [before] if not any(item[:2] == before[:2] for item in result) else result
     return result
+
+
+def replays_previous(timeline, index):
+    """Whether cut box `index`'s memory starts with the whole preceding video. H3 replays that video's lip movement
+    onto the new shot, so not when either side of the cut speaks."""
+    from . import dialogue
+    return (bool(index) and timeline.boxes[index].cut
+            and not (dialogue.speaks(timeline, index) or dialogue.speaks(timeline, index - 1)))
 
 
 def scene_sources(timeline, index):
@@ -947,6 +1011,10 @@ def plan_box(timeline, index, context, carry_audio, width, height, ref_image_siz
     text = assemble_prompt(timeline, index)
     if not text:
         raise _error(f"box {n} has no prompt")
+    from . import dialogue
+    problem = dialogue.box_problem(timeline, index, context, text)
+    if problem:
+        raise _error(problem)
     assigned = {ref["slot"] for ref in timeline.refmods if ref.get("strength", 1) > 0}
     slots = box_slots(timeline, index, context)
     for kind, name in mentions(text):
@@ -995,9 +1063,16 @@ def plan_box(timeline, index, context, carry_audio, width, height, ref_image_siz
     settings = box_settings(fresh, slots.mode, width, height, context, carry_audio, ref_image_size,
                             audio_context_frames=audio_context_frames)
     window = text_window(timeline, index, context)
-    prompt = timed_text.insert(rewrite(text, slots.tags), slots.mode, window)
+    prompt = timed_prompt(timeline, index, context, rewrite(text, slots.tags), slots.mode, window)
     return BoxPlan(index, box, fresh, frames, carried, frames + dropped + carried, slots, prompt,
                    layout_key(timeline, index, context), settings, notes, window)
+
+
+def timed_prompt(timeline, index, context, prose, mode, window):
+    """`prose` with box `index`'s timed text and its recordings' dialogue, as H3 receives it."""
+    from . import dialogue
+    prompt = timed_text.insert(prose, mode, window)
+    return dialogue.insert(prompt, mode, dialogue.box_events(timeline, index, context))
 
 
 def _digest(value):
@@ -1059,6 +1134,10 @@ def layout_key(timeline, index, context=39):
     text = text_chain(timeline, index, context)
     if text:
         value["timed_text"] = text
+    from . import dialogue
+    events = dialogue.box_events(timeline, index, context)
+    if events:
+        value["dialogue"] = dialogue.digest(events)
     plates = plate_chain(timeline, index)
     if plates:
         value["appearance_plates"] = plates

@@ -138,6 +138,8 @@ export function parseState(text) {
     ...(Array.isArray(data.plates) ? { plates: structuredClone(data.plates).map(({pending, job, ...p}) => p) } : {}),
     ...(record(data.bible) ? { bible: structuredClone(data.bible) } : {}),
     ...(Array.isArray(data.bridges) ? { bridges: structuredClone(data.bridges).filter(record) } : {}),
+    ...(record(data.dialogue) ? { dialogue: structuredClone(data.dialogue) } : {}),
+    ...(Array.isArray(data.requires) ? { requires: data.requires.filter((item) => typeof item === 'string') } : {}),
     boxes: boxes.map((box, index) => ({
       id: String(box.id || `box${index + 1}`),
       frames: Number.isFinite(box.frames) ? Math.round(box.frames)
@@ -162,13 +164,16 @@ export function parseState(text) {
       ...(record(box.schedule) ? { schedule: structuredClone(box.schedule) } : {}),
       ...(record(box.join) ? { join: structuredClone(box.join) } : {}),
       ...(record(box.source) ? { source: structuredClone(box.source) } : {}),
+      ...(box.dialogue === 'manual' ? { dialogue: 'manual' } : {}),
     })),
   };
 }
 
 export function serialize(state) {
+  const requires = requiredFeatures(state);
   return stringifyJSON({
     version: 1,
+    ...(requires.length ? { requires } : {}),
     prompt: state.prompt,
     ...(state.reference_preparation ? {reference_preparation:state.reference_preparation} : {}),
     ...(state.still_prompt_preparation ? {still_prompt_preparation:state.still_prompt_preparation} : {}),
@@ -186,6 +191,7 @@ export function serialize(state) {
     ...(state.plates ? { plates: state.plates } : {}),
     ...(state.bible ? { bible: state.bible } : {}),
     ...(keptBridges(state).length ? { bridges: keptBridges(state) } : {}),
+    ...(state.dialogue ? { dialogue: state.dialogue } : {}),
     boxes: state.boxes.map((box) => ({
       id: box.id, frames: box.frames, prompt: box.prompt, seed: box.seed, cut: !!box.cut,
       ...(box.seed_mode === 'randomize' ? {seed_mode:'randomize'} : {}),
@@ -202,8 +208,21 @@ export function serialize(state) {
       ...(box.schedule ? { schedule: box.schedule } : {}),
       ...(box.join ? { join: box.join } : {}),
       ...(box.source ? { source: box.source } : {}),
+      ...(box.dialogue === 'manual' ? { dialogue: 'manual' } : {}),
     })),
   });
+}
+
+// Reader features this editor writes into "requires" when the file depends on them, as timeline.REQUIRES lists them.
+export const OWN_FEATURES = ['dialogue-cues-1', 'replacement-bridges-1'];
+
+// What the Timeline needs a reader to understand: this editor's features in use, and any newer one it was given.
+export function requiredFeatures(state) {
+  const own = [];
+  if (state.dialogue?.cues?.length || state.dialogue?.observed?.length
+    || (state.audio_clips ?? []).some((clip) => clip.locked === true)) own.push('dialogue-cues-1');
+  if (keptBridges(state).some(isReplacement)) own.push('replacement-bridges-1');
+  return [...new Set([...(state.requires ?? []).filter((item) => !OWN_FEATURES.includes(item)), ...own])].sort();
 }
 
 export function normalize(state, context) {
@@ -232,9 +251,21 @@ export function bridgeOf(state, index) {
   return keptBridges(state).find((bridge) => bridge.before === state.boxes[index]?.id);
 }
 
-// A new bridge into box `index` plays 29 frames from the box's prompt, kept in the order of the boxes.
-export function insertBridge(state, index) {
-  const bridge = { before: state.boxes[index].id, frames: 29, seed: newSeed(), prompt: state.boxes[index].prompt };
+export function isReplacement(bridge) {
+  return bridge?.mode === 'replace';
+}
+
+// The uploaded, enabled clips locked to the sequence clock, as dialogue.locked_clips reads them.
+export function lockedClips(state) {
+  return (state.audio_clips ?? []).filter((clip) => clip.locked === true && clip.file && referenceEnabled(state, clip.slot));
+}
+
+// A new bridge into box `index` lasts 29 frames from the box's prompt, kept in the order of the boxes. It inserts
+// time, or with a locked recording replaces 14 frames before the cut and 15 after.
+export function insertBridge(state, index, mode = lockedClips(state).length ? 'replace' : 'insert') {
+  const before = state.boxes[index].id, seed = newSeed(), prompt = state.boxes[index].prompt;
+  const bridge = mode === 'replace' ? { before, mode: 'replace', left: 14, right: 15, seed, prompt }
+    : { before, frames: 29, seed, prompt };
   const position = (item) => state.boxes.findIndex((box) => box.id === item.before);
   state.bridges = [...keptBridges(state).filter((item) => item.before !== bridge.before), bridge]
     .sort((one, other) => position(one) - position(other));
@@ -245,10 +276,57 @@ export function removeBridge(state, index) {
   state.bridges = keptBridges(state).filter((bridge) => bridge.before !== state.boxes[index].id);
 }
 
+// The bridge into box `index` in `mode`, keeping its length; an insertion has no region to review or select.
+export function setBridgeMode(state, index, mode) {
+  const bridge = bridgeOf(state, index);
+  if (!bridge) return undefined;
+  if (mode === 'replace' && !isReplacement(bridge)) {
+    const frames = bridge.frames;
+    delete bridge.frames;
+    Object.assign(bridge, { mode: 'replace', left: Math.floor(frames / 2), right: frames - Math.floor(frames / 2) });
+  } else if (mode === 'insert' && isReplacement(bridge)) {
+    bridge.frames = bridge.left + bridge.right;
+    for (const key of ['mode', 'left', 'right', 'review', 'selected']) delete bridge[key];
+  }
+  return bridge;
+}
+
+// `frames` (snapped to a bridge length) replaced, `left` of them before the cut. A confirmed region stays named in
+// `review`; the server compares it with the new region.
+export function setCoverage(bridge, frames, left) {
+  const length = BRIDGE_FRAMES.reduce((best, item) => Math.abs(item - frames) < Math.abs(best - frames) ? item : best);
+  bridge.left = Math.min(length, Math.max(0, Math.round(Number(left) || 0)));
+  bridge.right = length - bridge.left;
+}
+
+export function confirmRegion(bridge, regionKey) {
+  bridge.review = regionKey;
+}
+
+export function selectCandidate(bridge, candidate) {
+  bridge.selected = candidate;
+}
+
+export function useOriginalCut(bridge) {
+  delete bridge.selected;
+}
+
+// The frames bridges add to the full video: replacements add none.
+export function insertedFrames(state) {
+  return keptBridges(state).filter((bridge) => !isReplacement(bridge)).reduce((sum, bridge) => sum + bridge.frames, 0);
+}
+
+export function setBoxDialogue(state, index, mode) {
+  if (mode === 'manual') state.boxes[index].dialogue = 'manual';
+  else delete state.boxes[index].dialogue;
+}
+
 // Why the bridge into box `index` can't render, as bridges.problem words it: mentions read as words, so its prompt is
-// empty only when the shared prompt and its own are.
+// empty only when the shared prompt and its own are. A replacement reads saved footage, so dropped frames don't matter.
 export function bridgeProblem(state, index) {
-  const dropped = index > 0 ? droppedFrames(state, index - 1) : 0;
+  const existing = bridgeOf(state, index);
+  const replacing = existing ? isReplacement(existing) : lockedClips(state).length > 0;
+  const dropped = index > 0 && !replacing ? droppedFrames(state, index - 1) : 0;
   if (dropped) {
     return `Box ${index} drops ${dropped} frames, so the bridge before box ${index + 1} can't start from its last frame: `
       + `give box ${index} a length on the grid.`;
@@ -381,15 +459,70 @@ export function setJoin(state, index, kind, note, context) {
   else delete box.join;
 }
 
+// The file `slot` plays now, as reference_replacements.file_for resolves it: a replacement's own file or its source
+// slot's, else the slot's own picture or clip. null when nothing plays there or the replacements form a cycle.
+export function recordingFile(state, slot) {
+  const replacements = state.reference_replacements ?? {}, seen = new Set();
+  let name = slot;
+  while (replacements[name]) {
+    if (seen.has(name)) return null;
+    seen.add(name);
+    if (replacements[name].file) return replacements[name].file;
+    name = replacements[name].source;
+  }
+  return [...state.pictures ?? [], ...state.voice_clips ?? [], ...state.audio_clips ?? []]
+    .find((entry) => entry.slot === name)?.file ?? null;
+}
+
+// Cue and clip times are decimal seconds; an edge within this of a frame edge is on it, as dialogue.EPSILON.
+const CUE_EPSILON = 1e-6;
+
+// [first frame, end frame, portrayal] of each part of `cue` its bound recording plays, rounded outward as
+// dialogue.placed rounds them; [] when the cue is unbound or outside its clip's window.
+function cueFrames(state, cue) {
+  const slot = cue.recording?.slot, file = recordingFile(state, slot), wanted = cue.recording?.file;
+  const clip = (state.audio_clips ?? []).find((item) => item.slot === slot);
+  if (!clip || (state.disabled_refs ?? []).includes(slot) || !file || !wanted
+      || ['type', 'subfolder', 'filename'].some((key) => (file[key] ?? '') !== (wanted[key] ?? ''))) return [];
+  const start = Math.max(cue.start, clip.source_start), end = Math.min(cue.end, clip.source_start + clip.duration);
+  const parts = [];
+  let cursor = cue.start;
+  for (const span of [...cue.spans ?? []].sort((one, other) => one.start - other.start)) {
+    if (span.start > cursor) parts.push([cursor, span.start, cue.portrayal]);
+    parts.push([span.start, span.end, span.portrayal]);
+    cursor = span.end;
+  }
+  if (cursor < cue.end) parts.push([cursor, cue.end, cue.portrayal]);
+  const frame = (seconds) => (clip.start + seconds - clip.source_start) * FPS;
+  return parts.map(([first, last, portrayal]) => [Math.max(first, start), Math.min(last, end), portrayal])
+    .filter(([first, last]) => last - first > CUE_EPSILON)
+    .map(([first, last, portrayal]) => [Math.floor(frame(first) + CUE_EPSILON), Math.ceil(frame(last) - CUE_EPSILON), portrayal]);
+}
+
+// Whether box `index` asks H3 for speech someone may say on screen, as dialogue.speaks: typed <d>, or a bound cue
+// over its frames that isn't all voiceover.
+export function speaks(state, index) {
+  const box = state.boxes[index];
+  if ([state.prompt, box.prompt].some((text) => String(text ?? '').includes('<d>'))) return true;
+  if (box.dialogue === 'manual') return false;
+  const start = state.boxes.slice(0, index).reduce((sum, item) => sum + item.frames, 0), end = start + box.frames;
+  return (state.dialogue?.cues ?? []).some((cue) => cueFrames(state, cue)
+    .some(([first, last, portrayal]) => portrayal !== 'voiceover' && first < end && last > start));
+}
+
 export function memorySources(state, index) {
   const box = state.boxes[index];
   if (!box || !box.memory || box.memory === 'off') return [];
   const sources = box.memory === 'scene' ? sceneSources(state, index)
     : box.memory === 'cast' ? castSources(state, index) : box.memories ?? [];
   if (!index || !box.cut) return sources;
-  const previous = state.boxes[index - 1].id;
-  return [{box: previous, frame: 0, label: 'the previous shot before this cut', whole: true},
-    ...sources.filter(item => box.memory === 'selected' || item.box !== previous)];
+  const previous = state.boxes[index - 1];
+  if (speaks(state, index) || speaks(state, index - 1)) {
+    const before = {box: previous.id, frame: Math.max(0, previous.frames - 5), label: 'the moment before this cut'};
+    return sources.some((item) => item.box === before.box && item.frame === before.frame) ? sources : [...sources, before];
+  }
+  return [{box: previous.id, frame: 0, label: 'the previous shot before this cut', whole: true},
+    ...sources.filter(item => box.memory === 'selected' || item.box !== previous.id)];
 }
 
 function sceneSources(state, index) {

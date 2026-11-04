@@ -33,7 +33,7 @@ def records(timeline, index, folder, entries, is_done, width=None, height=None):
         record = {"box": timeline.boxes[source].id, "index": source + 1, "frame": raw, "label": label,
                   "created": entry.get("created"), "layout": (entry.get("timeline") or {}).get("layout"),
                   "file_stamp": store.latent_stamp(folder, entry)}
-        if index and timeline.boxes[index].cut and number == 0:
+        if number == 0 and rules.replays_previous(timeline, index):
             # Retain replay to preserve the original phase and the group containing the played endpoint.
             # That last group can encode up to three padding frames; CLIP presentation stops at delivered.
             delivered = entry.get("context_frames", 0) + store.played_frames(entry)
@@ -89,3 +89,12 @@ def with_note(prompt, records, first_video, cast=False):
     if shot:
         return prompt[:shot.start(1)] + note + "\n" + prompt[shot.start(1):]
     return prompt + "\n" + note
+
+
+def box_prompt(timeline, index, context, plan, records):
+    """What H3 receives for box `index` planned as `plan`, with `records` noted before its timed text and dialogue."""
+    slots = plan.slots
+    prose = rules.rewrite(rules.assemble_prompt(timeline, index), slots.tags)
+    prose = with_note(prose, records, 1 + len(slots.video_inputs) + sum(ref["kind"] == "video" for ref in slots.refmods),
+                      cast=timeline.boxes[index].memory == "cast")
+    return rules.timed_prompt(timeline, index, context, prose, slots.mode, plan.text_window)

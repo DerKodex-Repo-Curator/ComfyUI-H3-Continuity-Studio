@@ -234,7 +234,11 @@ def insert(prompt, mode, window):
             state += "; keep this exact text visible through the final generated frame without clearing, fading out, exiting, or another entrance at the clipped end"
         interval = "" if window.get("static") else f"{cue['start_ms']}–{cue['end_ms']} ms, "
         lines.append(f'Visible text ({interval}{state}): "' + cue["text"] + '"')
-    block = "\n" + "\n".join(lines)
+    return insert_block(prompt, mode, "\n" + "\n".join(lines))
+
+
+def insert_block(prompt, mode, block):
+    """`block` at the end of the prompt's visual section, which an unstructured prompt becomes."""
     section = "detailed_description" if mode == "ref2va" else "integrated_multimodal_description"
     header = re.search(r"(?m)^" + section + r":", prompt)
     if header:

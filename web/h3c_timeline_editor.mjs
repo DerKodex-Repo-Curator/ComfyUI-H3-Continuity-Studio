@@ -2,20 +2,21 @@
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import * as model from './h3c_timeline_model.mjs?v=20261013-node-settings-1';
-import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261011-reference-preparation-1';
+import * as model from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
+import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261103-replacement-bridges-1';
 import { shotFrames, frameTargets, syncTargets } from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
-import {FrameImages, targetLabel} from './h3c_frame_images.mjs?v=20261103-guide-split-1';
-import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261103-guide-split-1';
-import { splitAtGuide, guideSplitTiming, describeGuideSplit, describeGuideSplitTiming } from './h3c_guide_split.mjs?v=20261103-guide-split-1';
+import {FrameImages, targetLabel} from './h3c_frame_images.mjs?v=20261103-bridges-guide-split-1';
+import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261103-bridges-guide-split-1';
+import { splitAtGuide, guideSplitTiming, describeGuideSplit, describeGuideSplitTiming } from './h3c_guide_split.mjs?v=20261103-bridges-guide-split-1';
 import { fillReferenceSwitches } from './h3c_reference_switches.mjs?v=20261010-image-descriptions-1';
 import { ReferenceReplacements } from './h3c_reference_replacements.mjs?v=20261011-reference-preparation-1';
 import { fillPicturePicker, mentionedReferences, referenceChip } from './h3c_reference_pictures.mjs?v=20261010-reference-workspace-1';
-import { CastPage } from './h3c_cast.mjs?v=20261014-reference-thumbnails-1';
+import { CastPage } from './h3c_cast.mjs?v=20261103-replacement-bridges-1';
 import { PicturesPanel, highestSlot } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
 import { CheckPanel } from './h3c_check.mjs?v=20261005-check-4';
-import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261013-node-settings-1';
-import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261013-node-settings-1';
+import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261103-replacement-bridges-1';
+import { DialoguePanel } from './h3c_dialogue.mjs?v=20261104-dialogue-key-1';
+import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261103-replacement-bridges-1';
 
 const STYLE_ID = 'h3ct-style';
 const PANEL_HEIGHT = 470;
@@ -98,6 +99,11 @@ const CSS = `
 .h3ct-bridge-mark.next { background: #c49a3a; border-color: #f0d79a; }
 .h3ct-bridge-mark.pending, .h3ct-bridge-mark.waiting { background: #2c3342; border: 1px dashed #aab1bd; }
 .h3ct-bridge-mark.problem { background: #e0605a; border: 1px solid #ffb3ad; }
+.h3ct-bridge-mark.review { background: #2c3342; border: 1px dashed #f0d79a; }
+.h3ct-replace-region { position: absolute; top: 4px; bottom: 4px; z-index: 2; pointer-events: none; border-radius: 3px;
+  border: 1px dashed rgba(122,162,247,.7);
+  background: repeating-linear-gradient(135deg, rgba(122,162,247,.22) 0 4px, transparent 4px 8px); }
+.h3ct-replace-region.plays { border: 1px solid #66bc90; background: rgba(102,188,144,.22); }
 .h3ct-bridge-mark:focus-visible { outline: 2px solid #8fbcff; outline-offset: 2px; }
 .h3ct-draft { position: absolute; top: 6px; bottom: 6px; padding: 3px 6px; font-size: 11px; pointer-events: none;
   background: rgba(122,162,247,.14); border: 1px dashed #7aa2f7; border-radius: 4px; }
@@ -316,7 +322,8 @@ export class TimelineEditor {
     this.trackEl.addEventListener('pointerdown', (event) => this.drawStart(event));
     this.stillsEl = el('div', 'h3ct-stills');
     this.audioLanes = new AudioLanes(this);
-    lane.append(this.stillsEl, this.rulerEl, this.trackEl, this.audioLanes.root, this.audioLanes.settings);
+    this.dialogue = new DialoguePanel(this);
+    lane.append(this.stillsEl, this.rulerEl, this.trackEl, this.audioLanes.root, this.audioLanes.settings, this.dialogue.root);
     this.hintEl = el('p', 'h3ct-hint');
 
     this.panelEl = el('div', 'h3ct-panel');
@@ -410,6 +417,15 @@ export class TimelineEditor {
     this.chipsEl = el('div', 'h3ct-chips');
     this.modeEl = el('div', 'h3ct-mode');
     this.promptProblemEl = el('p', 'h3ct-hint problem');
+    this.dialogueSelect = el('select', 'h3ct-select');
+    this.dialogueSelect.append(option('cues', 'From the cues'), option('manual', 'Typed in the prompt'));
+    this.dialogueSelect.addEventListener('change', () => {
+      model.setBoxDialogue(this.state, this.selected, this.dialogueSelect.value);
+      this.commit();
+    });
+    this.dialogueField = field('Dialogue', this.dialogueSelect);
+    this.dialogueField.title = "From the cues: the recording's cues in this clip's window become its <d> lines, at their "
+      + 'own times. Typed in the prompt: the clip keeps your own <d> lines and leaves the cues out';
     this.firstPicker = el('div', 'h3cp-picker');
     this.lastPicker = el('div', 'h3cp-picker');
     this.cutInput = el('input');
@@ -526,7 +542,7 @@ export class TimelineEditor {
     this.joinSettings = disclosure('Join with previous clip', joins);
     this.lengthSettings = disclosure('Length', length); this.lengthSettings.open = true;
     this.seedSettings = disclosure('Seed', field('Seed', this.seedInput, roll), field('Seed mode', this.seedMode));
-    this.bridgeDetails = disclosure('Bridge · extra frames outside Timeline time', this.bridges.field, this.bridges.root);
+    this.bridgeDetails = disclosure('Bridge · new frames across the cut', this.bridges.field, this.bridges.root);
     this.promptMarks = new MentionLayer(this.promptEl, this.mentionHooks());
 
     const shared = this.sharedRoot = el('div', 'h3ct-shared');
@@ -556,7 +572,7 @@ export class TimelineEditor {
     this.castChipsEl.setAttribute('aria-label', 'Characters, places and props in this clip');
     const cast = el('section');
     cast.append(el('div', 'h3ct-section-heading', 'In this clip'), this.castChipsEl);
-    this.tabPanels.prompt.prepend(cast, this.promptProblemEl);
+    this.tabPanels.prompt.prepend(cast, this.promptProblemEl, this.dialogueField);
     this.checks = new CheckPanel(this);
     this.continuityDetails = disclosure('Continuity check', this.checks.root); this.continuityDetails.open = true;
     this.tabPanels.takes.append(this.continuityDetails, this.takes.root, this.takes.bridgeRoot);
@@ -667,16 +683,21 @@ export class TimelineEditor {
     return PANEL_HEIGHT;
   }
 
-  // The runs Render all queues: every box that isn't done, then every bridge that isn't done and has no problem.
+  // The runs Render all queues: every box that isn't done, then every bridge that isn't done and has no problem, and
+  // a candidate for every replacement whose confirmed region has none yet.
   remaining() {
     const count = this.state.boxes.length;
     const bridges = model.keptBridges(this.state);
     const indexOf = (bridge) => this.state.boxes.findIndex((box) => box.id === bridge.before);
     if (this.stale || !this.status?.ok) {
-      return count + bridges.filter((bridge) => !model.bridgeProblem(this.state, indexOf(bridge))).length;
+      return count + bridges.filter((bridge) => (!model.isReplacement(bridge) || bridge.review)
+        && !model.bridgeProblem(this.state, indexOf(bridge))).length;
     }
-    return this.state.boxes.filter((box) => this.statusOf(box)?.status !== 'done').length
-      + bridges.filter((bridge) => !['done', 'problem'].includes(this.bridgeStatusOf(bridge.before)?.status)).length;
+    const queued = (bridge) => {
+      const status = this.bridgeStatusOf(bridge.before)?.status;
+      return model.isReplacement(bridge) ? ['pending', 'next'].includes(status) : !['done', 'problem'].includes(status);
+    };
+    return this.state.boxes.filter((box) => this.statusOf(box)?.status !== 'done').length + bridges.filter(queued).length;
   }
 
   nextBox() {
@@ -693,7 +714,7 @@ export class TimelineEditor {
       pictures: this.pictures.root, refmods: this.refmodsEl, lane: this.laneEl, hint: this.hintEl, panel: this.panelEl,
       cast: this.castEl, sharedPrompt: this.sharedRoot, clipTakes: this.takes.root,
       bridgeTakes: this.takes.bridgeRoot, continuity: this.checks.root, bridgeSettings: this.bridges.root,
-      audioSettings: this.audioLanes.settings, timedTextSettings: this.audioLanes.textSettings,
+      audioSettings: this.audioLanes.settings, dialogueSettings: this.dialogue.root, timedTextSettings: this.audioLanes.textSettings,
       audioHeader: this.audioLanes.header, timedTextHeader: this.audioLanes.textHeader,
       stillPrompts: this.frameImages.preparation.root};
   }
@@ -1087,10 +1108,11 @@ export class TimelineEditor {
     const bridges = model.keptBridges(this.state);
     const what = bridges.length ? 'clip or bridge' : 'clip';
     let summary = `${count} ${count === 1 ? 'clip' : 'clips'} · ${model.seconds(model.totalFrames(this.state))} s`;
-    if (bridges.length) {
-      const frames = bridges.reduce((sum, bridge) => sum + bridge.frames, 0);
-      summary += ` · ${bridges.length} ${bridges.length === 1 ? 'bridge' : 'bridges'}, +${model.seconds(frames)} s`;
+    const replaced = bridges.filter(model.isReplacement).length, inserted = bridges.length - replaced;
+    if (inserted) {
+      summary += ` · ${inserted} ${inserted === 1 ? 'bridge' : 'bridges'}, +${model.seconds(model.insertedFrames(this.state))} s`;
     }
+    if (replaced) summary += ` · ${replaced} ${replaced === 1 ? 'replacement' : 'replacements'}`;
     if (ok && !this.stale) summary += ` · ${this.status.message}`;
     this.summaryEl.textContent = summary;
     this.renderButton.textContent = count && !remaining ? '✓ All rendered' : `▶ Render ${remaining} remaining`;
@@ -1117,7 +1139,9 @@ export class TimelineEditor {
   }
 
   renderHint() {
-    const error = this.status && !this.status.ok ? this.status.error : this.status?.export_error;
+    const conflicts = this.status?.ok && !this.stale ? this.status.timing_conflicts ?? [] : [];
+    const error = this.status && !this.status.ok ? this.status.error
+      : [this.status?.export_error, ...conflicts].filter(Boolean).join(' ');
     const pan = getComputedStyle(this.trackEl).touchAction.includes('pan-x');
     this.hintEl.textContent = error || this.followNote || (pan
       ? 'Swipe to pan · drag edges to trim · tap a clip to edit · use + Clip to add'
@@ -1199,13 +1223,24 @@ export class TimelineEditor {
     for (const bridge of model.keptBridges(this.state)) {
       const index = this.state.boxes.findIndex((box) => box.id === bridge.before);
       const status = this.stale ? undefined : this.bridgeStatusOf(bridge.before);
+      const replacing = model.isReplacement(bridge);
       const line = bridgeLine(status, model.bridgeProblem(this.state, index));
+      if (replacing) {
+        const region = el('div', 'h3ct-replace-region');
+        region.classList.toggle('plays', !!status?.plays);
+        region.style.left = percent(Math.max(0, starts[index] - bridge.left) / span);
+        region.style.width = percent((bridge.left + bridge.right) / span);
+        this.trackEl.append(region);
+      }
       const mark = el('button', 'h3ct-bridge-mark');
       mark.type = 'button';
       if (status) mark.classList.add(status.status);
       mark.classList.toggle('problem', line.problem);
       mark.setAttribute('aria-label', `Bridge before clip ${index + 1}`);
-      mark.title = `Bridge before clip ${index + 1}: ${bridge.frames} frames, outside the Timeline's time\n${line.text}`;
+      const what = replacing
+        ? `replaces ${bridge.left + bridge.right} frames across the cut, keeping the Timeline's time`
+        : `${bridge.frames} frames, outside the Timeline's time`;
+      mark.title = `Bridge before clip ${index + 1}: ${what}\n${line.text}`;
       mark.style.left = percent(starts[index] / span);
       mark.addEventListener('pointerdown', (event) => event.stopPropagation());
       mark.addEventListener('click', (event) => {
@@ -1231,6 +1266,7 @@ export class TimelineEditor {
     this.renderStills(span);
     // AudioLanes guards typing by state/clip identity, including after its settings root is borrowed.
     this.audioLanes.render(span);
+    this.dialogue.render();
   }
 
   // The Studio sets how wide the lane draws (zoom, 1 = fit the panel).
@@ -1311,8 +1347,8 @@ export class TimelineEditor {
     mode.value = box.memory ?? 'off';
     mode.addEventListener('change', () => { box.memory = mode.value; this.commit(); });
     root.append(field('Visual memory', mode), el('p', 'h3ct-hint', box.memory === 'cast'
-      ? "Cuts also receive the full preceding video for layout and movement, even when character pictures are supplied. Cast adds earlier character and place views. A new scene follows its new setting prompt; a clip without a schedule uses Same scene."
-      : 'Cuts receive the full preceding video for layout, object appearance and movement. Same scene also remembers its establishing view; a new scene follows its new setting prompt. Selected moments add chosen earlier views. Off disables visual memory.'));
+      ? "Cuts also receive the full preceding video for layout and movement, even when character pictures are supplied. When someone speaks on either side of the cut, they remember the moment before it instead, because H3 would copy the earlier lip movement. Cast adds earlier character and place views. A new scene follows its new setting prompt; a clip without a schedule uses Same scene."
+      : 'Cuts receive the full preceding video for layout, object appearance and movement. When someone speaks on either side of the cut, they remember the moment before it instead, because H3 would copy the earlier lip movement. Same scene also remembers its establishing view; a new scene follows its new setting prompt. Selected moments add chosen earlier views. Off disables visual memory.'));
     const sources = model.memorySources(this.state, this.selected);
     const listed = sources.map(source =>
       `Clip ${this.state.boxes.findIndex(item => item.id === source.box) + 1} · ${source.whole ? 'Full video' : model.seconds(source.frame) + ' s'} · ${source.label}`).join(' / ');
@@ -1322,7 +1358,7 @@ export class TimelineEditor {
       return;
     }
     if (box.memory !== 'selected') return;
-    if (sources.some(source => source.whole)) root.append(el('p', 'h3ct-hint', listed));
+    if (sources.some(source => !(box.memories ?? []).includes(source))) root.append(el('p', 'h3ct-hint', listed));
     for (const [index, memory] of (box.memories ?? []).entries()) {
       const row = el('div', 'h3ct-row');
       const source = el('select', 'h3ct-select');
@@ -1728,11 +1764,15 @@ export class TimelineEditor {
     this.titleEl.textContent = `Clip ${this.selected + 1} · ${model.lengthLabel(this.state, this.selected, context)}`;
     this.clipActions.firstElementChild.textContent = `Clip ${this.selected + 1} actions`;
     const info = model.describeBox(this.state, this.selected, this.connectedSets(), context);
-    this.promptProblemEl.textContent = info.problems.join(' ');
-    this.promptProblemEl.hidden = !info.problems.length;
+    const spoken = this.stale ? '' : this.statusOf(box)?.dialogue_problem;
+    const blocking = [...info.problems, ...(spoken ? [`${spoken.charAt(0).toUpperCase()}${spoken.slice(1)}.`] : [])];
+    this.promptProblemEl.textContent = blocking.join(' ');
+    this.promptProblemEl.hidden = !blocking.length;
+    this.dialogueField.hidden = !this.state.dialogue?.cues?.length;
+    this.dialogueSelect.value = box.dialogue === 'manual' ? 'manual' : 'cues';
     this.boxRenderButton.textContent = renderLabel(this.selected + 1, this.takeCount());
     this.boxRenderButton.title = 'Render only this clip using its seed mode, keeping its saved prompt and neighboring videos';
-    this.boxRenderButton.disabled = this.host.hasVideo?.()===false || this.queuing || info.problems.length > 0 || !this.seedInput.validity.valid;
+    this.boxRenderButton.disabled = this.host.hasVideo?.()===false || this.queuing || blocking.length > 0 || !this.seedInput.validity.valid;
     const tags = info.tags.map((item) => `${item.tag} = ${item.name}`).join(', ');
     const guides = info.guides.map((item) => ` · ${item.name} guides the ${item.frame} frame`).join('');
     const problems = info.problems.length ? ` · ${info.problems.join(' ')}` : '';

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseState, serialize } from '../../web/h3c_timeline_model.mjs?v=20261013-node-settings-1';
-import { guideSplitTiming, splitAtGuide, describeGuideSplit } from '../../web/h3c_guide_split.mjs?v=20261103-guide-split-1';
+import { parseState, serialize } from '../../web/h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
+import { guideSplitTiming, splitAtGuide, describeGuideSplit } from '../../web/h3c_guide_split.mjs?v=20261103-bridges-guide-split-1';
 import { CONTEXT, guideFile, shotGuideTimeline, continuingTimeline, noFirstTimeline } from './guide_split_fixtures.mjs';
 
 const load = (timeline) => parseState(JSON.stringify(timeline));

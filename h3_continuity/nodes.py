@@ -18,7 +18,9 @@ SegmentType = io.Custom("H3C_SEGMENT")
 # ponytail: serialize local saves/exports; use per-sequence locks if concurrent exports become common.
 SEQUENCE_LOCK = threading.RLock()
 # The Timeline hands H3 Save these record keys for this save only; saved entries never hold them.
-UNSAVED = ("splice", "soundtrack", "export_error")
+UNSAVED = ("splice", "replace", "soundtrack", "export_error")
+# Frames of footage a candidate's previews show on each side of it.
+PREVIEW_FRAMES = 48
 
 
 def sequences_root():
@@ -262,6 +264,9 @@ class H3C_SaveSegment(io.ComfyNode):
         if "bridge" in (segment.timeline or {}):
             return cls.save_bridge(segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate,
                                    description, notes, color_space)
+        if "replacement" in (segment.timeline or {}):
+            return cls.save_replacement(segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate,
+                                        description, notes, color_space)
 
         with SEQUENCE_LOCK:
             authorize_sequence(sequence.name, sequence_owner(cls), "save_segment")
@@ -308,7 +313,8 @@ class H3C_SaveSegment(io.ComfyNode):
             if (write_full_video and not segment.timeline) or segment.timeline_complete:
                 info += " " + ((segment.timeline or {})['export_error'] if (segment.timeline or {}).get('export_error') else
                                rebuild_full_video(folder, sequence.name, manifest, crf, spliced,
-                                                 (segment.timeline or {}).get("soundtrack", ()), managed_owner=sequence_owner(cls)))
+                                                 (segment.timeline or {}).get("soundtrack", ()), managed_owner=sequence_owner(cls),
+                                                 replaced=_replaced(folder, manifest, segment.timeline)))
             if notes:
                 info += " " + " ".join(notes)
             return io.NodeOutput(info, ui=ui.PreviewText(info))
@@ -355,7 +361,64 @@ class H3C_SaveSegment(io.ComfyNode):
             if segment.timeline_complete:
                 info += " " + (record['export_error'] if record.get('export_error') else
                                rebuild_full_video(folder, sequence.name, manifest, crf, bridges.spliced(folder, manifest, keys),
-                                                 record.get("soundtrack", ()), managed_owner=sequence_owner(cls)))
+                                                 record.get("soundtrack", ()), managed_owner=sequence_owner(cls),
+                                                 replaced=_replaced(folder, manifest, record)))
+            if notes:
+                info += " " + " ".join(notes)
+            return io.NodeOutput(info, ui=ui.PreviewText(info))
+
+
+    @classmethod
+    def save_replacement(cls, segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate,
+                         description, notes, color_space="sRGB"):
+        """Saves a replacement candidate beside the earlier ones; nothing is moved and nothing is selected."""
+        from . import replacement_candidates
+        sequence, record = segment.sequence, segment.timeline
+        from .timeline_api.service import authorize_sequence, sequence_owner
+        with SEQUENCE_LOCK:
+            authorize_sequence(sequence.name, sequence_owner(cls), "save_segment")
+            now = datetime.datetime.now()
+            folder = sequence.folder
+            os.makedirs(folder, exist_ok=True)
+            manifest = store.load_manifest(folder)
+            box = record["replacement"]
+            taken = {entry.get("candidate") for entry in replacement_candidates.entries(manifest, box)}
+            salt, candidate = 0, None
+            while candidate is None or candidate in taken:
+                candidate = replacement_candidates.candidate_id(box, f"{now.isoformat()}#{salt}", record["seed"],
+                                                                record["region"])
+                salt += 1
+            width, height = latents.pixel_size(video)
+            entry = {
+                "box": box, "candidate": candidate, "stem": replacement_candidates.stem(box, candidate),
+                "frames": frames, "context_frames": segment.context_frames, "carried_audio": segment.carried_ticks > 0,
+                "latent_width": width, "latent_height": height, "video": None, "audio_sample_rate": sample_rate,
+                "description": description or segment.description or "", "created": now.isoformat(timespec="seconds"),
+                "timeline": {**{key: value for key, value in record.items() if key not in UNSAVED},
+                             "candidate": candidate},
+                "played": record["played"],
+            }
+            if segment.carried_audio_start:
+                entry['audio_pin'] = {'start_tick': segment.carried_audio_start, 'ticks': segment.carried_ticks}
+            if images is not None:
+                _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space)
+            store.save_segment(folder, entry, video, audio_latent, waveform)
+            if images is not None:
+                try:
+                    note = write_previews(folder, manifest, entry, crf,
+                                          bridges.spliced(folder, manifest, record["splice"]) if record.get("splice") else [],
+                                          record.get("soundtrack", ()))
+                except (OSError, ValueError, RuntimeError) as error:
+                    note = f"No preview: {error}"
+                if note:
+                    notes.append(note)
+            replacement_candidates.add(manifest, entry)
+            store.write_manifest(folder, manifest)
+            info = (f"Saved replacement candidate {candidate} before box {sequence.index} of '{sequence.name}': "
+                    f"{entry['played']} frames ({timing.seconds(entry['played']):.2f} s) in place of the same number. "
+                    "Select it in the Studio to play it in the full video.")
+            if images is None:
+                info += " No images were connected, so it has no video to review or play."
             if notes:
                 info += " " + " ".join(notes)
             return io.NodeOutput(info, ui=ui.PreviewText(info))
@@ -392,13 +455,107 @@ def _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, 
                       "color_space": color_space}
 
 
+def _replaced(folder, manifest, record):
+    """The selected candidates a Timeline record lists that still play after this save."""
+    if not (record or {}).get("replace"):
+        return []
+    from . import replacement_candidates
+    return replacement_candidates.selected_entries(folder, manifest, record["replace"])
+
+
 def _not_rebuilt(error):
     return f"Full video not rebuilt: {str(error).removeprefix('H3 Timeline: ').rstrip('.')}."
 
 
-def rebuild_full_video(folder, name, manifest, crf, spliced=(), soundtrack=(), *, managed_owner=None):
-    """Joins the saved segments, each `spliced` bridge before the segment of its box. With `soundtrack` clips
-    (`audio_tracks.marked`), it plays them instead of the segments' audio."""
+def ordered_parts(manifest, spliced=(), replaced=()):
+    """The full video's parts in order, each (entry, first frame, frames, inserts time): every saved segment, each
+    `spliced` bridge before the segment of its box, and each `replaced` candidate at its box's join in place of the
+    frames it covers on both sides."""
+    segments = manifest["segments"]
+    by_box = {(entry.get("timeline") or {}).get("box"): entry for entry in segments}
+    leading = {entry["box"]: entry for entry in spliced}
+    candidates = {entry["box"]: entry for entry in replaced}
+    cuts = {}
+    for candidate in replaced:
+        after = by_box.get(candidate["box"])
+        before = next((entry for entry in segments if after and entry["index"] == after["index"] - 1), None)
+        if before is None:
+            raise ValueError(f"H3 Timeline: replacement candidate {candidate.get('candidate')} has no saved boxes "
+                             "on both sides")
+        record = candidate["timeline"]
+        cuts[after["index"]] = (record["right"], cuts.get(after["index"], (0, 0))[1])
+        cuts[before["index"]] = (cuts.get(before["index"], (0, 0))[0], record["left"])
+    parts = []
+    for entry in segments:
+        box_id = (entry.get("timeline") or {}).get("box")
+        if box_id in leading:
+            parts.append((leading[box_id], 0, store.played_frames(leading[box_id]), True))
+        if box_id in candidates:
+            parts.append((candidates[box_id], 0, store.played_frames(candidates[box_id]), False))
+        start, end = cuts.get(entry["index"], (0, 0))
+        count = store.played_frames(entry) - start - end
+        if count < 1:
+            raise ValueError(f"H3 Timeline: replacements leave no frame of segment {entry['index']}")
+        parts.append((entry, start, count, False))
+    return parts
+
+
+def _generated_audio(folder, parts):
+    """The parts' own audio, each window from its saved waveform."""
+    return media.assemble_audio([(e["context_frames"] + first + count, e["context_frames"] + first,
+                                  store.load_waveform(folder, e) if e.get("audio_sample_rate") else None,
+                                  e.get("audio_sample_rate")) for e, first, count, *_ in parts])
+
+
+def _video_windows(folder, parts):
+    return [(os.path.join(folder, e["video"]["file"]), first, count) for e, first, count, *_ in parts]
+
+
+def write_previews(folder, manifest, candidate, crf, spliced=(), soundtrack=()):
+    """Writes the candidate between up to PREVIEW_FRAMES of the footage on each side (`{stem}_preview.mp4`) and the
+    same moments as they play without it (`{stem}_original.mp4`), both with the same soundtrack, and records them in
+    the candidate's entry as `preview`. Returns why they weren't written, or ""."""
+    try:
+        ordered = ordered_parts(manifest, spliced, [candidate])
+    except ValueError as error:
+        return f"No preview: {str(error).removeprefix('H3 Timeline: ')}."
+    at = next(i for i, part in enumerate(ordered) if part[0] is candidate)
+    (before, before_first, before_count, _), (after, after_first, after_count, _) = ordered[at - 1], ordered[at + 1]
+    if not before.get("video") or not after.get("video"):
+        return "No preview: a box beside it has no saved frames."
+    lead, tail = min(PREVIEW_FRAMES, before_count), min(PREVIEW_FRAMES, after_count)
+    record, played = candidate["timeline"], store.played_frames(candidate)
+    start = before_first + before_count - lead
+    versions = {"preview": [(before, start, lead), (candidate, 0, played), (after, after_first, tail)],
+                "original": [(before, start, lead + record["left"]),
+                             (after, after_first - record["right"], record["right"] + tail)]}
+    heard = None
+    if soundtrack:
+        try:
+            waveform, rate = audio_tracks.soundtrack_audio(soundtrack, [(count, inserted)
+                                                                        for _, _, count, inserted in ordered])
+        except ValueError as error:
+            return f"No preview: {str(error).removeprefix('H3 Timeline: ').rstrip('.')}."
+        offset = sum(count for _, _, count, _ in ordered[:at - 1]) + before_count - lead
+        heard = (waveform[:, timing.sample_at_frame(offset, rate):
+                          timing.sample_at_frame(offset + lead + played + tail, rate)], rate)
+    files = {}
+    for kind, windows in versions.items():
+        file = f"{candidate['stem']}_{kind}.mp4"
+        written, note = media.build_full_video(os.path.join(folder, file), _video_windows(folder, windows),
+                                               heard if soundtrack else _generated_audio(folder, windows), crf)
+        if written is None:
+            return f"No preview: {note}"
+        files[kind] = file
+    candidate["preview"] = {"file": files["preview"], "original": files["original"], "frames": lead + played + tail,
+                            "region": [lead, lead + played], "fps": candidate["video"]["fps"]}
+    return ""
+
+
+def rebuild_full_video(folder, name, manifest, crf, spliced=(), soundtrack=(), *, managed_owner=None, replaced=()):
+    """Joins the saved segments, each `spliced` bridge before the segment of its box and each `replaced` candidate in
+    place of the frames it covers. With `soundtrack` clips (`audio_tracks.marked`), it plays them instead of the
+    segments' audio, on the Timeline's clock: only spliced bridges add time."""
     with SEQUENCE_LOCK:
         from .timeline_api.service import authorize_sequence
         authorize_sequence(name, managed_owner, "full_video")
@@ -417,28 +574,22 @@ def rebuild_full_video(folder, name, manifest, crf, spliced=(), soundtrack=(), *
             sources = audio_tracks.soundtrack_sources(soundtrack)
         except ValueError as error:
             return _not_rebuilt(error)
-        fingerprint = store.full_video_fingerprint(folder, manifest, spliced, sources)
+        fingerprint = store.full_video_fingerprint(folder, manifest, [*spliced, *replaced], sources)
         if fingerprint is None:
             return "Full video not rebuilt: a segment video or audio source is missing."
-        leading = {entry["box"]: entry for entry in spliced}
-        ordered = []
-        for entry in segments:
-            box_id = (entry.get("timeline") or {}).get("box")
-            if box_id in leading:
-                ordered.append(leading[box_id])
-            ordered.append(entry)
+        try:
+            ordered = ordered_parts(manifest, spliced, replaced)
+        except ValueError as error:
+            return _not_rebuilt(error)
         if soundtrack:
             try:
-                audio = audio_tracks.soundtrack_audio(soundtrack, [(store.played_frames(e), "box" in e) for e in ordered])
+                audio = audio_tracks.soundtrack_audio(soundtrack, [(count, inserted) for _, _, count, inserted in ordered])
             except ValueError as error:
                 return _not_rebuilt(error)
         else:
-            parts = [(e["context_frames"] + store.played_frames(e), e["context_frames"],
-                      store.load_waveform(folder, e) if e.get("audio_sample_rate") else None, e.get("audio_sample_rate"))
-                     for e in ordered]
-            audio = media.assemble_audio(parts)
+            audio = _generated_audio(folder, ordered)
         written, note = media.build_full_video(os.path.join(folder, f"{name}_full.mp4"),
-                                               [os.path.join(folder, e["video"]["file"]) for e in ordered], audio, crf)
+                                               _video_windows(folder, ordered), audio, crf)
         if written is None:
             return note
         manifest["full_video"] = {"file": os.path.basename(written), "sources": fingerprint}

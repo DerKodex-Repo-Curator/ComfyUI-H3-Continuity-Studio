@@ -12,6 +12,8 @@ Each remembered moment is a **five-frame** window read directly from a saved cli
 
 At a **cut**, every enabled memory mode also supplies the **full preceding video's original latent**, so layout, object appearance and movement carry over while the next shot starts from a fresh target.
 
+When someone speaks on either side of the cut, the full video is left out: H3 copies its lip movement onto the new shot, so the new clip's lines go out of sync. The clip remembers the five frames before the cut in its place. Speech here means a [dialogue cue](../sound/dialogue.md) that isn't all voiceover, or typed `<d>` lines.
+
 ## The four modes
 
 Choose one in a clip's **Settings → Visual memory**.
