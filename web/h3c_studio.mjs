@@ -7,6 +7,7 @@ import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=2026
 
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261104-partial-video-1';
+import {historyShortcut} from './h3c_history.mjs?v=20261104-history-1';
 
 const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
 const CENTER = ['viewer', 'story', 'cast', 'pictures', 'refmods'];
@@ -116,6 +117,14 @@ const CSS = `
 .h3cx-inspector .h3ct-panel { min-width:0; }
 .h3cx-inspector input, .h3cx-inspector select, .h3cx-inspector textarea { max-width:100%; }
 .h3cx-project-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.h3cx-history { width:min(520px,calc(100vw - 24px)); max-height:80dvh; overflow:auto; padding:16px;
+  background:#1d2027; color:var(--input-text,#ddd); border:1px solid #535b6c; border-radius:6px; font:14px/1.45 system-ui,sans-serif; }
+.h3cx-history::backdrop { background:#0009; }
+.h3cx-history-head { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.h3cx-history-list { display:flex; flex-direction:column; gap:4px; padding:0; list-style:none; }
+.h3cx-history-list button { width:100%; text-align:left; padding:8px; }
+.h3cx-history-list [aria-current="step"] { background:#293e60; border-color:#729cdd; }
+.h3cx-history-list .h3cx-future { opacity:.65; }
 .h3cx-mobile-nav, .h3cx-mobile-more { display:none; }
 .h3cx-focus-body { flex:1; min-width:0; }
 @media(max-width:1150px) { .h3cx-main { --h3cx-lib-min:220px; --h3cx-insp-min:310px; } .h3cx-bar .h3cx-slot { font-size:12px; } }
@@ -213,7 +222,7 @@ function link(className, text, title) {
   return node;
 }
 
-class Studio {
+export class Studio {
   constructor() {
     ensureStyle();
     this.host = null;
@@ -277,6 +286,7 @@ class Studio {
       this.focusedField = event.target.matches('input, textarea, select') ? event.target : null;
     });
     root.addEventListener('focusout', (event) => {
+      this.host?.history.endGroup();
       // CSS can hide a field and blur it before the breakpoint's change event arrives.
       if (this.focusedField === event.target && event.target.getClientRects().length) this.focusedField = null;
     });
@@ -320,6 +330,9 @@ class Studio {
     this.actionsSlot = el('span', 'h3cx-slot');
     this.newProjectButton = button('New project', 'Clear the current Timeline for a new project and keep its available sources', () => this.openNewProject());
     this.projectButton = button('Project settings', 'Shared prompt and graph settings', () => this.openFocus('project'));
+    this.undoButton = button('Undo', 'Undo the last Timeline edit (Ctrl/Cmd+Z outside text fields)', () => this.host?.undo());
+    this.redoButton = button('Redo', 'Redo the last undone edit (Ctrl/Cmd+Shift+Z or Ctrl+Y outside text fields)', () => this.host?.redo());
+    this.historyButton = button('History', 'Jump to an earlier or later Timeline state', () => this.openHistory());
     this.downloadVideo = button('Download video', '', () => {
       const download = this.host?.editor.regions().download;
       if (!this.downloadVideo.disabled) download?.click();
@@ -332,10 +345,12 @@ class Studio {
     this.inspectorToggle.setAttribute('aria-controls', 'h3cx-inspector');
     const bar = el('header', 'h3cx-bar');
     this.projectActions = el('div', 'h3cx-project-actions');
-    this.projectActions.append(this.newProjectButton, this.projectButton, this.downloadVideo);
+    this.projectActions.append(this.undoButton, this.redoButton, this.historyButton,
+      this.newProjectButton, this.projectButton, this.downloadVideo);
     bar.append(close, this.libraryToggle, this.inspectorToggle, this.nameEl, this.summarySlot, this.savedSlot,
       el('span', 'h3cx-grow'), this.projectActions);
     this.bar = bar;
+    this.buildHistory();
     const activity = el('div', 'h3cx-activity');
     this.writerCancel = el('span', 'h3cx-slot');
     this.writerMessage = el('span', 'h3cx-writer-message');
@@ -673,6 +688,7 @@ class Studio {
     if (this.host !== host) {
       this.giveBack();
       this.host = host;
+      this.historySignature = null;
       this.libraryPage = 'references';
       this.focusPage = null;
       this.mobilePage = 'viewer';
@@ -751,8 +767,61 @@ class Studio {
     this.refresh();
   }
 
+  buildHistory() {
+    const dialog = this.historyDialog = el('dialog', 'h3cx-history');
+    dialog.setAttribute('aria-label', 'Timeline history');
+    const head = el('div', 'h3cx-history-head');
+    head.append(el('h2', 'h3cx-title', 'History'), button('Close', 'Close history', () => dialog.close()));
+    this.historyList = el('ol', 'h3cx-history-list');
+    dialog.append(head, el('p', 'h3cx-note',
+      'Choose a state to restore it. Editing after a jump replaces the later steps. The latest 100 edits are kept for this session.'),
+      this.historyList);
+    dialog.addEventListener('keydown', event => {
+      event.stopPropagation();
+      const action = historyShortcut(event);
+      if (action) { event.preventDefault(); this.host?.[action](); }
+    });
+    this.root.append(dialog);
+  }
+
+  openHistory() {
+    if (!this.host) return;
+    document.activeElement?.blur?.();
+    this.host.history.endGroup();
+    this.historyDialog.showModal();
+    this.refreshHistory();
+    this.historyList.querySelector('[aria-current="step"]')?.focus();
+  }
+
+  refreshHistory() {
+    const history = this.host?.history;
+    this.undoButton.disabled = !history?.canUndo;
+    this.redoButton.disabled = !history?.canRedo;
+    if (!this.historyDialog.open) return;
+    // Status polling must not rebuild the list and steal keyboard focus.
+    const signature = JSON.stringify([history.index, history.entries.map(({label, time}) => [label, time])]);
+    if (signature === this.historySignature) return;
+    this.historySignature = signature;
+    const focused = this.historyList.contains(document.activeElement);
+    this.historyList.replaceChildren(...history.entries.map((entry, index) => {
+      const item = el('li', index > history.index ? 'h3cx-future' : '');
+      const current = index === history.index;
+      const control = button(`${index}. ${entry.label}${current ? ' · Current' : ''}`,
+        new Date(entry.time).toLocaleTimeString(), () => {
+          this.host.jumpHistory(index);
+          this.historyList.querySelector('[aria-current="step"]')?.focus();
+        });
+      if (current) control.setAttribute('aria-current', 'step');
+      item.append(control);
+      return item;
+    }));
+    if (focused) this.historyList.querySelector('[aria-current="step"]')?.focus();
+  }
+
   close() {
     if (this.root.hidden) return;
+    this.historyDialog.close();
+    this.host?.history.endGroup();
     this.trimmingPointer = null;
     this.focusedField = null;
     this.remembered = {host:this.host, snapshot:this.snapshot()};
@@ -930,6 +999,7 @@ class Studio {
   refresh() {
     if (this.root.hidden || !this.host) return;
     const host = this.host;
+    this.refreshHistory();
     if (this.inspectorTarget.kind === 'clip')
       this.inspectorTarget = {kind: 'clip', box: host.editor.box()?.id ?? null};
     const watch = host.watch();
@@ -1154,10 +1224,13 @@ class Studio {
       else this.close();
       return;
     }
-    // ComfyUI ignores keys while a modal dialog such as the Studio is open, so the Studio hands it Undo and Redo. Text
-    // fields keep their own undo.
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.repeat && /^[yz]$/i.test(event.key)
-      && !event.target.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"])')) this.host?.undoKey?.(event);
+    const action = historyShortcut(event);
+    if (action) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.host?.[action]();
+      return;
+    }
     if (!event.ctrlKey && !event.metaKey && !event.altKey) event.stopPropagation();
   }
 

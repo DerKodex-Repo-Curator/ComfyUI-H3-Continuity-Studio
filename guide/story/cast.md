@@ -83,7 +83,7 @@ A Cast clip remembers, in order and up to three moments in total: each scheduled
 
 ## Undo
 
-Each Cast change, **Build bible** included, is one step of ComfyUI's Undo (Ctrl+Z): it reverts the bible, the prompts and the links together. Ctrl+Y redoes. A prose update or Story feedback is undone with the Story's **Undo**.
+Each Cast change, **Build bible** included, is one step in the Studio's [editing history](../getting-started/studio-tour.md#undo-redo-and-history): it reverts the bible, the prompts and the links together. **Undo** (Ctrl+Z outside a field) goes back; **Redo** goes forward. A prose update or Story feedback can also be undone with the Story's **Undo**.
 
 ## Prepare references
 

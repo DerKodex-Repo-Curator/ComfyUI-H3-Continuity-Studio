@@ -1,77 +1,83 @@
 # Guide-split prompt continuity roadmap
 
 **Status:** In Progress
-**Current Phase:** Phase 2: Release
+**Current Phase:** Phase 3: Editing history release
 
 ## Phase Ledgers
 
 - [Guide-split prompt continuity design](phases/2026-11-04-guide-split-prompt-continuity.md)
+- [Editing history release](phases/2026-11-04-editing-history-release.md)
 
 ## Recovery State
 
 ```json
 {
   "version": 1,
-  "revision": 8,
-  "phase": "Phase 2: Release",
+  "revision": 11,
+  "phase": "Phase 3: Editing history release",
   "active_features": [
-    "GSP2"
+    "EH2"
   ],
-  "focus_feature": "GSP2",
-  "goal": "Create and merge the guide-split removal PR and publish v0.7.0 with all changes since v0.6.0.",
-  "done_when": "PR is merged, v0.7.0 tag resolves to its merged commit, and GitHub release is published with the complete cumulative changelog.",
-  "last_completed": "Cumulative v0.7.0 changelog complete; final CPU suite 51 JS + 130 Python passed/no skips; isolated uv MkDocs strict build and diff checks passed.",
-  "in_progress": "Release content verified. PR body and release notes prepared under ignored .tmp. Ready to commit/push and create PR; no release tag exists.",
+  "focus_feature": "EH2",
+  "goal": "Port editing history to current main, merge its PR, and publish v0.10.0.",
+  "done_when": "PR merged; tag points at its merge commit; v0.10.0 published and verified.",
+  "last_completed": "Recovered current main 172fe5c and confirmed historical PR19/v0.7.0 completed.",
+  "in_progress": "Scoped history implementation rebased onto main 47c1d43, preserving partial export. Final 84 JS + 192 Python tests, strict docs, syntax, diff and desktop/mobile browser checks pass. UTF-8 conflict-resolution correction verified. Release notes prepared under ignored .tmp.",
   "next": {
-    "action": "Commit and push the verified branch; create and link its PR, then inspect checks and merge readiness.",
-    "reason": "All local checks pass; user explicitly authorized publishing and merging."
+    "action": "Commit final release metadata and UTF-8 corrections, push feat/editing-history, create/link PR, and inspect checks. After green checks merge with a merge commit and publish v0.10.0 at that merge commit using .tmp/release-notes.md.",
+    "reason": "User authorized publication; no source or verification issues remain."
   },
   "files": [
     {
+      "path": "web/h3c_history.mjs",
+      "state": "new"
+    },
+    {
+      "path": "web/h3c_timeline.js",
+      "state": "modified"
+    },
+    {
+      "path": "web/h3c_studio.mjs",
+      "state": "modified"
+    },
+    {
+      "path": "web/h3c_timeline_editor.mjs",
+      "state": "modified"
+    },
+    {
+      "path": "tests/js/history.test.mjs",
+      "state": "new"
+    },
+    {
       "path": "CHANGELOG.md",
-      "state": "Complete v0.7.0 cumulative changes since v0.6.0"
+      "state": "v0.10.0"
+    },
+    {
+      "path": "guide/getting-started/studio-tour.md",
+      "state": "updated"
     }
   ],
   "repository": {
-    "branch": "design/guide-split-prompt-continuity",
-    "head": "469771e042e0",
+    "branch": "feat/editing-history",
+    "head": "5f44fb9f41a6",
     "dirty": [
       "CHANGELOG.md",
-      "docs/roadmap-discipline/",
-      "docs/superpowers/plans/2026-11-03-guide-split.md",
-      "docs/superpowers/specs/2026-11-03-guide-split-design.md",
-      "guide/build/frame-guides.md",
-      "guide/build/timeline.md",
-      "skills/h3-continuity-joins/SKILL.md",
-      "skills/h3-continuity-video/SKILL.md",
-      "tests/README.md",
-      "tests/js/emit_guide_split.mjs",
-      "tests/js/emit_shot_split.mjs",
-      "tests/js/guide_split.test.mjs",
-      "tests/js/guide_split_editor.test.mjs",
-      "tests/js/guide_split_fixtures.mjs",
-      "tests/js/shot_split.test.mjs",
-      "tests/js/shot_split_fixtures.mjs",
-      "tests/test_guide_split_server.py",
-      "tests/test_shot_split_server.py",
-      "web/h3c_frame_images.mjs",
-      "web/h3c_guide_split.mjs",
-      "web/h3c_shot_split.mjs",
-      "web/h3c_timeline.js",
-      "web/h3c_timeline_editor.mjs"
+      "docs/roadmap-discipline/readiness-checklist.md",
+      "web/h3c_studio.mjs",
+      "web/h3c_timeline.js"
     ],
-    "dirty_hash": "4df25aa4d0ce1de296c1b3f220d4726b41793f8fc347731ef8b4f7bdbd8405ee"
+    "dirty_hash": "25ce256f7d478722f891a10c417488a6c0adc893dc6faa13a289ad3b600c2d43"
   },
   "verification": {
-    "required": "node tests/run.mjs; git diff --check; inspect PR checks and merge state; verify release tag resolves to the merged commit and published release notes cover v0.6.0 onward",
-    "last_run": "node tests/run.mjs; git diff --check; inspect PR checks and merge state; verify release tag resolves to the merged commit and published release notes cover v0.6.0 onward",
+    "required": "node tests/run.mjs; isolated desktop/mobile browser smoke; strict docs build; git diff --check; PR checks; merged tag and published release verification",
+    "last_run": "node tests/run.mjs; node .tmp/history-smoke.mjs; uv run --with-requirements requirements-docs.txt mkdocs build --strict; syntax and diff checks",
     "status": "passed",
-    "detail": "Local release verification: node tests/run.mjs 51 JS + 130 Python pass/no skips; uv run --with-requirements requirements-docs.txt mkdocs build --strict passed; git diff --check passed. Remote PR/tag/release checks pending."
+    "detail": "84 JS + 192 Python pass/no skips; isolated real controls/host methods pass with mocked services, desktop/mobile; strict docs, syntax and diff checks pass. Remote PR/tag/release actions pending."
   },
   "blockers": [],
   "reload": [
     "docs/roadmap-discipline/features.md",
-    "docs/roadmap-discipline/phases/2026-11-04-guide-split-prompt-continuity.md"
+    "docs/roadmap-discipline/phases/2026-11-04-editing-history-release.md"
   ]
 }
 ```

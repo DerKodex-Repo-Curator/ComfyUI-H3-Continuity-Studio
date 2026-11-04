@@ -10,9 +10,9 @@ import { api } from '../../scripts/api.js';
 import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261004-studio-1';
-import { studio } from './h3c_studio.mjs?v=20261104-partial-video-3';
+import { studio } from './h3c_studio.mjs?v=20261104-history-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261104-partial-video-3';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261104-history-1';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
@@ -22,6 +22,7 @@ import {boundarySnapshot} from './h3c_frame_images.mjs?v=20261104-studio-ux-1';
 import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
 import { TakesClient } from './h3c_takes.mjs?v=20261104-take-marks-2';
 import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
+import {TimelineHistory, editingSnapshot, withLiveReceipts} from './h3c_history.mjs?v=20261104-history-1';
 
 const NODE_TYPE = 'H3C_Timeline';
 const STATUS_URL = '/h3c/timeline/status';
@@ -114,13 +115,24 @@ function recordStep() {
   (tracker?.captureCanvasState ?? tracker?.checkState)?.call(tracker);
 }
 
-class TimelineHost {
+export class TimelineHost {
   constructor(node) {
     this.node = node;
     this.timer = null;
     this.request = 0;
     this.widget = findWidget(node, 'timeline');
     hide(this.widget);
+    this.history = new TimelineHistory({
+      read: () => this.historyState(),
+      identity: () => `${this.sequenceName()}/${this.node.properties?.h3c_project?.id ?? ''}`,
+      apply: value => this.restoreHistory(value),
+      notify: () => { const shown = studio(); if (shown.host === this) shown.refreshHistory(); },
+      group: () => {
+        const field = document.activeElement;
+        return field?.matches('textarea, input[type="text"], input:not([type]), [contenteditable="true"]') ? field : null;
+      },
+      flush: () => document.activeElement?.blur?.(),
+    });
     this.takesClient = new TakesClient(async (url, body) => {
       if (this.project) {
         if (url.endsWith('/rate')) return {ok: false, error: 'Rate takes on the H3 Timeline node’s own sequence.'};
@@ -181,6 +193,7 @@ class TimelineHost {
       takes: (action, body) => this.takesClient.send(action, body),
       viewUrl,
       changed: () => this.changed(),
+      loaded: () => this.history.capture(true),
       story: () => this.story(),
       bible: async (body) => (await api.fetchApi(BIBLE_URL, {method: 'POST',
         headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})).json(),
@@ -395,20 +408,31 @@ class TimelineHost {
     this.editor.frameImages.refreshControls();
   }
 
-  // While the Studio is open, ComfyUI records the graph only on clicks, and a button's edit lands after its click, so an
-  // edit not yet recorded is recorded first, or the Undo would skip it and lose it. What the reload after an undo
-  // changes isn't an edit, such as a node settling to a new size or ComfyUI moving a picture input, and recording it at
-  // the next click or key would end the Redo history. So sizes are left out here, and ComfyUI joins the rest to the
-  // state undone to, as it does after the steps it records.
-  undoKey(event) {
-    const tracker = undoHistory();
-    const sizeless = (state) => JSON.parse(JSON.stringify(state ?? null, (key, value) => (key === 'size' ? undefined : value)));
-    const graph = app.rootGraph ?? app.graph;
-    if (!tracker?.constructor.graphEqual?.(sizeless(tracker.activeState), sizeless(graph?.serialize?.()))) recordStep();
-    tracker?.undoRedo?.(event)?.then?.((handled) => {
-      if (handled) tracker.squashState?.();
-    });
+  historyState() {
+    return {timeline: editingSnapshot(parseJSON(serialize(parseState(this.widget.value)))),
+      settings: Object.fromEntries(SETTINGS.map(name => [name, widgetValue(this.node, name)]))};
   }
+
+  restoreHistory(value) {
+    generationControl(this.node, 'timeline');
+    recordStep();
+    const box = this.editor.box()?.id;
+    for (const [name, setting] of Object.entries(value.settings)) {
+      const widget = findWidget(this.node, name);
+      if (widget && !isLinked(this.node, name) && setting != null) widget.value = setting;
+    }
+    this.writeTimeline(stringifyJSON(withLiveReceipts(value.timeline, parseState(this.widget.value))));
+    this.editor.selected = Math.max(0, (value.timeline.boxes ?? []).findIndex(item => item.id === box));
+    this.editor.selectedShot = 1;
+    this.editor.load();
+    this.node.setDirtyCanvas?.(true, true);
+    this.changed();
+    recordStep();
+  }
+
+  jumpHistory(index) { this.history.restore(index); }
+  undo() { this.history.undo(); }
+  redo() { this.history.redo(); }
 
   showProgress() {
     syncImageOutputs(this.node, this.editor?.state);
@@ -510,6 +534,7 @@ class TimelineHost {
   writeTimeline(text) {
     setGenerationControl(generationControl(this.node,'timeline'),text);
     this.widget.value=text;
+    this.history.capture();
   }
 
   async writeStillState(state) {
@@ -862,7 +887,7 @@ class TimelineHost {
   }
 
   replaceTimeline(text) {
-    this.widget.value = text;
+    this.writeTimeline(text);
     this.editor.load();
     this.saved.changed();
     this.schedule(0);
@@ -901,6 +926,7 @@ class TimelineHost {
 
   settingChanged(name) {
     if (name === 'context_frames') this.editor.contextChanged();
+    this.history.capture();
     this.changed();
   }
 
@@ -1130,6 +1156,7 @@ app.registerExtension({
       if (!findWidget(this, 'timeline')) return result;
       const host = new TimelineHost(this);
       host.editor.startIfEmpty();
+      host.history.reset(host.historyState());
       this.setSize?.([Math.max(this.size?.[0] ?? 0, 420), Number(this.computeSize?.()?.[1]) || FACE_HEIGHT]);
       host.schedule(0);
       return result;
