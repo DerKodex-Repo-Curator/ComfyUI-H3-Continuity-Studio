@@ -579,7 +579,7 @@ class H3C_Timeline(io.ComfyNode):
         sequence = continuity.SequenceRef(name, folder, next_index + 1, previous, video, audio)
         memories = visual_memory.records(parsed, next_index, folder, by_index, is_done, width, height)
         memory_args = {}
-        if video is not None:
+        if video is not None and parsed.continuation_guide:
             memory_args['continuation_image'] = store.load_last_frame(folder, previous)
         if memories:
             memory_args["memories"] = visual_memory.load(folder, by_index, memories)
@@ -605,7 +605,8 @@ class H3C_Timeline(io.ComfyNode):
                            if frame >= box.carried and frame != end and not (box.fresh and frame == 0)]
         positive = shot_preview.add_guides(positive, latent, vae, internal_guides)
         latent, positive, negative, segment, _ = continuity.prepare_segment(
-            sequence, latent, context, carry_audio, positive, negative, node="H3 Timeline", audio_context_frames=audio_context_frames)
+            sequence, latent, context, carry_audio, positive, negative, node="H3 Timeline", audio_context_frames=audio_context_frames,
+            noise_vae=vae if parsed.context_noise else None)
         segment.preserve_following = True
         following = by_index.get(next_index + 2)
         ending = 0

@@ -94,6 +94,7 @@ nav:
       - Joins and bridges: continuity/joins-and-bridges.md
       - Takes: continuity/takes.md
       - The continuity check: continuity/check.md
+      - Long continuing chains: continuity/long-chains.md
   - Story:
       - story/index.md
       - The H3 Story writer: story/writer.md

@@ -183,15 +183,23 @@ def joins(sequence, index, directory, entry):
     if carried > 0:
         before, tokens = sequence.entries.get(index), tokens_for_frames(carried)
         if (before is None or not store.has_segment_latents(sequence.folder, before)
-                or not _same(_window(directory, entry, tokens, True), _window(sequence.folder, before, tokens, False))):
+                or not (_same(_window(directory, entry, tokens, True), _window(sequence.folder, before, tokens, False))
+                        or _parent(entry, before))):
             return "the box before changed"
     after = sequence.entries.get(index + 2)
     following = (after or {}).get("context_frames") or 0
     if following > 0 and store.has_segment_latents(sequence.folder, after):
         tokens = tokens_for_frames(following)
-        if not _same(_window(directory, entry, tokens, False), _window(sequence.folder, after, tokens, True)):
+        if not (_same(_window(directory, entry, tokens, False), _window(sequence.folder, after, tokens, True))
+                or _parent(after, entry)):
             return "the box after changed"
     return ""
+
+
+def _parent(child, parent):
+    """Whether `child` recorded `parent` as the render it continued from. Context noise changes the carried frames,
+    so such a child's latents never match its parent's end exactly."""
+    return bool(child.get("carried_from")) and child["carried_from"] == parent.get("created")
 
 
 def _window(folder, entry, tokens, first):

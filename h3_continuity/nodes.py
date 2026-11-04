@@ -1,4 +1,4 @@
-"""ComfyUI nodes: H3 Sequence, H3 Continue and H3 Save Segment."""
+"""ComfyUI nodes: H3 Sequence, H3 Continue, H3 Continuation Model and H3 Save Segment."""
 
 import datetime
 import os
@@ -59,7 +59,8 @@ def _plural(count, word):
     return f"{word}{'s' if count != 1 else ''}"
 
 
-def prepare_segment(sequence, latent, context_frames, carry_audio, positive=None, negative=None, node="H3 Continue", *, audio_context_frames=0):
+def prepare_segment(sequence, latent, context_frames, carry_audio, positive=None, negative=None, node="H3 Continue", *, audio_context_frames=0,
+                    noise_vae=None):
     """Carries the end of the previous segment into `latent`. Returns the latent, the conditionings
     without guides inside the carried frames, the SegmentPlan for H3 Save Segment and the number of
     removed guides. Without a previous latent nothing is carried and `latent` is returned as is."""
@@ -70,7 +71,8 @@ def prepare_segment(sequence, latent, context_frames, carry_audio, positive=None
         return latent, positive, negative, SegmentPlan(sequence, 0, 0, frames, size, None, None), 0
     context = int(context_frames)
     out, carried_video, carried_audio, ticks = latents.build_continuation(
-        latent, sequence.video, sequence.audio, context, carry_audio, node=node, audio_context_frames=audio_context_frames)
+        latent, sequence.video, sequence.audio, context, carry_audio, node=node, audio_context_frames=audio_context_frames,
+        noise_vae=noise_vae)
     positive, removed_positive = latents.drop_guides_before(positive, context)
     negative, removed_negative = latents.drop_guides_before(negative, context)
     plan = SegmentPlan(sequence, context, ticks, frames, size, carried_video, carried_audio)
@@ -203,6 +205,65 @@ class H3C_Continue(io.ComfyNode):
         return io.NodeOutput(out, positive, negative, plan, info)
 
 
+class H3C_ContinuationModel(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="H3C_ContinuationModel",
+            display_name="H3 Continuation Model",
+            category=CATEGORY,
+            description="Samples boxes that continue the box before (and bridges) with continuation_model, for "
+                        "example the model with a LoRA trained for continuations, and every other box with model.",
+            inputs=[
+                io.Model.Input("model", tooltip="The model for boxes that start fresh or cut."),
+                SegmentType.Input("segment", tooltip="From H3 Timeline or H3 Continue."),
+                io.Model.Input("continuation_model", optional=True,
+                               tooltip="The model for continuing boxes. Unconnected: every box uses model."),
+            ],
+            outputs=[io.Model.Output(display_name="model")],
+        )
+
+    @classmethod
+    def execute(cls, model, segment, continuation_model=None) -> io.NodeOutput:
+        continues = segment.carried_video is not None
+        return io.NodeOutput(continuation_model if continues and continuation_model is not None else model)
+
+
+class H3C_SigmasTail(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="H3C_SigmasTail",
+            display_name="H3 Sigmas Tail",
+            category=CATEGORY,
+            description="Experimental. Raises (or lowers) the last noise levels before zero, so a distilled model "
+                        "settles less fine detail in its final step. With segment, only continuing boxes change.",
+            inputs=[
+                io.Sigmas.Input("sigmas"),
+                io.Int.Input("tail_steps", default=3, min=1, max=20, tooltip="Levels before the final zero to move."),
+                io.Float.Input("strength", default=0.5, min=-0.9, max=3.0, step=0.05,
+                               tooltip="Above 0 raises the tail toward the level before it; 0 changes nothing."),
+                SegmentType.Input("segment", optional=True,
+                                  tooltip="From H3 Timeline: fresh and cut boxes keep their schedule."),
+            ],
+            outputs=[io.Sigmas.Output(display_name="sigmas")],
+        )
+
+    @classmethod
+    def execute(cls, sigmas, tail_steps, strength, segment=None) -> io.NodeOutput:
+        values = [float(value) for value in sigmas]
+        end = len(values) - 1 if values and values[-1] == 0 else len(values)
+        start = max(1, end - int(tail_steps))
+        if not strength or (segment is not None and segment.carried_video is None) or start >= end:
+            return io.NodeOutput(sigmas)
+        # each moved level keeps its ratio to the level above the tail, raised to 1 / (1 + strength)
+        anchor = values[start - 1]
+        for index in range(start, end):
+            values[index] = min(anchor * (values[index] / anchor) ** (1 / (1 + strength)),
+                                values[index - 1] * 0.999)
+        return io.NodeOutput(torch.tensor(values, dtype=sigmas.dtype, device=sigmas.device))
+
+
 class H3C_SaveSegment(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -286,6 +347,9 @@ class H3C_SaveSegment(io.ComfyNode):
             }
             if segment.carried_audio_start:
                 entry['audio_pin'] = {'start_tick': segment.carried_audio_start, 'ticks': segment.carried_ticks}
+            if segment.carried_video is not None and (sequence.base or {}).get("created"):
+                # the render this box continued, for takes and lineage
+                entry["carried_from"] = sequence.base["created"]
             if segment.timeline:
                 entry["timeline"] = {key: value for key, value in segment.timeline.items() if key not in UNSAVED}
             # A box that drops generated frames plays only its first `played` new frames; its latent keeps them all.

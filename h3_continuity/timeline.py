@@ -91,6 +91,9 @@ class Timeline:
     dialogue: dict | None = None
     # Whether each box keeps its own typed dialogue instead of the cues; empty without `parse`. Not on Box either.
     manual_dialogue: list = field(default_factory=list)
+    # Continuing boxes only: the guide at the first new frame and paired context noise.
+    continuation_guide: bool = True
+    context_noise: bool = False
 
 
 @dataclass
@@ -299,6 +302,12 @@ def parse(text):
     if type(limit) is not int or not MAX_FRAMES <= limit <= LONG_MAX_FRAMES or limit % GRID != 5:
         raise _error(f"max_frames must be a length on the 17k+5 grid from {MAX_FRAMES} to {LONG_MAX_FRAMES} frames")
     parsed.max_frames = limit
+    parsed.continuation_guide = data.get("continuation_guide", True)
+    if not isinstance(parsed.continuation_guide, bool):
+        raise _error("continuation_guide must be true or false")
+    parsed.context_noise = data.get("context_noise", False)
+    if not isinstance(parsed.context_noise, bool):
+        raise _error("context_noise must be true or false")
     parsed.plates = data.get("plates", [])
     if not isinstance(parsed.plates, list):
         raise _error("plates must be a list")
@@ -1108,6 +1117,10 @@ def layout_key(timeline, index, context=39):
              "seed": box.seed, "fresh": fresh, "first": slots.first, "last": slots.last}
     if box.flf_refmods:
         value["flf_refmods"] = True
+    if not fresh and not timeline.continuation_guide:
+        value["continuation_guide"] = False
+    if not fresh and timeline.context_noise:
+        value["context_noise"] = True
     if timeline.reference_replacements:
         value['reference_replacements'] = timeline.reference_replacements
     dropped = dropped_frames(timeline, index)

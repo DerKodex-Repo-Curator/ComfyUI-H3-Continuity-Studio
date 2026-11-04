@@ -87,6 +87,26 @@ class RunTest(unittest.TestCase):
         self.assertEqual(composed, [])
 
 
+class RejectedArmTest(unittest.TestCase):
+    def test_a_rejected_prompt_is_recorded_and_the_batch_goes_on(self):
+        import io
+        import urllib.error
+        out = Path(tempfile.mkdtemp())
+        rendered = []
+
+        def render(server, graph, scene, project, cap):
+            rendered.append(project)
+            if project.endswith("bad"):
+                raise urllib.error.HTTPError("http://x/prompt", 400, "Bad Request", {}, io.BytesIO(b'{"error": "missing node"}'))
+            yield {"seconds": 1.0, "status": "success", "info": [], "timeline": []}
+
+        summary = smoke.run({"scene": SCENE, "arms": {"bad": {}, "good": {}}}, GRAPH, "s9", out, out, server="x", cap=1,
+                            render=render, probe=lambda p: {}, compose=lambda *a: None)
+        self.assertEqual(rendered, ["ps-s9-bad", "ps-s9-good"])
+        self.assertIn("HTTP 400", summary["arms"]["bad"]["info"][0])
+        self.assertIn("missing node", summary["arms"]["bad"]["info"][0])
+
+
 class ScenarioFilesTest(unittest.TestCase):
     def test_every_smoke_spec_names_a_scene_whose_timeline_parses(self):
         here = Path(__file__).resolve().parents[1]

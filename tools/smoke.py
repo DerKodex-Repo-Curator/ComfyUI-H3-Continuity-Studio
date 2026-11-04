@@ -14,6 +14,7 @@ import json
 import os
 import shutil
 import subprocess
+import urllib.error
 from pathlib import Path
 
 import render_scene
@@ -93,6 +94,8 @@ def run(spec, graph, scenario, out, output_root, server, cap, arms=None,
                 info += record["info"]
         except SystemExit as stopped:  # render_scene stops a run that exceeds its cap
             info.append(str(stopped))
+        except urllib.error.HTTPError as rejected:  # ComfyUI refused the prompt, e.g. a missing node
+            info.append(f"HTTP {rejected.code}: {rejected.read().decode('utf-8', 'replace')[:500]}")
         video = full_video(output_root, records)
         copied = None
         if video is not None:

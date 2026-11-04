@@ -49,6 +49,20 @@ Saves the run as the next segment (the finished video without repeated frames, p
 | `description` | Text stored with the segment, such as the prompt. |
 | `write_full_video` | Only affects the deprecated H3 Sequence chain; the Timeline always exports when every clip is done. |
 
+## H3 Continuation Model
+
+Picks the model the sampler uses for this run: `continuation_model` when the Timeline's `segment` carries frames from the clip before (a continuing clip or a bridge), `model` otherwise. Put it between your model chain and the guider, for example with a LoRA meant only for continuations on `continuation_model`. See [Long continuing chains](../continuity/long-chains.md).
+
+| Input | Notes |
+| --- | --- |
+| `model` | For clips that start fresh or cut. |
+| `segment` | From H3 Timeline. |
+| `continuation_model` | Optional. Unconnected, every clip uses `model`. |
+
+## H3 Sigmas Tail
+
+Experimental. Raises the last few noise levels before zero (`BasicScheduler → H3 Sigmas Tail → sampler sigmas`), so a distilled 8-step model settles less fine detail in its final step. Each moved level keeps its ratio to the level above the tail, raised to the power 1 / (1 + `strength`); the first level, the levels above the tail and the final zero stay. With `segment` connected, clips that start fresh or cut keep their schedule. Defaults: `tail_steps` 3, `strength` 0.5; 0 changes nothing.
+
 ## H3 Context Windows, H3 Join Chain
 
 For [long clips](../build/long-clips.md). **Context Windows** wraps ComfyUI's MiniMax H3 Context Windows (model → model); **Join Chain** joins saved continuing segments into one latent for refinement.
