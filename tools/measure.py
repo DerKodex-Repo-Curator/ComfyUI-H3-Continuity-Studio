@@ -1,6 +1,6 @@
 """Texture drift, colour drift and still holds per saved segment of a sequence, as the continuity check measures them.
 
-python tools/measure.py D:/Projects/ComfyUI_windows_portable/ComfyUI/output/h3_sequences/ps-s1-base [--every 8]
+python tools/measure.py $COMFY_ROOT/output/h3_sequences/ps-s1-base [--every 8]
 
 Texture and colour use every `--every`-th played frame against the first segment; holds use all played frames,
 preceded by the previous segment's last frame when a segment continues. Read-only."""
