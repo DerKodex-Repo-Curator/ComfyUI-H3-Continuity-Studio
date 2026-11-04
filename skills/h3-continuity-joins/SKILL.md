@@ -29,6 +29,15 @@ wants one setting everywhere.
   place, time or look really changes, because it resets what scene memory
   remembers. `new_scene` without `cut` is a continuation.
 
+## Long continuing chains
+
+Over many continuing boxes, texture builds up ("burn"); the continuity check reports it as *N% grainier* and a hitch at a join as *Holds still: 3 frames at the join.* Optional Timeline fields, measured on a six-box chain (FastH3 8-step):
+
+- `"context_noise": true` cut texture growth by about a third (clip 6: 1.75 against 2.04), same framing, about 10% slower. With the **H3 Sigmas Tail** node (`BasicScheduler -> H3 Sigmas Tail -> sampler sigmas`, `segment` connected): 1.67.
+- `"continuation_guide": false` removes the join hold in moving shots; calm shots then move a little more at the join. Keep the default for calm shots.
+- `"audio_feather": N` lets the last N carried audio ticks regenerate.
+- **H3 Continuation Model** routes continuing boxes to another model, for a continuation LoRA. The public anti-burn LoRA cut to a close-up at 0.5 and did nothing at 0.3 on FastH3 int8, so do not recommend it for that model.
+
 ## Transitions inside H3
 
 To join two shots with a move, generate the cause, the cover and the reveal inside

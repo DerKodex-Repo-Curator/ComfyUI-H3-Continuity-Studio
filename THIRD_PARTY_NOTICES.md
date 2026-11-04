@@ -3,3 +3,17 @@
 The shot-writing guidance in `h3_continuity/story_prompts.py` is adapted from the [MiniMax H3 Singularity prompt-writing specification](https://huggingface.co/WarmBloodAban/Minimax-h3_Singularity/blob/af671d9214a6e41ab8c2f43e9f871ea56246115f/MiniMax_H3_Singularity_Prompt_Writing_Specification_Enhanced_EN.md) by WarmBloodAban. The upstream repository's model card at that revision identifies Apache-2.0. A copy of the [Apache License 2.0](APACHE-2.0.txt) is provided. The guidance in this project has been adapted; no upstream model weights are included.
 
 The public release omits the MiniMax prompt-guide text. If installed separately, those guides and the MiniMax H3 model have their own terms; see `h3_continuity/h3_guide/NOTICE` and `h3_continuity/h3_guide/LICENSE` and the upstream distribution. Other dependencies and models have their own licenses.
+
+The texture measure in `h3_continuity/check_frames.py` (`texture`) is a NumPy port of `texture_band_rms` from [ComfyUI-MiniMaxH3-PrefixStream](https://github.com/knoic/ComfyUI-MiniMaxH3-PrefixStream), used under the MIT License:
+
+> MIT License
+>
+> Copyright (c) 2026 knoic
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Paired context noise, audio feather, take ratings and lineage, and per-box video windows follow ideas from the same project. H3 Sigmas Tail follows an idea from [ComfyUI-H3-Motion-Context](https://github.com/NikoDemon80/ComfyUI-H3-Motion-Context) (GPL-3.0); it is an independent implementation and contains none of that project's code.

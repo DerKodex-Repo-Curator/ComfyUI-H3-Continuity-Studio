@@ -238,6 +238,17 @@ own. Box `first` and `last` fields, mentions, the bible and `disabled_refs` can
 then name the slot. A slot below `image17` fails with "picture binding needs a
 saved slot from image17 up".
 
+## Continuity settings for long chains and repaints
+
+Four optional Timeline fields, off by default. Each changes only continuing boxes (or, for `video_slices`, the boxes that mention the slot), and a set value marks those boxes for a new render.
+
+| Field | Value | Effect |
+| --- | --- | --- |
+| `context_noise` | `true` | Paired context noise on the carried frames: less texture build-up ("burn") over long continuing chains, about 10% more time per continuing box. |
+| `continuation_guide` | `false` | No guide from the previous box's last frame at the first new frame; removes a ~3-frame hold at joins in moving shots. |
+| `audio_feather` | 0-16 | The last N carried audio ticks regenerate, rising by cosine from frozen to free. |
+| `video_slices` | e.g. `["video1"]` | Each box receives only its own Timeline window of that reference video (its start minus the carried frames, through every generated frame) and of its same-numbered soundtrack. |
+
 ## Bridges
 
 A top-level `bridges` list adds a few generated frames on the join before a box
