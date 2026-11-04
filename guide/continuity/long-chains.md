@@ -22,7 +22,7 @@ Texture is the finest-detail energy of each clip against clip 1 (1.00 = no chang
 
 The table above is `fasth3_omniref_8step_pruned_int8_convrot`. The same chain on MiniMax's REF2VA model (`minimax_h3_ref2va_pruned_int8_convrot` and `minimax_h3_ref2va_pruned_bf16`) with the ref2v turbo LoRA (`minimax_h3_ref2v_turbo_8step_v1.1`) burned far less in both files, so the difference comes from the model, not from int8.
 
-FastH3 v2 (`fastvideo_fasth3_8step_v2_pruned_int8_convrot` with turbo LoRA `minimax_h3_ref2v_turbo_8step_v1.0` at 1), which the Story Studio examples render video with, did not burn (clip 6 texture 0.97), but in every render clip 2 cut to a closer framing one frame after the join. Clip 1 had come out wider than the "medium close-up" every prompt names, and clip 2 moved to the prompt's framing instead of keeping clip 1's; the later joins were smooth. The anti-burn LoRA did not change the cut. On this model, check the first join of a long chain. Whether a clip 1 that already matches the prompt's framing avoids the cut was not measured, and other models were not measured.
+FastH3 v2 (`fastvideo_fasth3_8step_v2_pruned_int8_convrot` with turbo LoRA `minimax_h3_ref2v_turbo_8step_v1.0` at 1), which the Story Studio examples render video with, did not burn (clip 6 texture 0.97), but in every render clip 2 cut to a closer framing one frame after the join. That held with the examples' own sampler (res_multistep) and with a second seed. Each time, clip 1 had come out wider than the "medium close-up" every prompt names, and clip 2 moved to the prompt's framing instead of keeping clip 1's; the later joins were smooth. The anti-burn LoRA did not change the cut. On this model, check the first join of a long chain. Whether a clip 1 that already matches the prompt's framing avoids the cut was not measured, and other models were not measured.
 
 | Model and anti-burn LoRA | Clip 6 texture | Joins | Result |
 | --- | --- | --- | --- |
@@ -35,8 +35,10 @@ FastH3 v2 (`fastvideo_fasth3_8step_v2_pruned_int8_convrot` with turbo LoRA `mini
 | FastH3 v2 int8 | 0.97 | **36 at clip 2**, then 1.4–1.6 | No burn, but clip 2 cut to a closer framing. |
 | FastH3 v2 int8, anti-burn LoRA 0.3 | 0.92 | **36 at clip 2**, then 1.3–1.5 | The same cut. |
 | FastH3 v2 int8, anti-burn LoRA 0.5 | 0.86 | **37 at clip 2**, then 1.3–2.1 | The same cut. |
+| FastH3 v2 int8, res_multistep | 0.95 | **39 at clip 2**, then 1.5–1.8 | The same cut with the examples' sampler. |
+| FastH3 v2 int8, res_multistep, another seed | 0.90 | **45 at clip 2**, then 1.4–2.8 | The same cut; the 2.8 is a hand gesture. |
 
-Each row is one render of this chain; differences of about 0.1 can come from the seed alone. The three FastH3 v2 renders share clip 1 and the seed (the LoRA only reaches continuing clips), so their three cuts are one observation, not three. Every row used the same sampler (euler, 8 steps); the Story Studio examples sample FastH3 v2 with res_multistep, which was not tested. On a 24 GB GPU a continuing clip took about 1 min 40 s on the int8 files and 2 min 40 s on the 40 GB bf16 file, which does not fit and streams from system memory.
+Each row is one render of this chain; differences of about 0.1 can come from the seed alone. The first three FastH3 v2 renders share clip 1 and the seed (the LoRA only reaches continuing clips), so their cuts count as one; the two res_multistep renders each made their own clip 1, so the cut was seen after three different clip 1s. Every row used euler at 8 steps except the two res_multistep rows, the sampler the Story Studio examples use for FastH3 v2 (same 8 steps and scheduler). On a 24 GB GPU a continuing clip took about 1 min 40 s on the int8 files and 2 min 40 s on the 40 GB bf16 file, which does not fit and streams from system memory.
 
 ## Context noise
 
