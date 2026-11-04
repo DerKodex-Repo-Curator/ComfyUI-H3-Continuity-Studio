@@ -91,8 +91,7 @@ class Timeline:
     dialogue: dict | None = None
     # Whether each box keeps its own typed dialogue instead of the cues; empty without `parse`. Not on Box either.
     manual_dialogue: list = field(default_factory=list)
-    # Continuing boxes only: video carry noise-mask value (0 freezes) and the guide at the first new frame.
-    soft_prefix: float = 0.0
+    # Continuing boxes only: the guide at the first new frame and paired context noise.
     continuation_guide: bool = True
     context_noise: bool = False
 
@@ -303,10 +302,6 @@ def parse(text):
     if type(limit) is not int or not MAX_FRAMES <= limit <= LONG_MAX_FRAMES or limit % GRID != 5:
         raise _error(f"max_frames must be a length on the 17k+5 grid from {MAX_FRAMES} to {LONG_MAX_FRAMES} frames")
     parsed.max_frames = limit
-    soft = data.get("soft_prefix", 0)
-    if isinstance(soft, bool) or not isinstance(soft, (int, float)) or not 0 <= soft <= 1:
-        raise _error("soft_prefix must be a number from 0 to 1")
-    parsed.soft_prefix = float(soft)
     parsed.continuation_guide = data.get("continuation_guide", True)
     if not isinstance(parsed.continuation_guide, bool):
         raise _error("continuation_guide must be true or false")
@@ -1122,8 +1117,6 @@ def layout_key(timeline, index, context=39):
              "seed": box.seed, "fresh": fresh, "first": slots.first, "last": slots.last}
     if box.flf_refmods:
         value["flf_refmods"] = True
-    if not fresh and timeline.soft_prefix:
-        value["soft_prefix"] = timeline.soft_prefix
     if not fresh and not timeline.continuation_guide:
         value["continuation_guide"] = False
     if not fresh and timeline.context_noise:

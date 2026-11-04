@@ -606,7 +606,7 @@ class H3C_Timeline(io.ComfyNode):
         positive = shot_preview.add_guides(positive, latent, vae, internal_guides)
         latent, positive, negative, segment, _ = continuity.prepare_segment(
             sequence, latent, context, carry_audio, positive, negative, node="H3 Timeline", audio_context_frames=audio_context_frames,
-            soft_prefix=parsed.soft_prefix, noise_vae=vae if parsed.context_noise else None)
+            noise_vae=vae if parsed.context_noise else None)
         segment.preserve_following = True
         following = by_index.get(next_index + 2)
         ending = 0
@@ -661,8 +661,6 @@ class H3C_Timeline(io.ComfyNode):
                             "settings": box.settings, "media": hashes[next_index].of(box.slots),
                             "references": hashes[next_index].of(box.slots, keyframes=False),
                             "guide_chain": rules.guide_chain(parsed, next_index, context), "seed": box.box.seed}
-        if parsed.soft_prefix:
-            segment.timeline["soft_prefix"] = parsed.soft_prefix
         if box.generated > box.frames + box.carried:
             segment.timeline["played"] = box.frames
         if rules.text_chain(parsed, next_index, context):

@@ -53,7 +53,6 @@ class SegmentPlan:
     ending_audio: torch.Tensor | None = None
     timeline_complete: bool = False
     carried_audio_start: int = 0
-    soft_prefix: float = 0.0
 
 
 def _plural(count, word):
@@ -61,7 +60,7 @@ def _plural(count, word):
 
 
 def prepare_segment(sequence, latent, context_frames, carry_audio, positive=None, negative=None, node="H3 Continue", *, audio_context_frames=0,
-                    soft_prefix=0.0, noise_vae=None):
+                    noise_vae=None):
     """Carries the end of the previous segment into `latent`. Returns the latent, the conditionings
     without guides inside the carried frames, the SegmentPlan for H3 Save Segment and the number of
     removed guides. Without a previous latent nothing is carried and `latent` is returned as is."""
@@ -73,12 +72,11 @@ def prepare_segment(sequence, latent, context_frames, carry_audio, positive=None
     context = int(context_frames)
     out, carried_video, carried_audio, ticks = latents.build_continuation(
         latent, sequence.video, sequence.audio, context, carry_audio, node=node, audio_context_frames=audio_context_frames,
-        soft_prefix=soft_prefix, noise_vae=noise_vae)
+        noise_vae=noise_vae)
     positive, removed_positive = latents.drop_guides_before(positive, context)
     negative, removed_negative = latents.drop_guides_before(negative, context)
     plan = SegmentPlan(sequence, context, ticks, frames, size, carried_video, carried_audio)
     plan.carried_audio_start = timing.ticks_for_frames(context) - ticks if ticks else 0
-    plan.soft_prefix = soft_prefix
     return out, positive, negative, plan, max(removed_positive, removed_negative)
 
 
@@ -314,15 +312,13 @@ class H3C_SaveSegment(io.ComfyNode):
         if video.shape[0] > 1:
             notes.append(f"Batch of {video.shape[0]}: saved the first item only.")
         video, audio_latent = video[:1], audio_latent[:1]
-        drift = 0.0 if segment.soft_prefix else latents.carried_difference(
-            video, audio_latent, segment.carried_video, segment.carried_audio, audio_start=segment.carried_audio_start)
+        drift = latents.carried_difference(video, audio_latent, segment.carried_video, segment.carried_audio,
+                                          audio_start=segment.carried_audio_start)
         drift = max(drift, latents.carried_difference(video, audio_latent, segment.ending_video,
                                                     segment.ending_audio, at_end=True))
         if drift > 1e-3:
             notes.append(f"Warning: the carried frames changed during sampling (max difference {drift:.3g}). "
                          "Make sure the sampler gets its latent from H3 Continue or H3 Timeline.")
-        if segment.soft_prefix:
-            notes.append(f"Soft prefix {segment.soft_prefix:g}: the carried frames were allowed to change.")
         waveform = sample_rate = None
         if audio is not None:
             waveform, sample_rate = audio["waveform"][0, :2].float().cpu(), int(audio["sample_rate"])
