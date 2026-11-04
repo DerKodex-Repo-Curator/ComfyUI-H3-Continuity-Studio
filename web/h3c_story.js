@@ -13,8 +13,8 @@ import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { migrateStoryDescriptionInputs, migrateSerializedStoryDescriptionInputs } from './h3c_story_inputs.mjs?v=20261003-story-inputs-2';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import * as story from './h3c_story_model.mjs?v=20261011-reference-preparation-1';
-import { StoryPanel } from './h3c_story_panel.mjs?v=20261104-fork-1';
-import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261103-story-frame-guides-1';
+import { StoryPanel } from './h3c_story_panel.mjs?v=20261104-story-groups-1';
+import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261104-story-groups-1';
 import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=20261014-story-library-1';
 import { parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 
@@ -129,9 +129,21 @@ class StoryHost {
       openStudio: () => this.openStudio(),
       settings: () => this.inputs().filter(input => input.name === 'idea_images'),
       setInput: (name, value) => this.setInput(name, value),
-      listStories: async () => {const rows=await this.library.refresh();this.libraryId=rows.find(row=>row.graph===this.graphId())?.id;return rows;},
+      listStories: async () => {
+        const {stories,names}=await this.library.refresh(),graph=this.graphId();
+        this.libraryId=stories.find(row=>row.graph===graph)?.id;
+        return {rows:stories.map(row=>({...row,current:row.graph===graph})),names};
+      },
       openSavedStory: id => this.libraryAction(() => this.library.open(id)),
       deleteSavedStory: entry => this.libraryAction(async () => { if(await this.library.remove(entry))await panel.refreshStories(); }),
+      deleteSavedStoryGroup: group => this.libraryAction(async () => {
+        try {if(await this.library.removeAll(group))await panel.refreshStories();}
+        catch(error) {if(error.partial)await panel.refreshStories().catch(()=>{});throw error;}
+      }),
+      renameSavedStory: group => this.libraryAction(async () => {
+        const name=await this.library.ask(group);
+        if(name!==null&&await this.library.rename(group.key,name))await panel.refreshStories();
+      }),
       keepWorkflow: () => this.libraryAction(async () => {
         await this.forkLibrary();
         panel.say('This workflow and its prompts are saved as an independent story. The previous saved story was kept.');
@@ -148,6 +160,7 @@ class StoryHost {
       request: (url, body) => this.libraryRequest(url, body),
       load: value => this.loadLibrary(value),
       confirm: message => app.extensionManager?.dialog?.confirm?.({title:'Delete saved story',message}) ?? window.confirm(message),
+      prompt: (message, value) => app.extensionManager?.dialog?.prompt?.({title:'Rename saved story',message,defaultValue:value}) ?? window.prompt(message,value),
       deleted: async id => {
         if(id===this.libraryId){this.libraryDeleted=this.graphId();this.panel.say('Story permanently deleted. Start a new project before writing again.');}
       },

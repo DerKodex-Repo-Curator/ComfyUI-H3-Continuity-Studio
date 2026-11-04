@@ -14,7 +14,7 @@ LOCK = threading.RLock()
 
 
 def path(kind, graph, node):
-    if kind not in ("workflow", "job", "library", "deleted") or not all(
+    if kind not in ("workflow", "job", "library", "deleted", "names") or not all(
             isinstance(value, str) and 0 < len(value) <= 256 for value in (graph, node)):
         raise ValueError("A saved H3 state needs a workflow and node identity.")
     key = hashlib.sha256(json.dumps([kind, graph, node]).encode()).hexdigest()
