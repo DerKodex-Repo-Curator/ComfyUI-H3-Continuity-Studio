@@ -12,7 +12,7 @@ Press **Open Studio** on the Timeline (or Story) node. The Studio fills the wind
 | **References** | Show or hide the left-hand references column. |
 | *Project name and status* | The sequence name, the clip count and length, bridges and the render state ("All 6 boxes are rendered."). |
 | **New project** | Start a fresh project in this workflow. See [Full video and projects](../output/full-video-and-projects.md). |
-| **Project settings** | Shared prompt, and export or import of the project. |
+| **Project settings** | Shared prompt, settings for [long continuing chains](../continuity/long-chains.md#in-the-studio), and export or import of the project. |
 | **Download video** | Save the full video (enabled once every clip is rendered). |
 | **Feedback** | Open the Story page at its feedback field to [patch a written story](../story/writer.md#editing-a-written-story). |
 

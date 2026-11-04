@@ -429,9 +429,10 @@ class Studio {
     this.focusBody.append(...FOCUS.map(name => this.pages[name]));
     this.pages.project.append(el('h3', 'h3cx-title', 'Shared prompt · applies to every clip'));
     this.projectPrompt = el('div', 'h3cx-project-prompt');
+    this.projectChain = el('div');
     this.projectFiles = el('div', 'h3cx-project-files');
     this.projectFileNote = el('p', 'h3cx-note');
-    this.pages.project.append(this.projectPrompt, this.projectFiles, this.projectFileNote,
+    this.pages.project.append(this.projectPrompt, this.projectChain, this.projectFiles, this.projectFileNote,
       el('p', 'h3cx-note', 'Each Clip is one generation box. Project JSON and backend messages keep the existing box names.'),
       el('p', 'h3cx-note', 'API keys and provider settings are on the linked H3 Story node in the graph. Open its API keys group to Save or Forget keys; advanced inputs hold model, thinking, Vision and memory settings.'),
       el('p', 'h3cx-note', 'Timeline name, width, height, context frames, carry audio and reference image size remain on the H3 Timeline node in the graph.'),
@@ -990,6 +991,7 @@ class Studio {
     this.place(regions.pictures, this.pages.pictures);
     this.place(regions.refmods, this.pages.refmods);
     this.place(regions.sharedPrompt, this.projectPrompt);
+    this.place(regions.chainSettings, this.projectChain);
     this.place(regions.stillPrompts, this.track);
     this.place(regions.lane, this.track);
     this.place(regions.hint, this.track);
@@ -998,6 +1000,7 @@ class Studio {
     this.place(regions.timedTextSettings, this.pages.text);
     regions.references.open = true;
     regions.refmods.open = true;
+    regions.chainSettings.open = true;
     this.setLibrary('references');
     this.trackWidth = this.track.clientWidth;
     this.applyLaneView();

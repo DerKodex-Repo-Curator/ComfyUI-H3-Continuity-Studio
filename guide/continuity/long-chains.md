@@ -20,11 +20,11 @@ Texture is the finest-detail energy of each clip against clip 1 (1.00 = no chang
 
 ## Context noise
 
-Add `"context_noise": true` to the Timeline JSON (or send it through the [API](../automation/api.md)). For each continuing clip, the carried frames are decoded, given seeded noise that fades from strong at the start of the overlap to none at its last frame, and encoded again; only the difference the noise makes is added to the original carried latent, so the VAE's own round-trip error is not carried forward. The carried frames stay frozen while H3 samples; audio is unchanged. It costs one decode and two encodes of the overlap per continuing clip.
+Tick **Context noise** in the Studio ([below](#in-the-studio)), or add `"context_noise": true` to the Timeline JSON (or send it through the [API](../automation/api.md)). For each continuing clip, the carried frames are decoded, given seeded noise that fades from strong at the start of the overlap to none at its last frame, and encoded again; only the difference the noise makes is added to the original carried latent, so the VAE's own round-trip error is not carried forward. The carried frames stay frozen while H3 samples; audio is unchanged. It costs one decode and two encodes of the overlap per continuing clip.
 
 ## Guide at the first new frame
 
-A continuing clip normally uses the previous clip's last frame as a guide at its first new frame, so the pose does not reset. In moving shots this produces a short hitch: about three nearly identical frames at the join, which the check reports as *Holds still: 3 frames at the join.* `"continuation_guide": false` removes the guide and the hitch; in calm shots the join then moves a little more. It is a per-Timeline setting; the default keeps the guide.
+A continuing clip normally uses the previous clip's last frame as a guide at its first new frame, so the pose does not reset. In moving shots this produces a short hitch: about three nearly identical frames at the join, which the check reports as *Holds still: 3 frames at the join.* Unticking **Guide from the last frame** in the Studio (`"continuation_guide": false`) removes the guide and the hitch; in calm shots the join then moves a little more. It is a per-Timeline setting; the default keeps the guide.
 
 ## H3 Sigmas Tail
 
@@ -34,4 +34,19 @@ A node for your graph (`BasicScheduler → H3 Sigmas Tail → the sampler's sigm
 
 Routes continuing clips (and bridges) to a different model, for a LoRA trained for continuations. The public H3 Anti-Burn LoRA was tested with it on FastH3 int8 and did not help (table above); its authors trained it on other turbo models, so it may behave differently on yours.
 
-The Studio keeps `context_noise` and `continuation_guide` when it saves, but has no control for them yet.
+## In the Studio
+
+**Project settings → Long continuing chains** holds these Timeline settings.
+
+| Control | Timeline key | Default |
+| --- | --- | --- |
+| **Context noise** | `context_noise` | off |
+| **Guide from the last frame** | `continuation_guide` | on |
+| **Audio feather**, in ticks of 25 ms | `audio_feather` | 0 |
+| **Split @video1 across clips**, one per reference video | `video_slices` | off; see [References](../build/references.md) |
+
+They apply to every continuing clip; a split video applies to every clip that mentions it. Changing **Context noise**, **Guide from the last frame** or **Audio feather** marks those clips as changed until they render again. A split changes only the video frames and sound those clips receive, which the Studio cannot see before a run: clips already rendered still show as rendered, and **Run** in the graph renders them again, one clip per run.
+
+**Audio feather** lets the end of the carried audio regenerate: over that many ticks (up to 16, which is 0.4 s), the carried sound fades from frozen to free, which can soften an audible seam at the join. At 0 the carried audio stays frozen.
+
+H3 Sigmas Tail is a node in your graph, so it has no control here.

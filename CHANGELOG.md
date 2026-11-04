@@ -7,12 +7,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 ### Added
 
 - **Texture drift and holds in the continuity check.** Drift also compares fine-detail energy with the scene's first clip and names a rise of 25% or more ("Drift: 104% grainier than box 1."); a drop is stored but not named, since motion blur lowers it too. The check reports still holds of two or more near-still frames, including the step into a continuing clip ("Holds still: 3 frames at the join."). Holds enable Retake.
-- **Settings for long continuing chains** (Timeline JSON, off by default; the Studio keeps them but has no control yet): `context_noise` (paired context noise on the carried frames; on a six-clip chain, clip 6's texture rose to 1.75x instead of 2.04x, about 10% slower), `continuation_guide: false` (no last-frame guide at the first new frame; removes the 3-frame join hold in moving shots) and `audio_feather` (the last carried audio ticks regenerate). See *Long continuing chains* in the guide.
+- **Settings for long continuing chains** (off by default; in the Studio under **Project settings → Long continuing chains**, or as Timeline JSON): `context_noise` (paired context noise on the carried frames; on a six-clip chain, clip 6's texture rose to 1.75x instead of 2.04x, about 10% slower), `continuation_guide: false` (no last-frame guide at the first new frame; removes the 3-frame join hold in moving shots) and `audio_feather` (the last carried audio ticks regenerate). See *Long continuing chains* in the guide.
 - **H3 Sigmas Tail** node: raises the last noise levels before zero, optionally on continuing clips only (texture 1.93x alone, 1.67x with context noise).
 - **H3 Continuation Model** node: samples continuing clips and bridges with another model, for a continuation LoRA.
 - **Take ratings, tags and lineage.** Each take has five stars and a short tag (`takes_marks.json`), and a continuing take says which take of the clip before it came from.
 - **Fork as a copy** in the Studio's **Project settings**: downloads the generation (the way back), then continues on a copy with every render and take.
-- **`video_slices`**: each clip receives only its own window of a long reference video and its soundtrack, for repainting a long video clip by clip.
+- **`video_slices`** (**Split @video1 across clips** in the same Studio section): each clip receives only its own window of a long reference video and its soundtrack, for repainting a long video clip by clip.
 - **Measurement tool.** `tools/measure.py` prints texture, colour drift and holds per saved segment; scenario S5 (one long reference video split across clips) joins the others in `examples/prefixstream_scenes/`.
 - External Timeline preparation is `external-instructions-v10` and lists the new fields; the Timeline API schema declares them.
 

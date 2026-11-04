@@ -15,6 +15,7 @@ import { PicturesPanel, highestSlot } from './h3c_pictures.mjs?v=20261011-refere
 import { CheckPanel } from './h3c_check.mjs?v=20261104-check-holds-1';
 import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261103-replacement-bridges-1';
 import { DialoguePanel } from './h3c_dialogue.mjs?v=20261104-dialogue-key-1';
+import { ChainSettings } from './h3c_chain_settings.mjs?v=20261104-chain-settings-1';
 import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261104-take-marks-2';
 
 const STYLE_ID = 'h3ct-style';
@@ -322,6 +323,7 @@ export class TimelineEditor {
     this.stillsEl = el('div', 'h3ct-stills');
     this.audioLanes = new AudioLanes(this);
     this.dialogue = new DialoguePanel(this);
+    this.chain = new ChainSettings(this);
     lane.append(this.stillsEl, this.rulerEl, this.trackEl, this.audioLanes.root, this.audioLanes.settings, this.dialogue.root);
     this.hintEl = el('p', 'h3ct-hint');
 
@@ -584,7 +586,7 @@ export class TimelineEditor {
     this.pictures = new PicturesPanel(this);
     this.cast = new CastPage(this);
     this.castEl = this.cast.root;
-    this.root.append(head, this.feedbackEl, this.referencesEl, this.pictures.root, this.refmodsEl, this.castEl, this.frameImages.preparation.root, lane, this.hintEl,
+    this.root.append(head, this.feedbackEl, this.referencesEl, this.pictures.root, this.refmodsEl, this.chain.root, this.castEl, this.frameImages.preparation.root, lane, this.hintEl,
       this.panelEl);
     this.renderRefmods();
   }
@@ -715,7 +717,7 @@ export class TimelineEditor {
       bridgeTakes: this.takes.bridgeRoot, continuity: this.checks.root, bridgeSettings: this.bridges.root,
       audioSettings: this.audioLanes.settings, dialogueSettings: this.dialogue.root, timedTextSettings: this.audioLanes.textSettings,
       audioHeader: this.audioLanes.header, timedTextHeader: this.audioLanes.textHeader,
-      stillPrompts: this.frameImages.preparation.root};
+      stillPrompts: this.frameImages.preparation.root, chainSettings: this.chain.root};
   }
 
   // Upload… beside a frame picker: the new picture becomes the `end` frame of the box chosen when it was pressed.
@@ -1266,6 +1268,7 @@ export class TimelineEditor {
     // AudioLanes guards typing by state/clip identity, including after its settings root is borrowed.
     this.audioLanes.render(span);
     this.dialogue.render();
+    this.chain.render();
   }
 
   // The Studio sets how wide the lane draws (zoom, 1 = fit the panel).
