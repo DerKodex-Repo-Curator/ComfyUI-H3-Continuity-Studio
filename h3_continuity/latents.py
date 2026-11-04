@@ -20,12 +20,15 @@ def pixel_size(video):
     return video.shape[4] * 16, video.shape[3] * 16
 
 
-def build_continuation(latent, source_video, source_audio, context_frames, carry_audio, node="H3 Continue", *, audio_context_frames=0):
+def build_continuation(latent, source_video, source_audio, context_frames, carry_audio, node="H3 Continue", *, audio_context_frames=0,
+                       soft_prefix=0.0):
     """Write the source's last `context_frames` frames into the start of `latent` and freeze them.
 
     Returns (latent, carried_video, carried_audio, carried_ticks); carried_audio is None and
     carried_ticks is 0 when `carry_audio` is off.
     """
+    if not 0 <= soft_prefix <= 1:
+        raise ValueError(f"{node}: soft_prefix must be from 0 to 1")
     video, audio = split_h3_latent(latent, node)
     if "noise_mask" in latent:
         raise ValueError(f"{node}: the incoming latent already has a noise mask; combining masks is not supported")
@@ -44,7 +47,7 @@ def build_continuation(latent, source_video, source_audio, context_frames, carry
     video = video.clone()
     video[:, :, :tokens] = carried_video
     video_mask = torch.ones((1, 1) + tuple(video.shape[2:]), device=video.device)
-    video_mask[:, :, :tokens] = 0
+    video_mask[:, :, :tokens] = float(soft_prefix)
 
     audio_mask = torch.ones((1, 1) + tuple(audio.shape[2:]), device=audio.device)
     carried_audio, ticks = None, 0
