@@ -1,0 +1,11 @@
+{
+  "scene": "examples/prefixstream_scenes/s1_talking_chain.json",
+  "arms": {
+    "base": {},
+    "noise": {
+      "timeline": {
+        "context_noise": true
+      }
+    }
+  }
+}
