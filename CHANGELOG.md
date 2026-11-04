@@ -2,6 +2,24 @@
 
 All notable changes to H3 Continuity Studio are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-11-04
+
+### Added
+
+- **Smoke comparisons.** `tools/smoke.py` runs a scene with named variations of Timeline settings, prompts or graph nodes, records each run's timing and status, and copies the full videos with duration, frame-count and audio-presence metadata into a JSON summary. When every variation produces a video, it also creates a side-by-side comparison. Use `--arm` to select variations and `--cap` to bound each render request.
+- **Four comparison scenarios.** `examples/prefixstream_scenes/` includes a talking continuation chain, a walking phone conversation, a rooftop landing and two alternative story branches, with smoke specifications under `smoke/`.
+
+### Removed
+
+- **Split at guide.** Splitting inside a shot repeated its opening action in both prompts, which could restart a camera move. Use **Split before Shot N** at a timed shot boundary; the second clip starts with a **Cut**. First, Last and interior frame guides remain available, and saved projects keep their existing boxes, prompts, guides and joins.
+
+### Fixed
+
+- **Portable smoke output paths.** The smoke tool defaults to `$COMFY_ROOT/output` when `COMFY_ROOT` is set; otherwise it requires `--output`, instead of assuming one machine's folder.
+- **Portable ComfyUI test setup.** The test runner supplies `COMFY_ROOT` from a detected Windows portable ComfyUI installation when the variable is unset, so CPU tests can load ComfyUI without manual environment setup.
+
+[Changes since v0.6.0](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.6.0...v0.7.0).
+
 ## [0.6.0] - 2026-11-04
 
 ### Added

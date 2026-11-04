@@ -122,14 +122,12 @@ Neither box renders again, and every box keeps its Timeline time.
 
 ## Splitting a box
 
-- **Split before Shot N** turns a `[Shot N]` boundary of one box into two boxes.
-  Each keeps the references it uses, and a bridge before the box stays with the
-  first half.
-- **Split at guide.** A Shot guide pins one frame in the middle of a generation,
-  and H3 doesn't build toward it, so it tends to appear as an insert. Splitting
-  there makes the guide a real endpoint: the first box ends on it (`last`) and a
-  continuing box starts from it (`first`). Both halves round up to the grid, so
-  the guide can land a few frames later. A half that still mentions references gets
-  `flf_refmods`, so it stays `flf2va`. The new box gets a new seed. Later guides,
-  plate changes, pins and chosen memories move with it, and both halves render
-  again.
+- **Split before Shot N** turns a timed `[Shot N]` boundary of one box into two
+  boxes. Later shots need increasing `At MM:SS.mmm,` timestamps. The second box
+  starts as a Cut. Each half keeps its own shots and required references, accepted
+  guides move with their shots, and a bridge before the box stays with the first half.
+- Frame guides can steer a moment inside a shot, including without Shot markers,
+  but have no split action. Keep one continuous camera move in one box: repeating
+  the whole-shot prompt in a second box can restart its opening action.
+- Existing saved boxes keep their prompts, paired guides and joins, including
+  Continue joins created by earlier guide splits.
