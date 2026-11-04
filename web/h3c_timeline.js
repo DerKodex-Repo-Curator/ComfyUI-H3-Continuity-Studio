@@ -12,7 +12,7 @@ import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261004-studio-1';
 import { studio } from './h3c_studio.mjs?v=20261103-bridges-guide-split-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261104-check-holds-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261104-take-marks-1';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-continuity-keys-2';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
@@ -20,7 +20,7 @@ import { voiceRefs } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
 import {captureRecipe,captureTimelineId,captureStillBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=20261022-recipe-switch-1';
 import {boundarySnapshot} from './h3c_frame_images.mjs?v=20261104-shot-split-only-1';
 import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
-import { TakesClient } from './h3c_takes.mjs?v=20261103-replacement-bridges-1';
+import { TakesClient } from './h3c_takes.mjs?v=20261104-take-marks-1';
 import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
 
 const NODE_TYPE = 'H3C_Timeline';
@@ -123,6 +123,7 @@ class TimelineHost {
     hide(this.widget);
     this.takesClient = new TakesClient(async (url, body) => {
       if (this.project) {
+        if (url.endsWith('/rate')) return {ok: false, error: 'Rate takes on the H3 Timeline node’s own sequence.'};
         const action = url.endsWith('/use') ? 'use' : url.endsWith('/delete') ? 'delete' : 'list';
         const found = await this.project.takes(action, body);
         if (action === 'list') {

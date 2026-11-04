@@ -259,15 +259,56 @@ def warnings(sequence, index):
     return found
 
 
-def _in_use(entry):
-    return None if entry is None else {"created": entry.get("created"), "seed": (entry.get("timeline") or {}).get("seed")}
+MARKS = "takes_marks.json"
 
 
-def _listed(sequence, take, why):
+def marks(folder):
+    """{created: {"rating", "tag"}} for the renders of the sequence in `folder`; {} when none or unreadable."""
+    try:
+        with open(os.path.join(folder, MARKS), encoding="utf-8") as handle:
+            found = json.load(handle).get("takes")
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def mark(folder, created, rating, tag):
+    """Saves a render's rating (1-5, or 0) and short tag, keyed by when it was rendered; no rating and no tag clears
+    the mark."""
+    if not isinstance(created, str) or not created:
+        raise ValueError("H3 Timeline: a take mark needs the render's time")
+    if type(rating) is not int or not 0 <= rating <= 5:
+        raise ValueError("H3 Timeline: a take rating is a whole number from 0 to 5")
+    if not isinstance(tag, str) or len(tag) > 40:
+        raise ValueError("H3 Timeline: a take tag is text of at most 40 characters")
+    found = marks(folder)
+    if rating or tag.strip():
+        found[created] = {"rating": rating, "tag": tag.strip()}
+    else:
+        found.pop(created, None)
+    path = os.path.join(folder, MARKS)
+    with open(path + ".tmp", "w", encoding="utf-8") as handle:
+        json.dump({"version": 1, "takes": found}, handle, ensure_ascii=False, indent=1)
+    os.replace(path + ".tmp", path)
+
+
+def _marked(created, found):
+    record = found.get(created) or {}
+    return {"rating": record.get("rating", 0), "tag": record.get("tag", "")}
+
+
+def _in_use(entry, found):
+    if entry is None:
+        return None
+    return {"created": entry.get("created"), "seed": (entry.get("timeline") or {}).get("seed"),
+            **_marked(entry.get("created"), found)}
+
+
+def _listed(sequence, take, why, found):
     entry = take["entry"]
     created, video = entry.get("created"), entry.get("video")
     return {"folder": take["folder"], "created": created, "seed": _seed(take), "usable": not why, "why": why,
-            "bytes": take["bytes"],
+            "bytes": take["bytes"], **_marked(created, found),
             "video": None if not video else {"filename": video["file"], "type": "output", "v": created,
                                              "subfolder": f"h3_sequences/{sequence.name}/{take['folder']}"}}
 
@@ -281,17 +322,30 @@ def listing(body):
             box_id = body.get("box")
             index = sequence.index(box_id)
             bridge = sequence.bridge(box_id)
+            noted = marks(sequence.folder)
             found = {"ok": True, "busy": busy(sequence.folder),
-                     "box": {"in_use": _in_use(sequence.in_use("box", box_id)),
-                             "takes": [_listed(sequence, take, box_fit(sequence, index, take))
+                     "box": {"in_use": _in_use(sequence.in_use("box", box_id), noted),
+                             "takes": [_listed(sequence, take, box_fit(sequence, index, take), noted)
                                        for take in sequence.takes_of("box", box_id)],
                              "warnings": warnings(sequence, index)},
                      "bridge": None}
             if bridge is not None:
-                found["bridge"] = {"in_use": _in_use(sequence.in_use("bridge", box_id)),
-                                   "takes": [_listed(sequence, take, bridge_fit(sequence, bridge, take))
+                found["bridge"] = {"in_use": _in_use(sequence.in_use("bridge", box_id), noted),
+                                   "takes": [_listed(sequence, take, bridge_fit(sequence, bridge, take), noted)
                                              for take in sequence.takes_of("bridge", box_id)]}
             return found
+        except ERRORS as error:
+            return {"ok": False, "error": str(error)}
+
+
+def rate(body):
+    """{"ok"} after saving body["rating"] and body["tag"] for the render made at body["created"] in the posted
+    Timeline's sequence."""
+    with continuity.SEQUENCE_LOCK:
+        try:
+            sequence = _Sequence(body)
+            mark(sequence.folder, body.get("created"), body.get("rating"), body.get("tag", ""))
+            return {"ok": True}
         except ERRORS as error:
             return {"ok": False, "error": str(error)}
 
@@ -319,8 +373,8 @@ def use(body, *, managed_owner=None):
             wanted = _seed_wanted(sequence, kind, box_id)
             take = next((item for item in sequence.saved if item["folder"] == body.get("take")), None)
             if take is None:
-                current = _in_use(sequence.in_use(kind, box_id)) or {}
-                if current.get("created") is not None and current == {"created": body.get("created"), "seed": wanted}:
+                current = _in_use(sequence.in_use(kind, box_id), {}) or {}
+                if current.get("created") is not None and (current["created"], current["seed"]) == (body.get("created"), wanted):
                     return {"ok": True}
                 return {"ok": False, "error": "This take is no longer saved."}
             if _target(take["entry"]) != (kind, box_id):
