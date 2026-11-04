@@ -10,7 +10,7 @@ from comfy_execution.graph_utils import ExecutionBlocker
 
 from . import conditioning, latents, store, timing, shot_preview, refmods, audio_tracks, visual_memory
 from . import box_checks, bridges, dialogue, studio_pictures, voice_clips, reference_replacements, replacement_candidates
-from . import replacement
+from . import partial_video, replacement
 from . import nodes as continuity
 from . import timeline as rules
 from .story_node import StoryType
@@ -136,10 +136,24 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
                 record = saved_full_video()
             if record:
                 full_video = _view(name, record["file"], record["sources"])
+        partial = None
+        if materialize and not current and parsed.video_slices and manifest.get("source") and soundtrack is not None:
+            from .timeline_api.service import authorize_sequence
+            authorize_sequence(name, managed_owner, "full_video")
+            try:
+                partial, note = partial_video.build(folder, name, parsed, manifest, done, soundtrack, FULL_VIDEO_CRF)
+            except (OSError, ValueError, RuntimeError) as error:
+                note = f"Partial video could not be saved: {error}"
+            export_error = export_error or note
         status = rules.status_payload(name, parsed, segments, next_index, thumb, full_video,
                                       store.sequence_seconds(manifest, spliced), done)
         if export_error and full_video is None:
             status["export_error"] = export_error
+        if partial:
+            status["partial_video"] = {"file": _view(name, partial["file"], partial["sources"]),
+                                       "rendered": partial["rendered"], "boxes": partial["boxes"]}
+            if parsed.all_bridges:
+                status["partial_video"]["note"] = "Bridges and replacements are left out."
         if parsed.all_bridges:
             items = {}
             found = bridges.states(folder, parsed, manifest, done, known)
@@ -576,6 +590,9 @@ class H3C_Timeline(io.ComfyNode):
                                    clip, vae, audio_vae, ref_image_size, negative)
         if next_index is None:
             return cls.finish(name, folder, parsed, manifest, is_done, known)
+        if parsed.video_slices and parsed.video_slices[0] in images:
+            partial_video.keep_source(folder, name, parsed.video_slices[0], images, audios, width, height,
+                                      MediaHashes(images, audios).digest)
         box = plan(next_index)
         conflict = rules.carry_conflict(parsed, next_index, context)
         if conflict:

@@ -16,6 +16,7 @@ import { CheckPanel } from './h3c_check.mjs?v=20261104-check-holds-1';
 import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261103-replacement-bridges-1';
 import { DialoguePanel } from './h3c_dialogue.mjs?v=20261104-dialogue-key-1';
 import { ChainSettings } from './h3c_chain_settings.mjs?v=20261104-chain-settings-1';
+import { exportedVideo } from './h3c_partial_video.mjs?v=20261104-partial-video-1';
 import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261104-take-marks-2';
 
 const STYLE_ID = 'h3ct-style';
@@ -1153,8 +1154,12 @@ export class TimelineEditor {
       : `Every ${what} is rendered`;
     this.renderNextButton.disabled = this.renderButton.disabled;
     this.renderNextButton.title = remaining ? `Queue one run, for the next ${what} that is not rendered yet` : `Every ${what} is rendered`;
-    const full = ok && !this.stale && !this.queuing ? this.status.full_video : null;
+    const shown = ok && !this.stale && !this.queuing ? exportedVideo(this.status) : null;
+    const full = shown?.file ?? null;
+    this.partialVideo = shown?.partial ?? null;
     const fullUrl = full ? this.host.viewUrl(full) : null;
+    this.fullLink.title = `Open the ${this.partialVideo ? 'partial' : 'full'} video in a new tab`;
+    this.fullDownloadLink.title = `Download the ${this.partialVideo ? 'partial' : 'full'} video`;
     for (const link of [this.fullLink, this.fullDownloadLink]) {
       link.hidden = !full;
       if (full) link.href = fullUrl;
