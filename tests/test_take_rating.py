@@ -42,9 +42,10 @@ class TakeRatingTest(unittest.TestCase):
     def test_listed_rows_carry_their_marks(self):
         marks = {"c1": {"rating": 5, "tag": "best"}}
         self.assertEqual(takes._in_use({"created": "c1", "timeline": {"seed": 7}}, marks),
-                         {"created": "c1", "seed": 7, "rating": 5, "tag": "best"})
+                         {"created": "c1", "seed": 7, "carried_from": None, "rating": 5, "tag": "best"})
         self.assertEqual(takes._in_use({"created": "c2", "timeline": {"seed": 8}}, marks),
-                         {"created": "c2", "seed": 8, "rating": 0, "tag": ""})
+                         {"created": "c2", "seed": 8, "carried_from": None, "rating": 0, "tag": ""})
+        self.assertEqual(takes._in_use({"created": "c3", "carried_from": "p", "timeline": {}}, {})["carried_from"], "p")
 
 
 if __name__ == "__main__":

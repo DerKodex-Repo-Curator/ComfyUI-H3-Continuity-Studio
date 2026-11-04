@@ -65,6 +65,13 @@ function size(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
+// Where a take came from: "from box 2’s take of 11-04 07:30 (in use)", or '' for a take that carried nothing or
+// was saved before takes recorded it. inUse: the box before's take in use, {created} or null.
+export function fromText(carriedFrom, number, inUse) {
+  if (!carriedFrom || number < 2) return '';
+  return `from box ${number - 1}’s take of ${when(carriedFrom)}${inUse?.created === carriedFrom ? ' (in use)' : ''}`;
+}
+
 // "★★★★☆ · keeper", "tag: keeper" or '' for a take's rating (0-5) and tag.
 export function marksText(rating = 0, tag = '') {
   const stars = rating ? '★'.repeat(rating) + '☆'.repeat(5 - rating) : '';
@@ -168,11 +175,12 @@ class Section {
     const inUse = part.in_use;
     this.inUseEl.replaceChildren();
     if (inUse) {
-      this.inUseEl.append(`In use: rendered ${when(inUse.created)} · ${seedText(inUse.seed)} `);
+      const from = this.bridge ? '' : fromText(inUse.carried_from, this.panel.editor.selected + 1, part.before);
+      this.inUseEl.append(`In use: rendered ${when(inUse.created)} · ${seedText(inUse.seed)}${from ? ` · ${from}` : ''} `);
       if (this.panel.editor.host.projectAttached !== true) this.inUseEl.append(this.marks(inUse));
     }
     this.inUseEl.hidden = !inUse;
-    this.rowsEl.replaceChildren(...(part.takes ?? []).map((take) => this.row(take, off)));
+    this.rowsEl.replaceChildren(...(part.takes ?? []).map((take) => this.row(take, off, part.before)));
     this.actions.hidden = !!part.error || this.panel.editor.host.projectAttached === true;
     this.otherButton.disabled = !!off;
     this.otherButton.title = off || `Delete every saved take of this ${this.bridge ? 'bridge' : 'box'}, keeping the take in use`;
@@ -189,7 +197,7 @@ class Section {
     this.noteEl.hidden = !note;
   }
 
-  row(take, off) {
+  row(take, off, before = null) {
     const panel = this.panel;
     const row = el('div', 'h3ctk-row');
     const why = el('span', 'h3ctk-why', take.usable ? 'Can be used' : `Can’t be used: ${take.why}`);
@@ -202,7 +210,8 @@ class Section {
     const remove = button('Delete', off || 'Delete this take’s files', () => panel.remove(this, {scope: 'take', take: take.folder}));
     remove.disabled = !!off || panel.editor.host.projectAttached === true;
     remove.hidden = panel.editor.host.projectAttached === true;
-    row.append(el('span', 'h3ctk-line', `Rendered ${when(take.created)} · ${seedText(take.seed)}`));
+    const from = this.bridge ? '' : fromText(take.carried_from, panel.editor.selected + 1, before);
+    row.append(el('span', 'h3ctk-line', `Rendered ${when(take.created)} · ${seedText(take.seed)}${from ? ` · ${from}` : ''}`));
     if (panel.editor.host.projectAttached !== true) row.append(this.marks(take));
     row.append(why, play, use, remove);
     return row;

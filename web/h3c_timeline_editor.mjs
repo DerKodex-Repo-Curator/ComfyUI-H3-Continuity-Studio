@@ -15,7 +15,7 @@ import { PicturesPanel, highestSlot } from './h3c_pictures.mjs?v=20261011-refere
 import { CheckPanel } from './h3c_check.mjs?v=20261104-check-holds-1';
 import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261103-replacement-bridges-1';
 import { DialoguePanel } from './h3c_dialogue.mjs?v=20261104-dialogue-key-1';
-import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261104-take-marks-1';
+import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261104-take-marks-2';
 
 const STYLE_ID = 'h3ct-style';
 const PANEL_HEIGHT = 470;

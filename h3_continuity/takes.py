@@ -301,14 +301,14 @@ def _in_use(entry, found):
     if entry is None:
         return None
     return {"created": entry.get("created"), "seed": (entry.get("timeline") or {}).get("seed"),
-            **_marked(entry.get("created"), found)}
+            "carried_from": entry.get("carried_from"), **_marked(entry.get("created"), found)}
 
 
 def _listed(sequence, take, why, found):
     entry = take["entry"]
     created, video = entry.get("created"), entry.get("video")
     return {"folder": take["folder"], "created": created, "seed": _seed(take), "usable": not why, "why": why,
-            "bytes": take["bytes"], **_marked(created, found),
+            "bytes": take["bytes"], "carried_from": entry.get("carried_from"), **_marked(created, found),
             "video": None if not video else {"filename": video["file"], "type": "output", "v": created,
                                              "subfolder": f"h3_sequences/{sequence.name}/{take['folder']}"}}
 
@@ -323,11 +323,13 @@ def listing(body):
             index = sequence.index(box_id)
             bridge = sequence.bridge(box_id)
             noted = marks(sequence.folder)
+            before = sequence.in_use("box", sequence.parsed.boxes[index - 1].id) if index else None
             found = {"ok": True, "busy": busy(sequence.folder),
                      "box": {"in_use": _in_use(sequence.in_use("box", box_id), noted),
                              "takes": [_listed(sequence, take, box_fit(sequence, index, take), noted)
                                        for take in sequence.takes_of("box", box_id)],
-                             "warnings": warnings(sequence, index)},
+                             "warnings": warnings(sequence, index),
+                             "before": {"created": before.get("created")} if before else None},
                      "bridge": None}
             if bridge is not None:
                 found["bridge"] = {"in_use": _in_use(sequence.in_use("bridge", box_id), noted),
@@ -374,7 +376,8 @@ def use(body, *, managed_owner=None):
             take = next((item for item in sequence.saved if item["folder"] == body.get("take")), None)
             if take is None:
                 current = _in_use(sequence.in_use(kind, box_id), {}) or {}
-                if current.get("created") is not None and (current["created"], current["seed"]) == (body.get("created"), wanted):
+                if current.get("created") is not None and (current["created"], current["seed"]) == (body.get("created"),
+                                                                                               wanted):
                     return {"ok": True}
                 return {"ok": False, "error": "This take is no longer saved."}
             if _target(take["entry"]) != (kind, box_id):
