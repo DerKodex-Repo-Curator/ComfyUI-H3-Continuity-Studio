@@ -51,9 +51,9 @@ Prompt partitioning cannot guarantee good prose or visual continuity.
 
 ### Phase 2: Release
 
-- [ ] **GSP2** (State: `active` | Verification: `node tests/run.mjs; git diff --check; inspect PR checks and merge state; verify release tag resolves to the merged commit and published release notes cover v0.6.0 onward`)
+- [x] **GSP2** (State: `passing` | Verification: `node tests/run.mjs; git diff --check; inspect PR checks and merge state; verify release tag resolves to the merged commit and published release notes cover v0.6.0 onward`)
   - *Behavior:* Create and merge a PR for the verified removal, then publish a tagged v0.7.0 release with all changes since v0.6.0, including already merged smoke tooling/examples from PR #12.
   - *Evidence:* User explicitly authorized PR creation, merge and tagged release. Fetched origin/tags: previous latest v0.6.0 at f05894d; branch and origin/main both at 469771e. No rebase needed. Inspected all intervening commits and the render_scene/test-runner diffs; other PrefixStream PRs #13-#18 remain open and are excluded.
-  - *Partial:* CHANGELOG.md has a complete v0.7.0 section. Commit, PR, merge, tag and release publication pending. Python's current environment lacks MkDocs; use the docs CI check or an isolated tooling environment for strict build verification.
+  - *Release recovery:* Verified 2026-11-04: PR #19 merged at a4e660af5778e2b90964ee6d14c31120095f9353, and v0.7.0 is published. This inherited release checkpoint was stale; the editing-history release is a separate work item.
   - *Constraints:* Publish the merged PR commit, not an unmerged branch or unrelated later main changes. Do not deploy to live ComfyUI or run inference. Do not modify other worktrees.
-  - *Next:* Verify the final tree and docs build, commit/push, create/link PR, merge after checks, then publish the merged commit as v0.7.0.
+  - *Next:* Complete; retain the published release.

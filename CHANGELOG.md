@@ -4,9 +4,16 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-04
+
 ### Added
 
+- **Undo, redo and history.** Studio controls and keyboard shortcuts step through Timeline edits. History lists named states and jumps directly backward or forward. Typing in one field and dragging a clip form one edit; making a new edit after a jump replaces the redo branch. The latest 100 edits stay available until the project/workflow changes or the page reloads. On phones, the controls are under More.
+- History restores clips, prompts, guides, Cast, pictures, references, audio, timed text and Timeline settings through the existing save path. Writer results applied to the Timeline are included; live job receipts keep following the server. Independent Story inputs, graph wiring, job cancellation and permanent file deletion remain outside this history.
+
 - **Partial video while repainting.** Until every clip of a Timeline that splits a video is rendered, the Studio's **Full video** and **Download video** use `<name>_partial.mp4`: the rendered clips, and the split video's own frames and sound for the others, at the Timeline's full length. The Timeline node saves the split video at render size (`<name>_source.mp4`) for it.
+
+[Changes since v0.9.0](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.9.0...v0.10.0).
 
 ## [0.9.0] - 2026-11-04
 

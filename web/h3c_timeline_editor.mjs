@@ -769,6 +769,7 @@ export class TimelineEditor {
     this.stale = true;
     this.render();
     this.cast.changed();
+    this.host.loaded?.();
   }
 
   startIfEmpty() {

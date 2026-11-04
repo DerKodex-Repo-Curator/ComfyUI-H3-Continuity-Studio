@@ -11,6 +11,8 @@ Press **Open Studio** on the Timeline (or Story) node. The Studio fills the wind
 | **✕** | Close the Studio. |
 | **References** | Show or hide the left-hand references column. |
 | *Project name and status* | The sequence name, the clip count and length, bridges and the render state ("All 6 boxes are rendered."). |
+| **Undo / Redo** | Step backward or forward through Timeline edits. |
+| **History** | Open the list of edits and jump directly to any retained state. |
 | **New project** | Start a fresh project in this workflow. See [Full video and projects](../output/full-video-and-projects.md). |
 | **Project settings** | Shared prompt, settings for [long continuing chains](../continuity/long-chains.md#in-the-studio), and export or import of the project. |
 | **Download video** | Save the full video (enabled once every clip is rendered). |
@@ -58,6 +60,12 @@ From top to bottom: the toolbar (**+ Clip**, **Render next**, **Render N remaini
 - Drag a clip's right edge to resize it, or drag after the last clip to draw a new one. Click a clip to edit it.
 - **+ Audio** and **+ Text** add [audio](../sound/audio.md) and [timed text](../sound/timed-text.md).
 
-## Undo
+## Undo, redo and history
 
-ComfyUI's **Ctrl+Z** and **Ctrl+Y** (or **Ctrl+Shift+Z**) work while the Studio is open, except inside a text field, where Ctrl+Z undoes your typing. Cast edits, take switches and writer results each undo as one step.
+Press **Undo** to reverse the last Timeline edit, or **Redo** to restore it. Outside a text field, **Ctrl+Z** (Mac: **Cmd+Z**) undoes; **Ctrl+Y** or **Ctrl+Shift+Z** (Mac: **Cmd+Shift+Z**) redoes. Text fields keep their own typing undo.
+
+**History** lists named states such as *Add clip*, *Edit clip 2 prompt* and *Change width*. Select a row to restore that point, including all intervening edits. The current state is marked; later states remain available until you make a new edit, which replaces that later branch. Typing during one visit to a field is grouped as one edit, and a drag is one edit.
+
+The latest **100 edits** are kept for each Timeline during the current session. Closing and reopening Studio keeps them; loading a different project, reloading the workflow or refreshing the page starts a new history. On a phone, the controls are under **More**.
+
+History restores Timeline content (clips, prompts, guides, Cast, pictures, references, audio and text) and the Timeline's size/context settings through normal autosave. Writer results applied to the Timeline are included. Independent Story-node inputs and graph wiring keep their existing ComfyUI behavior. History does not cancel jobs, erase rendered files or recover permanently deleted files; live job receipts continue following the server.
