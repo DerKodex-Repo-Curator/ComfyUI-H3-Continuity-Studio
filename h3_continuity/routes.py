@@ -6,7 +6,7 @@ import json
 from aiohttp import web
 from .timeline_api.contracts import APIError
 
-from . import reference_assets, saved_state, story_library, story_bible, story_job, story_keys, story_templates, refmods, audio_tracks, takes, stills, timeline_prepare as preparation
+from . import reference_assets, saved_state, story_library, story_names, story_bible, story_job, story_keys, story_templates, refmods, audio_tracks, takes, stills, timeline_prepare as preparation
 
 STATUS_ROUTE = "/h3c/timeline/status"
 TAKES_ROUTE = "/h3c/timeline/takes"
@@ -33,7 +33,8 @@ async def story_library_view(request):
         identity = request.query.get('id')
         if request.query.get('graph'):
             return web.json_response({'deleted': saved_state.deleted(request.query['graph'])})
-        result = await asyncio.to_thread(story_library.load, identity) if identity else {'stories': await asyncio.to_thread(story_library.listing)}
+        result = await asyncio.to_thread(story_library.load, identity) if identity else {
+            'stories': await asyncio.to_thread(story_library.listing), 'names': await asyncio.to_thread(story_names.read)}
         return web.json_response(result)
     except (ValueError, OSError) as error:
         return web.json_response({'error': str(error)}, status=400)
@@ -52,6 +53,14 @@ async def story_library_save(request):
         return web.json_response({'error': str(error), 'code': error.code,
                                   'library_revision': error.library_revision}, status=409)
     except (ValueError, OSError, KeyError, TypeError, APIError) as error:
+        return web.json_response({'error': str(error)}, status=400)
+
+
+async def story_library_rename(request):
+    try:
+        body = await _object(request) or {}
+        return web.json_response({'names': await asyncio.to_thread(story_names.rename, body.get('key'), body.get('name', ''))})
+    except (ValueError, OSError) as error:
         return web.json_response({'error': str(error)}, status=400)
 
 
@@ -392,6 +401,7 @@ def register():
     routes.get('/h3c/stories')(story_library_view)
     routes.post('/h3c/stories')(story_library_save)
     routes.post('/h3c/stories/delete')(story_library_delete)
+    routes.post('/h3c/stories/rename')(story_library_rename)
     from .timeline_api import routes as project_routes
     api = project_routes.runtime(instance)
     project_routes.register(instance, api)

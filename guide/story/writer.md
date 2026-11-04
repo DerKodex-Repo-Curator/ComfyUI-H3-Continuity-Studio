@@ -40,7 +40,7 @@ Fast writing makes one planning request and then one structured request per clip
 | **Rewrite entire Timeline** | Rewrites every clip. |
 | **Check all rendered clips** | Runs the [continuity check](../continuity/check.md). |
 | **Undo last Write** | Puts the Timeline back as it was before the last Write, where you haven't changed things since. |
-| **Saved stories** | Every story written on this server; load one into the Timeline or delete it. |
+| **Saved stories** | Every story written on this server, in two lists: pick a **story**, then one of its **versions** (newest first, numbered from v1). Saved entries with the same title, ignoring case and spacing, are versions of one story. **Load version** puts the selected version into the Timeline; the version open in this workflow is marked *open now*. **Delete version** removes only that version. **Rename story** shows a name of your choosing in place of the title (empty goes back to the title), and **Delete story** removes every version after one confirmation. |
 
 Progress shows in the Story panel and the Studio's top bar; a Write that fails or is cancelled **keeps the clips it finished**.
 

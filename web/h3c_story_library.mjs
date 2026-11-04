@@ -107,7 +107,21 @@ export async function saveBeforeNewProject(story, saved) {
 export class StoryLibrary {
   constructor(host) { this.host=host; this.pending=false; }
   check() { if(this.host.busy())throw Error('Wait for writing, uploads and rendering to finish before switching stories.'); }
-  async refresh() { return (await this.host.request('/h3c/stories')).stories; }
+  async refresh() {
+    const {stories,names}=await this.host.request('/h3c/stories');
+    return {stories,names:names??{}};
+  }
+  // The name the user wants for a story, null if they cancel; an empty name goes back to the story's own title.
+  async ask(group) {
+    const name=await this.host.prompt('Name this story. Leave it empty to use its own title.',group.name||group.title);
+    return typeof name==='string'?name:null;
+  }
+  async rename(key,name) {
+    if(this.pending)return false;
+    this.pending=true;
+    try {await this.host.request('/h3c/stories/rename',{key,name});return true;}
+    finally {this.pending=false;}
+  }
   async open(id) {
     if(this.pending)return;
     this.check();this.pending=true;
@@ -127,6 +141,26 @@ export class StoryLibrary {
       if(!await this.host.confirm(`Permanently delete “${entry.title}” and its generated videos, stills and takes? Shared uploads and RefMods are kept. This cannot be undone.`))return false;
       this.check();await this.host.request('/h3c/stories/delete',{id:entry.id});
       await this.host.deleted(entry.id);return true;
+    } finally {this.pending=false;}
+  }
+  // Every version of one story, after one confirmation. Stops at the first failure and says how many were removed.
+  async removeAll(group) {
+    if(this.pending)return false;
+    this.check();this.pending=true;
+    let removed=0;
+    try {
+      const count=group.versions.length;
+      if(!await this.host.confirm(`Permanently delete “${group.label}”, all ${count} ${count===1?'version':'versions'}, and their generated videos, stills and takes? Shared uploads and RefMods are kept. This cannot be undone.`))return false;
+      for(const entry of group.versions) {
+        this.check();await this.host.request('/h3c/stories/delete',{id:entry.id});
+        removed++;await this.host.deleted(entry.id);
+      }
+      // The name belonged to this story only; a failure to clear it leaves a harmless label.
+      if(group.name)await this.host.request('/h3c/stories/rename',{key:group.key,name:''}).catch(()=>{});
+      return true;
+    } catch(error) {
+      error.message=`${error.message} (${removed} of ${group.versions.length} versions deleted.)`;
+      error.partial=removed>0;throw error;
     } finally {this.pending=false;}
   }
 }

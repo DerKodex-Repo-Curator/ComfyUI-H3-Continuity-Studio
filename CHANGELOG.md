@@ -4,6 +4,18 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-04
+
+### Changed
+
+- **Saved stories are grouped.** The Saved stories list now has two selectors: the story, then its version. Saved entries with the same title (ignoring case and spacing) are versions of one story, so a story saved many times no longer fills the list. Versions are numbered from v1, newest first, and the one open in this workflow is marked *open now*. **Delete permanently** is now **Delete version** and removes only the selected version. Nothing is renamed or moved on disk.
+
+### Added
+
+- **Rename story and Delete story.** **Rename story** shows a name you choose in place of the title; the story is still found by its title, so new saves with that title join it, and an empty name goes back to the title. Names are kept on the server in `user/__h3c_state`. **Delete story** removes every version and its generated media after one confirmation; if a version cannot be deleted (for example a render is running) it stops there and says how many were removed.
+
+[Changes since v0.11.0](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.11.0...v0.12.0).
+
 ## [0.11.0] - 2026-11-04
 
 ### Added

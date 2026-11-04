@@ -1,6 +1,7 @@
 // The H3 Story face: Write, Check all, Cancel and Undo, Open Studio, and the API keys in a closed section. The Studio
 // places the story of the last Write and the export and import row on its Story page.
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
+import {groupLabel,groupStories,initialSelection,versionLabel} from './h3c_story_groups.mjs?v=20261104-story-groups-1';
 import {ideaImagesRow} from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 
 const STYLE_ID = 'h3cs-style';
@@ -39,7 +40,7 @@ const CSS = `
 .h3cs-settings .h3cx-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .h3cs-library { width:100%; min-width:0; }
 .h3cs-library > summary { cursor:pointer; font-weight:600; }
-.h3cs-library select { width:100%; min-width:0; padding:5px; color:inherit; background:var(--comfy-input-bg,#222); }
+.h3cs-library select { display:block; margin-top:6px; width:100%; min-width:0; padding:5px; color:inherit; background:var(--comfy-input-bg,#222); }
 .h3cs-library .h3cs-row { margin-top:6px; }
 `;
 
@@ -192,17 +193,24 @@ export class StoryPanel {
     if(host.listStories) {
       this.libraryEl=el('details','h3cs-library');
       this.libraryEl.append(el('summary',null,'Saved stories'));
-      this.librarySelect=el('select');this.librarySelect.setAttribute('aria-label','Saved stories');
+      // Story = every saved entry sharing a title; Version = one saved entry of it.
+      this.libraryGroup=el('select');this.libraryGroup.setAttribute('aria-label','Saved story');
+      this.librarySelect=el('select');this.librarySelect.setAttribute('aria-label','Saved story version');
+      this.libraryGroups=[];this.libraryRows=[];
       this.libraryNote=el('span','h3cs-hosts','Saved on this ComfyUI server.');
-      const row=el('div','h3cs-row');
-      this.libraryOpen=button('Load story','Load the selected story into this Timeline, keeping the current workflow. Saved renders load only when the wiring and settings match.',()=>host.openSavedStory(this.librarySelect.value));
-      this.libraryDelete=button('Delete permanently','Delete the selected story and its generated media.',()=>host.deleteSavedStory(this.libraryRows.find(row=>row.id===this.librarySelect.value)));
+      const row=el('div','h3cs-row'),storyRow=el('div','h3cs-row');
+      this.libraryOpen=button('Load version','Load the selected version into this Timeline, keeping the current workflow. Saved renders load only when the wiring and settings match.',()=>host.openSavedStory(this.librarySelect.value));
+      this.libraryDelete=button('Delete version','Delete the selected version and its generated media. Other versions of the story are kept.',()=>host.deleteSavedStory(this.libraryRows.find(row=>row.id===this.librarySelect.value)));
+      this.libraryRename=button('Rename story','Give the selected story a name instead of its title.',()=>host.renameSavedStory(this.selectedGroup()));
+      this.libraryDeleteStory=button('Delete story','Delete every version of the selected story and its generated media.',()=>host.deleteSavedStoryGroup(this.selectedGroup()));
       row.append(button('Refresh','Refresh stories saved on this server.',()=>this.refreshStories()),this.libraryOpen,this.libraryDelete);
-      this.libraryEl.append(this.librarySelect,row,this.libraryNote);
+      storyRow.append(this.libraryRename,this.libraryDeleteStory);
+      this.libraryEl.append(this.libraryGroup,this.librarySelect,row,storyRow,this.libraryNote);
       this.libraryEl.addEventListener('toggle',()=>{if(this.libraryEl.open)this.refreshStories();});
       this.root.insertBefore(this.libraryEl,this.keysEl);
-      this.librarySelect.addEventListener('change',()=>{this.libraryOpen.disabled=this.libraryDelete.disabled=!this.librarySelect.value;});
-      this.libraryOpen.disabled=this.libraryDelete.disabled=true;
+      this.libraryGroup.addEventListener('change',()=>this.showVersions(this.libraryGroup.value));
+      this.librarySelect.addEventListener('change',()=>this.syncLibraryButtons());
+      this.syncLibraryButtons();
     }
     this.settingFields = new Map();
     this.settingValues = new Map();
@@ -228,18 +236,46 @@ export class StoryPanel {
   async refreshStories() {
     this.libraryNote.textContent='Loading saved stories…';
     try {
-      const selected=this.librarySelect.value;this.libraryRows=await this.host.listStories();
-      this.librarySelect.replaceChildren();
-      const placeholder=el('option',null,this.libraryRows.length?'Choose a saved story':'No saved stories yet');placeholder.value='';
-      this.librarySelect.append(placeholder);
-      for(const row of this.libraryRows) {
-        const option=el('option',null,`${row.title} · ${row.boxes} clips · ${row.status} · ${new Date(row.updated*1000).toLocaleString()}`);
-        option.value=row.id;this.librarySelect.append(option);
+      const wanted={key:this.libraryGroup.value,id:this.librarySelect.value};
+      const {rows,names}=await this.host.listStories();
+      this.libraryRows=rows;
+      this.libraryGroups=groupStories(rows,names);
+      this.libraryGroup.replaceChildren();
+      const placeholder=el('option',null,this.libraryGroups.length?'Choose a saved story':'No saved stories yet');placeholder.value='';
+      this.libraryGroup.append(placeholder);
+      for(const group of this.libraryGroups) {
+        const option=el('option',null,groupLabel(group));option.value=group.key;this.libraryGroup.append(option);
       }
-      if(this.libraryRows.some(row=>row.id===selected))this.librarySelect.value=selected;
-      this.libraryOpen.disabled=this.libraryDelete.disabled=!this.librarySelect.value;
+      const start=initialSelection(this.libraryGroups,wanted);
+      this.libraryGroup.value=start.key;
+      this.showVersions(start.key,start.id);
       this.libraryNote.textContent='Saved on this ComfyUI server. Current edits are saved before switching.';
-    } catch(error) {this.libraryNote.textContent=error.message;this.libraryOpen.disabled=this.libraryDelete.disabled=true;}
+    } catch(error) {
+      this.libraryNote.textContent=error.message;this.libraryGroups=[];this.libraryRows=[];
+      this.showVersions('');
+    }
+  }
+
+  selectedGroup() {return this.libraryGroups.find(group=>group.key===this.libraryGroup.value);}
+
+  showVersions(key,id='') {
+    const group=this.libraryGroups.find(group=>group.key===key);
+    this.librarySelect.replaceChildren();
+    this.libraryGroup.disabled=!this.libraryGroups.length;
+    this.librarySelect.disabled=!group;
+    const placeholder=el('option',null,group?'Choose a version':'Choose a story first');placeholder.value='';
+    this.librarySelect.append(placeholder);
+    for(const row of group?.versions??[]) {
+      const option=el('option',null,versionLabel(row));option.value=row.id;this.librarySelect.append(option);
+    }
+    // A story with a single version needs no second choice.
+    this.librarySelect.value=group?.versions.some(row=>row.id===id)?id:group?.versions.length===1?group.versions[0].id:'';
+    this.syncLibraryButtons();
+  }
+
+  syncLibraryButtons() {
+    this.libraryOpen.disabled=this.libraryDelete.disabled=!this.librarySelect.value;
+    this.libraryRename.disabled=this.libraryDeleteStory.disabled=!this.selectedGroup();
   }
 
   busy(progress) {
