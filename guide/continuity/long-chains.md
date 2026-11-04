@@ -20,7 +20,9 @@ Texture is the finest-detail energy of each clip against clip 1 (1.00 = no chang
 
 ## The model matters most
 
-The table above is `fasth3_omniref_8step_pruned_int8_convrot`. The same chain on MiniMax's REF2VA model (`minimax_h3_ref2va_pruned_int8_convrot` and `minimax_h3_ref2va_pruned_bf16`) with the ref2v turbo LoRA (`minimax_h3_ref2v_turbo_8step_v1.1`) burned far less in both files, so the difference comes from the model, not from int8. Other models were not measured, including FastH3 v2 (`fastvideo_fasth3_8step_v2_pruned_int8_convrot` with turbo LoRA v1.0), which the Story Studio examples render video with.
+The table above is `fasth3_omniref_8step_pruned_int8_convrot`. The same chain on MiniMax's REF2VA model (`minimax_h3_ref2va_pruned_int8_convrot` and `minimax_h3_ref2va_pruned_bf16`) with the ref2v turbo LoRA (`minimax_h3_ref2v_turbo_8step_v1.1`) burned far less in both files, so the difference comes from the model, not from int8.
+
+FastH3 v2 (`fastvideo_fasth3_8step_v2_pruned_int8_convrot` with turbo LoRA `minimax_h3_ref2v_turbo_8step_v1.0` at 1), which the Story Studio examples render video with, did not burn (clip 6 texture 0.97), but in every render clip 2 cut to a closer framing one frame after the join. Clip 1 had come out wider than the "medium close-up" every prompt names, and clip 2 moved to the prompt's framing instead of keeping clip 1's; the later joins were smooth. The anti-burn LoRA did not change the cut. On this model, check the first join of a long chain. Whether a clip 1 that already matches the prompt's framing avoids the cut was not measured, and other models were not measured.
 
 | Model and anti-burn LoRA | Clip 6 texture | Joins | Result |
 | --- | --- | --- | --- |
@@ -30,8 +32,11 @@ The table above is `fasth3_omniref_8step_pruned_int8_convrot`. The same chain on
 | REF2VA bf16 | 1.25 | 1.0–1.8 | Like int8. |
 | REF2VA bf16, anti-burn LoRA 0.3 | 1.16 | 1.0–1.7 | Slightly lower, within what the seed can move. |
 | REF2VA bf16, anti-burn LoRA 0.5 | 1.23 | 1.1–1.5 | No cut; clip 2 rises to 1.36. |
+| FastH3 v2 int8 | 0.97 | **36 at clip 2**, then 1.4–1.6 | No burn, but clip 2 cut to a closer framing. |
+| FastH3 v2 int8, anti-burn LoRA 0.3 | 0.92 | **36 at clip 2**, then 1.3–1.5 | The same cut. |
+| FastH3 v2 int8, anti-burn LoRA 0.5 | 0.86 | **37 at clip 2**, then 1.3–2.1 | The same cut. |
 
-Each row is one render of this chain; differences of about 0.1 can come from the seed alone. On a 24 GB GPU a continuing clip took about 1 min 40 s on the int8 file and 2 min 40 s on the 40 GB bf16 file, which does not fit and streams from system memory.
+Each row is one render of this chain; differences of about 0.1 can come from the seed alone. The three FastH3 v2 renders share clip 1 and the seed (the LoRA only reaches continuing clips), so their three cuts are one observation, not three. Every row used the same sampler (euler, 8 steps); the Story Studio examples sample FastH3 v2 with res_multistep, which was not tested. On a 24 GB GPU a continuing clip took about 1 min 40 s on the int8 files and 2 min 40 s on the 40 GB bf16 file, which does not fit and streams from system memory.
 
 ## Context noise
 
@@ -47,7 +52,7 @@ A node for your graph (`BasicScheduler → H3 Sigmas Tail → the sampler's sigm
 
 ## H3 Continuation Model
 
-Routes continuing clips (and bridges) to a different model, for a LoRA trained for continuations. The public H3 Anti-Burn LoRA did not help on FastH3 int8 and cut to a close-up at 0.5 ([first table](#what-was-measured)). On MiniMax's REF2VA model with the turbo LoRA, the base its authors tested it on, 0.5 caused no cut and kept later clips from climbing ([The model matters most](#the-model-matters-most)), though that model burns little without it.
+Routes continuing clips (and bridges) to a different model, for a LoRA trained for continuations. The public H3 Anti-Burn LoRA did not help on FastH3 int8 and cut to a close-up at 0.5 ([first table](#what-was-measured)). On MiniMax's REF2VA model with the turbo LoRA, the base its authors tested it on, 0.5 caused no cut and kept later clips from climbing ([The model matters most](#the-model-matters-most)), though that model burns little without it. On FastH3 v2 it did not change that model's cut at the first join.
 
 ## In the Studio
 
