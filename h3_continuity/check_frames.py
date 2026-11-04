@@ -15,7 +15,7 @@ TEXTURE_STEP = 0.25
 TEXTURE_BANDS = ((2, 8), (8, 32), (32, 128))
 HOLD_STEPS = 2
 HOLD_RATIO = 0.35
-HOLD_FLOOR = 1.0
+HOLD_FLOOR = 2.0
 MAX_SHOTS = 5
 _SRGB_TO_XYZ = np.array([[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750],
                          [0.0193339, 0.1191920, 0.9503041]])
@@ -123,10 +123,12 @@ def drift_words(lab, first, texture=None, first_texture=None):
 
 def holds(frames):
     """(first frame, frames held) for each run of at least HOLD_STEPS consecutive frame steps whose mean absolute
-    difference (greyscale, about 240 px wide) is below HOLD_RATIO of the clip's median step; [] for a static shot,
+    difference (greyscale block means, about 240 px wide) is below HOLD_RATIO of the clip's median step; [] for a static shot,
     whose median step is below HOLD_FLOOR."""
-    stride = max(1, frames[0].shape[1] // 240)
-    small = np.array([frame[::stride, ::stride, :3].mean(axis=2) for frame in frames])
+    k = max(1, frames[0].shape[1] // 240)
+    h, w = frames[0].shape[0] // k * k, frames[0].shape[1] // k * k
+    # block means, not strided pixels: single pixels add compression shimmer that hides a calm shot
+    small = np.array([frame[:h, :w, :3].mean(axis=2).reshape(h // k, k, w // k, k).mean(axis=(1, 3)) for frame in frames])
     steps = np.abs(np.diff(small, axis=0)).mean(axis=(1, 2))
     if not len(steps) or np.median(steps) < HOLD_FLOOR:
         return []
