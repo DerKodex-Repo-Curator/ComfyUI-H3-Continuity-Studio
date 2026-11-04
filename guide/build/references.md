@@ -15,7 +15,7 @@ Connect a video loader's frame batch to `video1` and its audio to `video_audio1`
 
 ### One long video across clips
 
-To repaint or restyle a long video clip by clip, connect the whole video to `video1` and add `"video_slices": ["video1"]` to the Timeline JSON. Each clip then receives only its own part of the video: from the clip's start in the Timeline minus the frames it carries from the clip before, for every frame H3 generates for it, so the reference and the carried overlap line up. Its same-numbered soundtrack (`video_audio1`) is cut the same way. Mention `@video1` in each clip's prompt as usual. A video too short for a clip stops that clip with how many frames it has and which it needs. The Studio keeps the setting but has no control for it yet.
+To repaint or restyle a long video clip by clip, connect the whole video to `video1` and tick **Split @video1 across clips** under **Project settings → Long continuing chains** (in the Timeline JSON: `"video_slices": ["video1"]`). Each clip then receives only its own part of the video: from the clip's start in the Timeline minus the frames it carries from the clip before, for every frame H3 generates for it, so the reference and the carried overlap line up. Its same-numbered soundtrack (`video_audio1`) is cut the same way. Mention `@video1` in each clip's prompt as usual. A video too short for a clip stops that clip with how many frames it has and which it needs.
 
 The Timeline also exposes `IMAGE` outputs `image_1`, `image_2`… that match the selected clip's final native `<Picture 1>`, `<Picture 2>` order, including uploaded pictures, replacements and accepted guides. They are useful for feeding a still generator or an upscaler.
 
