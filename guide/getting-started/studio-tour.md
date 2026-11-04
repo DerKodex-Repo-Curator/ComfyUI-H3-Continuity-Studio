@@ -14,7 +14,7 @@ Press **Open Studio** on the Timeline (or Story) node. The Studio fills the wind
 | **New project** | Start a fresh project in this workflow. See [Full video and projects](../output/full-video-and-projects.md). |
 | **Project settings** | Shared prompt, settings for [long continuing chains](../continuity/long-chains.md#in-the-studio), and export or import of the project. |
 | **Download video** | Save the full video (enabled once every clip is rendered). |
-| **Feedback** | Open the Story page at its feedback field to [patch a written story](../story/writer.md#editing-a-written-story). |
+| **Revise story** | Open the Story page at its feedback field to [patch a written story](../story/writer.md#editing-a-written-story). |
 
 ## Left: References
 

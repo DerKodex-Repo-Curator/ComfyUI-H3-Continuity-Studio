@@ -1,6 +1,6 @@
 // Marker images own editable still prompts, candidates and the acceptance transaction. Queue recovery belongs to the host.
 import {frameTargets, buildStillPrompt, applyFrameGuide} from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
-import {parseState, serialize} from './h3c_timeline_model.mjs?v=20261104-continuity-keys-3';
+import {parseState, serialize} from './h3c_timeline_model.mjs?v=20261104-studio-ux-1';
 import {StillPromptPreparation,preparedStillPrompt,setPreparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
 
 import {seedValue, stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
@@ -38,6 +38,20 @@ function button(label, run) {
   const node=el('button',label,'h3ct-button');node.type='button';
   node.addEventListener('click',event=>{event.preventDefault();Promise.resolve().then(run).catch(error=>node.dispatchEvent(
     new CustomEvent('h3c-image-error',{bubbles:true,detail:error.message})));});return node;
+}
+
+// An image file dropped on `node` goes to onFile. The zone keeps file drops to itself: ComfyUI loads a file dropped
+// anywhere else on the page.
+export function imageDrop(node, onFile) {
+  const files=event=>event.dataTransfer?.types?.includes('Files');
+  const over=on=>node.classList.toggle('h3ct-drop-over',on);
+  node.addEventListener('dragover',event=>{if(!files(event))return;event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='copy';over(true);});
+  node.addEventListener('dragleave',event=>{if(!node.contains(event.relatedTarget))over(false);});
+  node.addEventListener('drop',event=>{
+    over(false);if(!files(event))return;event.preventDefault();event.stopPropagation();
+    const file=[...event.dataTransfer.files].find(item=>item.type.startsWith('image/'));
+    if(file)onFile(file);
+  });
 }
 
 export class FrameImages {
@@ -89,7 +103,8 @@ export class FrameImages {
     this.generateButton.classList.add('h3ct-primary');
     const actions=el('div',null,'h3ct-row h3ct-image-actions');actions.append(this.generateButton,this.uploadButton,this.settingsButton);
     this.additionalReferencesEl=el('p',null,'h3ct-hint');this.additionalReferencesEl.hidden=true;
-    this.acceptedEl=el('div',null,'h3ct-image-hero');this.candidatesEl=el('div',null,'h3ct-candidates');this.endingEl=el('div',null,'h3ct-row');
+    this.acceptedEl=el('div',null,'h3ct-image-hero');imageDrop(this.acceptedEl,file=>this.upload(file).catch(error=>this.note(error.message)));
+    this.candidatesEl=el('div',null,'h3ct-candidates');this.endingEl=el('div',null,'h3ct-row');
     this.recoveryEl=el('div');
     this.noteEl=el('p',null,'h3ct-hint');this.noteEl.setAttribute('role','status');
     this.preparation=new StillPromptPreparation(editor,()=>{this.promptEditing=false;this.render();});
@@ -288,7 +303,7 @@ export class FrameImages {
       const caption=el('div',null,'h3ct-row');caption.append(el('span',saved?.guide?'Guide in use':'Candidate preview',saved?.guide?'h3ct-guide-status':'h3ct-hint'));
       if(saved?.guide) caption.append(button('Remove guide',()=>this.removeGuide()),button('Use as scene anchor',()=>this.useSceneAnchor(saved.guide)));
       this.acceptedEl.append(caption);
-    } else this.acceptedEl.append(el('p','No image yet. Generate candidates or upload a guide.','h3ct-image-empty'));
+    } else this.acceptedEl.append(el('p','No image yet. Generate candidates, upload a guide or drop an image here.','h3ct-image-empty'));
     const anchors=this.editor.state.continuity?.anchors??[];
     if(anchors.length&&this.host.pinGuide){
       const select=el('select',null,'h3ct-note');select.setAttribute('aria-label','Accepted scene anchor');

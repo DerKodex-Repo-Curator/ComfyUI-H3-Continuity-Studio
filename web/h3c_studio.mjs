@@ -3,7 +3,7 @@
 // closes, opens another Timeline or the Timeline's Story changes. Its Story page edits the Story node's inputs.
 import { liveBadge, progressText } from './h3c_render_watch.mjs?v=20261004-studio-1';
 import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
-import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261104-continuity-keys-3';
+import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261104-studio-ux-1';
 
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 
@@ -315,7 +315,7 @@ class Studio {
     this.storyEl = el('div', 'h3cx-story h3cx-slot');
     this.writeOff = button('Write story', NO_STORY, () => {});
     this.writeOff.disabled = true;
-    this.feedbackButton = button('Feedback', 'Open Story feedback', () => this.openFeedback(), 'h3cx-feedback');
+    this.feedbackButton = button('Revise story', 'Ask the Story writer to change the written story', () => this.openFeedback(), 'h3cx-feedback');
     this.actionsSlot = el('span', 'h3cx-slot');
     this.newProjectButton = button('New project', 'Clear the current Timeline for a new project and keep its available sources', () => this.openNewProject());
     this.projectButton = button('Project settings', 'Shared prompt and graph settings', () => this.openFocus('project'));
@@ -855,6 +855,8 @@ class Studio {
     if (page === 'pictures' && this.host) this.host.editor.pictures.root.open = true;
     if (page === 'cast') this.host?.editor.cast?.refresh({link});
     if (this.mobileMedia.matches) this.setMobilePage('focus');
+    // Below 900 px the Inspector and References float over the centre, where this page opens.
+    else if (this.narrowMedia.matches) { this.setInspectorVisible(false); this.setReferencesVisible(false); }
     this.renderNavigation();
   }
 

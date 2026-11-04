@@ -58,7 +58,7 @@ Connect Text nodes to `descriptions.audio1`, `descriptions.audio2`, `description
 
 ## Editing a written story
 
-Select the clip and press **Feedback** in the Studio's top bar; the Story page opens at the feedback field. Enter a change such as *After stubbing his toe, make Subject 1 kneel.* **Apply feedback** asks the writer to patch the current story while preserving unrelated text, timing and clips. Progress and **Undo** are in the top bar.
+Select the clip and press **Revise story** in the Studio's top bar; the Story page opens at the feedback field. Enter a change such as *After stubbing his toe, make Subject 1 kneel.* **Apply feedback** asks the writer to patch the current story while preserving unrelated text, timing and clips. Progress and **Undo** are in the top bar.
 
 - Patches are validated before publication; a patch that would break the source publishes nothing.
 - Text you edit by hand while the writer works is preserved, with a note naming the skipped update.

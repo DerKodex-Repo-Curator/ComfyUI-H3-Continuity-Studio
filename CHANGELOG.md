@@ -4,8 +4,13 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-04
+
 ### Added
 
+- **Guides at any frame.** In a clip's **Shots** tab, **Guide another frame** uploads a guide for a chosen frame without adding a `[Shot N]` line, and every listed guide has a **Frame** field that moves it. A guide whose Shot marker was removed now reads **unused** instead of claiming a frame, and can be given a frame again.
+- **Convert to FLF2VA.** A REF2VA clip's **Settings** tab has a button that turns on **FLF2VA + cached RefMods**: its First and Last frames become the start and end frames, and its images become cached RefMods. When the clip mentions a raw video or raw audio, which the Studio cannot convert to RefMods, or a fresh clip has no First frame, the button is disabled and says why.
+- **Drop images on guide targets.** Dropping an image file on a First, Last or Shot marker, on the frame panel's image area, on **First frame** or **Last frame** in **Settings**, or on **Guide another frame** uses it as that guide.
 - **Texture drift and holds in the continuity check.** Drift also compares fine-detail energy with the scene's first clip and names a rise of 25% or more ("Drift: 104% grainier than box 1."); a drop is stored but not named, since motion blur lowers it too. The check reports still holds of two or more near-still frames, including the step into a continuing clip ("Holds still: 3 frames at the join."). Holds enable Retake.
 - **Settings for long continuing chains** (off by default; in the Studio under **Project settings → Long continuing chains**, or as Timeline JSON): `context_noise` (paired context noise on the carried frames; on a six-clip chain, clip 6's texture rose to 1.75x instead of 2.04x, about 10% slower), `continuation_guide: false` (no last-frame guide at the first new frame; removes the 3-frame join hold in moving shots) and `audio_feather` (the last carried audio ticks regenerate). See *Long continuing chains* in the guide.
 - **H3 Sigmas Tail** node: raises the last noise levels before zero, optionally on continuing clips only (texture 1.93x alone, 1.67x with context noise).
@@ -15,6 +20,16 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 - **`video_slices`** (**Split @video1 across clips** in the same Studio section): each clip receives only its own window of a long reference video and its soundtrack, for repainting a long video clip by clip.
 - **Measurement tool.** `tools/measure.py` prints texture, colour drift and holds per saved segment; scenario S5 (one long reference video split across clips) joins the others in `examples/prefixstream_scenes/`.
 - External Timeline preparation is `external-instructions-v10` and lists the new fields; the Timeline API schema declares them.
+
+### Changed
+
+- The Studio's **Feedback** button is now **Revise story**: it asks the Story writer to change the written story and doesn't send feedback to the node's author.
+
+### Fixed
+
+- **Project settings in narrow windows.** Below 900 px the Inspector and References panels float over the page that **Project settings** (and Story, Cast, Pictures and RefMods) opens, which made the button look like it did nothing. Opening one of those pages now closes them.
+
+[Changes since v0.7.0](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.7.0...v0.8.0).
 
 ## [0.7.0] - 2026-11-04
 

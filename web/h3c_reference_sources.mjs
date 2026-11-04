@@ -1,4 +1,4 @@
-import {referenceFile} from './h3c_timeline_model.mjs?v=20261104-continuity-keys-3';
+import {referenceFile} from './h3c_timeline_model.mjs?v=20261104-studio-ux-1';
 
 function widgetValue(node, name, graph, owners) {
   const input = node.inputs?.find(input => input.name === name);
