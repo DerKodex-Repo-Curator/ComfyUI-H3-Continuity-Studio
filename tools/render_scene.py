@@ -54,6 +54,22 @@ def run(server, graph, cap):
         time.sleep(1)
 
 
+def render(server, graph, scene, project, cap, box=None, overrides=None, context=None, frames=None):
+    """Queue the scene's boxes one run at a time; yield each run's seconds, status, info and Timeline outputs."""
+    runs = 1 if box else len(scene["timeline"]["boxes"]) + 1
+    for _ in range(runs):
+        prompt = prompt_for(graph, scene, project, box, overrides or {}, context, frames)
+        seconds, record = run(server, prompt, cap)
+        outputs = record.get("outputs", {}).values()
+        texts = [text for output in outputs for text in output.get("text", [])]
+        timeline = [item for output in outputs for item in output.get("h3c_timeline", [])]
+        texts += [f"{item.get('message')} Full video: {(item.get('full_video') or {}).get('filename')}" for item in timeline]
+        status = record["status"].get("status_str")
+        yield {"seconds": round(seconds, 1), "status": status, "info": texts, "timeline": timeline}
+        if not texts or any(item.get("next") is None for item in timeline) or status == "error":
+            break
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--server", default="http://127.0.0.1:8189")
@@ -74,17 +90,8 @@ def main():
     frames = {key: int(value) for key, value in (item.split("=", 1) for item in args.frames)}
     if args.copy_from:
         shutil.copytree(Path(args.sequences) / args.copy_from, Path(args.sequences) / args.project)
-    runs = 1 if args.box else len(scene["timeline"]["boxes"]) + 1
-    for _ in range(runs):
-        prompt = prompt_for(graph, scene, args.project, args.box, overrides, args.context, frames)
-        seconds, record = run(args.server, prompt, args.cap)
-        outputs = record.get("outputs", {}).values()
-        texts = [text for output in outputs for text in output.get("text", [])]
-        timeline = [item for output in outputs for item in output.get("h3c_timeline", [])]
-        texts += [f"{item.get('message')} Full video: {(item.get('full_video') or {}).get('filename')}" for item in timeline]
-        print(json.dumps({"seconds": round(seconds, 1), "status": record["status"].get("status_str"), "info": texts}))
-        if not texts or any(item.get("next") is None for item in timeline) or record["status"].get("status_str") == "error":
-            break
+    for result in render(args.server, graph, scene, args.project, args.cap, args.box, overrides, args.context, frames):
+        print(json.dumps({key: result[key] for key in ("seconds", "status", "info")}))
 
 
 if __name__ == "__main__":
