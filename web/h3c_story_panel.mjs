@@ -131,7 +131,8 @@ export class StoryPanel {
     const generationInput=el('input');generationInput.type='file';generationInput.accept='.json,application/json';generationInput.hidden=true;
     generationInput.addEventListener('change',()=>{const file=generationInput.files?.[0];generationInput.value='';if(file)host.importGeneration?.(file);});
     this.filesEl.append(button('Export generation','Transfer Story, guides, candidates and saved takes to another generator workflow.',()=>host.exportGeneration?.()),
-      button('Import generation into this workflow','Keep this workflow and generator; import a verified independent generation.',()=>generationInput.click()),generationInput);
+      button('Import generation into this workflow','Keep this workflow and generator; import a verified independent generation.',()=>generationInput.click()),generationInput,
+      button('Fork as a copy','Download this generation as a file, then keep working on a copy with all its renders and takes, to try another continuation without changing this one.',()=>host.forkGeneration?.()));
 
     this.keyInput = el('input');
     this.keyInput.type = 'password';

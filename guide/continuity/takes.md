@@ -26,6 +26,14 @@ A take **can be used** when it fits the clip as it is now and both clips beside 
 
 Joins are compared against the saved latents of the neighbouring clip, within 0.001. A take that carried no frames (a cut, or clip 1) has no join with the clip before.
 
+## Rating, tags and where a take came from
+
+Each take, and the take in use, has five stars and a short **tag** (up to 40 characters, such as *wide* or *best smile*). Press a star to rate the take; press its current rating again to clear it. Marks are saved in the sequence folder's `takes_marks.json` by the take's render time, so they stay with a take when you **Use** it and when it goes back to `takes/`.
+
+A take of a continuing clip also says which take of the clip before it continued from, for example *from box 2’s take of 11-04 07:30 (in use)*. Takes saved before this was recorded show no such line.
+
+To try a different continuation without losing this one, use **Fork as a copy** ([Projects](../output/full-video-and-projects.md#projects)).
+
 ## Using a take
 
 **Use** puts the take in place: the take in use moves to `takes/`, the chosen take's files move back, and the clip gets the take's seed, as one undo step. **Nothing renders.**

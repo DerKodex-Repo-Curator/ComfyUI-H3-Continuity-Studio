@@ -21,6 +21,7 @@ Open **Project settings** in the Studio's top bar.
 | **Shared prompt** | Text added before every clip's prompt. |
 | **Export project JSON** / **Import project JSON** | Move a complete workflow graph, including wiring. Media and RefMods stay as file references. |
 | **Export generation** / **Import generation into this workflow** | Move the *generation* (Story, Timeline, accepted guides, candidates, native saved takes and sidecars) into another generator workflow while keeping that workflow's models, nodes and sampler. |
+| **Fork as a copy** | Downloads this generation as a file, then imports it into this workflow as a separate sequence with all its renders and takes. Change and re-render later clips in the copy to try another continuation; the original sequence is untouched, and importing the downloaded file returns to it. |
 | **Back to graph** | Return to the Studio. |
 
 Generation JSON references verified media in this installation; it contains no model weights and does not embed large videos or latents. Missing or changed media blocks an import. Import creates a *separate* sequence and never resumes a batch or replays source jobs. Use generation transfer to move work, for example, between a Qwen image workflow and the H3 video workflow, and project JSON to copy a whole graph.
