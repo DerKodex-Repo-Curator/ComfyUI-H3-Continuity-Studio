@@ -40,6 +40,11 @@ class SigmasTailTest(unittest.TestCase):
     def test_without_a_segment_every_box_is_reshaped(self):
         self.assertFalse(torch.equal(tail(), SIGMAS))
 
+    def test_registered(self):
+        import asyncio
+        from h3_continuity.extension import H3ContinuityExtension
+        self.assertIn(nodes.H3C_SigmasTail, asyncio.run(H3ContinuityExtension().get_node_list()))
+
 
 if __name__ == "__main__":
     unittest.main()
