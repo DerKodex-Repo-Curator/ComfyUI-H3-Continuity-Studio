@@ -32,14 +32,17 @@ def save(folder, box_id, record):
     os.replace(path + ".tmp", path)
 
 
-def record(entry, model, problems, drift, error=None):
+def record(entry, model, problems, drift, error=None, holds=None):
     """The result for the render of manifest entry `entry`. `problems` is None when no Vision model ran or its reply
-    couldn't be read, which `error` then says; `drift` is {"box", "words"} or None."""
+    couldn't be read, which `error` then says; `drift` is {"box", "words", "texture"} or None; `holds` lists still
+    holds ({"start_ms", "frames", "join"}) or is None when they couldn't be measured."""
     made = {"layout": (entry.get("timeline") or {}).get("layout"), "created": entry.get("created"),
             "checked": datetime.datetime.now().isoformat(timespec="seconds"), "model": model or None,
             "problems": problems, "drift": drift}
     if error:
         made["error"] = error
+    if holds is not None:
+        made["holds"] = holds
     return made
 
 

@@ -12,9 +12,12 @@ import secrets
 import time
 import traceback
 
+import av
+
 from PIL import Image
 
-from . import box_checks, check_frames, llm, store, story_bible, story_context, story_inputs, story_keys, story_vram
+from . import box_checks, check_frames, llm, media, store, story_bible, story_context, story_inputs, story_keys
+from . import story_vram
 from . import studio_pictures, reference_replacements
 from . import h3_prompt_ir as prompt_ir, h3_prompt_schema as prompt_schema
 from . import nodes as continuity
@@ -360,6 +363,7 @@ def summary(tally, vision):
     parts = [f"{tally['problems']} with problems" if tally["problems"] else "",
              f"{tally['unreadable']} couldn't be read" if tally["unreadable"] else "",
              f"{tally['drifted']} drifted" if tally["drifted"] else "",
+             f"{tally['held']} {'holds' if tally['held'] == 1 else 'hold'} still" if tally.get("held") else "",
              "" if vision else "drift only, because the Story has no Vision model"]
     said = ", ".join(part for part in parts if part) or "no problems found"
     return f"Checked {'1 box' if count == 1 else f'{count} boxes'}: {said}."
@@ -372,12 +376,13 @@ def frame_picks(ctx, index, entry):
 
 
 def _drift(ctx, index, frames, firsts):
-    """Box `index`'s drift against its scene's first box, {"box", "words"}; None when it starts its scene or that
-    box has no render the check can read. `firsts` keeps each scene's first colour for the job."""
-    lab = check_frames.lab_mean(frames)
+    """Box `index`'s drift against its scene's first box, {"box", "words", "texture"}; None when it starts its scene
+    or that box has no render the check can read. `firsts` keeps each scene's first (colour, texture) for the job;
+    "texture" is each band's ratio to it."""
+    measured = check_frames.lab_mean(frames), check_frames.texture_mean(frames)
     start = check_frames.scene_start(ctx.timeline, index)
     if start == index:
-        firsts[index] = lab
+        firsts[index] = measured
         return None
     if start not in firsts:
         firsts[start] = None
@@ -385,12 +390,37 @@ def _drift(ctx, index, frames, firsts):
         if entry is not None:
             picks = frame_picks(ctx, start, entry)
             try:
-                firsts[start] = check_frames.lab_mean(check_frames.read(ctx.folder, entry, picks))
+                first = check_frames.read(ctx.folder, entry, picks)
+                firsts[start] = check_frames.lab_mean(first), check_frames.texture_mean(first)
             except ValueError:
                 pass
     if firsts[start] is None:
         return None
-    return {"box": ctx.timeline.boxes[start].id, "words": check_frames.drift_words(lab, firsts[start])}
+    (lab, texture), (first_lab, first_texture) = measured, firsts[start]
+    ratios = [round(float(value / base), 3) if base > 0 else None for value, base in zip(texture, first_texture)]
+    return {"box": ctx.timeline.boxes[start].id, "words": check_frames.drift_words(lab, first_lab, texture, first_texture),
+            "texture": ratios}
+
+
+def _holds(ctx, index, entry):
+    """checks.json holds of box `index`'s played frames, preceded by the box before's last played frame when this box
+    continues it; None when a video can't be read or isn't at 24 fps."""
+    def frames_of(item, wanted):
+        video = item["video"]
+        if video.get("fps") != rules.FPS:
+            raise ValueError("not 24 fps")
+        found = media.read_frames(os.path.join(ctx.folder, video["file"]), wanted)
+        return [found[number] for number in wanted]
+
+    try:
+        frames = frames_of(entry, list(range(store.played_frames(entry))))
+        before = ctx.rendered.get(ctx.timeline.boxes[index - 1].id) if index else None
+        joined = bool(entry.get("context_frames")) and before is not None
+        if joined:
+            frames = frames_of(before, [store.played_frames(before) - 1]) + frames
+    except (ValueError, OSError, av.error.FFmpegError):
+        return None
+    return check_frames.hold_records(check_frames.holds(frames), joined)
 
 
 async def _ask(job, messages, reply_format):
@@ -426,6 +456,7 @@ async def _check(job, tally):
                 firsts[index] = None
             continue
         drift = await asyncio.to_thread(_drift, ctx, index, frames, firsts)
+        held = await asyncio.to_thread(_holds, ctx, index, entry)
         problems = error = None
         if ctx.vision_model:
             before = ctx.rendered.get(ids[index - 1]) if index else None
@@ -436,11 +467,13 @@ async def _check(job, tally):
                 problems = parse(reply, allowed, shots)
             except ValueError:
                 error = UNREADABLE
-        box_checks.save(ctx.folder, box_id, box_checks.record(entry, ctx.vision_model, problems, drift, error))
+        box_checks.save(ctx.folder, box_id, box_checks.record(entry, ctx.vision_model, problems, drift, error,
+                                                                held))
         tally["checked"].append(box_id)
         tally["problems"] += bool(problems)
         tally["unreadable"] += error is not None
         tally["drifted"] += bool(drift and drift["words"])
+        tally["held"] += bool(held)
         job.updated(job)
 
 
@@ -450,7 +483,7 @@ async def run(jobs, job):
     it finished."""
     watchdog = asyncio.get_running_loop().create_task(jobs.watch(job))
     shares_gpu = False
-    tally = {"checked": [], "problems": 0, "unreadable": 0, "drifted": 0}
+    tally = {"checked": [], "problems": 0, "unreadable": 0, "drifted": 0, "held": 0}
     try:
         if job.ctx.links:
             job.ctx = settle(job.ctx, await story_inputs.run(jobs.comfy, job))
