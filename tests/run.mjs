@@ -9,7 +9,10 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const portable = join(homedir(), 'ComfyUI', 'ComfyUI_windows_portable', 'python_embeded', 'python.exe');
 const python = process.env.H3_PYTHON || (existsSync(portable) ? portable : 'python');
-const run = (command, args) => spawnSync(command, args, { cwd: root, stdio: 'inherit' }).status;
+// Product tests that load ComfyUI on the CPU read COMFY_ROOT; default it to the portable install's ComfyUI.
+const comfy = process.env.COMFY_ROOT || join(homedir(), 'ComfyUI', 'ComfyUI_windows_portable', 'ComfyUI');
+const env = existsSync(join(comfy, 'main.py')) ? { ...process.env, COMFY_ROOT: comfy } : process.env;
+const run = (command, args) => spawnSync(command, args, { cwd: root, stdio: 'inherit', env }).status;
 
 const js = run(process.execPath, ['--test', 'tests/js/*.test.mjs', 'tests/web/*.test.mjs']);
 // `discover -t .` puts the checkout on sys.path, which ComfyUI's embedded Python does not do for `-m`.
