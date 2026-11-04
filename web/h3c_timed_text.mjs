@@ -1,5 +1,5 @@
 // Exact transcript import and source/movie clocks; mirrors h3_continuity/timed_text.py.
-import { FPS } from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
+import { FPS } from './h3c_timeline_model.mjs?v=20261104-continuity-keys-1';
 
 function error(field, message) {
   return new Error(`timed_text.${field} ${message}`);

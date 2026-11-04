@@ -128,6 +128,8 @@ export function parseState(text) {
     ...(data.reference_descriptions && typeof data.reference_descriptions === 'object'
       ? { reference_descriptions: structuredClone(data.reference_descriptions) } : {}),
     ...(record(data.reference_replacements) ? {reference_replacements:structuredClone(data.reference_replacements)} : {}),
+    ...(data.context_noise === true ? {context_noise: true} : {}),
+    ...(data.continuation_guide === false ? {continuation_guide: false} : {}),
     ...(Array.isArray(data.disabled_refs) ? { disabled_refs: [...data.disabled_refs] } : {}),
     ...(Array.isArray(data.refmods) ? { refmods: structuredClone(data.refmods) } : {}),
     ...(Array.isArray(data.audio_clips) ? { audio_clips: structuredClone(data.audio_clips) } : {}),
@@ -182,6 +184,8 @@ export function serialize(state) {
     ...(state.timed_text ? { timed_text: state.timed_text } : {}),
     ...(state.reference_descriptions ? { reference_descriptions: state.reference_descriptions } : {}),
     ...(Object.keys(state.reference_replacements ?? {}).length ? {reference_replacements:state.reference_replacements} : {}),
+    ...(state.context_noise === true ? {context_noise: true} : {}),
+    ...(state.continuation_guide === false ? {continuation_guide: false} : {}),
     ...(state.disabled_refs ? { disabled_refs: state.disabled_refs } : {}),
     ...(state.refmods ? { refmods: state.refmods } : {}),
     ...(state.audio_clips ? { audio_clips: state.audio_clips } : {}),

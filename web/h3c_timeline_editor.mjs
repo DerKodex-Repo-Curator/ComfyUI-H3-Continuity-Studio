@@ -2,7 +2,7 @@
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import * as model from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
+import * as model from './h3c_timeline_model.mjs?v=20261104-continuity-keys-1';
 import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261103-replacement-bridges-1';
 import { shotFrames, frameTargets, syncTargets } from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
 import {FrameImages, targetLabel} from './h3c_frame_images.mjs?v=20261104-shot-split-only-1';

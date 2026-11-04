@@ -1,4 +1,4 @@
-import {referencePools, referenceType, referenceMediaType, setReferenceReplacement, restoreReferenceReplacement, switchReference, applyImageDescription, effectiveRefmods} from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
+import {referencePools, referenceType, referenceMediaType, setReferenceReplacement, restoreReferenceReplacement, switchReference, applyImageDescription, effectiveRefmods} from './h3c_timeline_model.mjs?v=20261104-continuity-keys-1';
 import {referenceChip} from './h3c_reference_pictures.mjs?v=20261010-reference-workspace-1';
 
 const ACCEPT = {image:'image/*',video:'video/*,.mkv,.mov,.webm,.mp4',audio:'audio/*,.wav,.flac,.mp3,.ogg,.m4a',video_audio:'audio/*,video/*,.wav,.flac,.mp3,.mp4'};
