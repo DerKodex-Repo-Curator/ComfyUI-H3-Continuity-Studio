@@ -4,6 +4,10 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+### Changed
+
+- **Long continuing chains guide: the model matters most.** The burn table is now labelled as FastH3 omniref int8's. A new table shows the same chain on MiniMax REF2VA (int8 ConvRot and bf16, with the ref2v turbo LoRA v1.1): it barely burns (clip 6 texture 1.19 against 2.04), and the anti-burn LoRA through **H3 Continuation Model** is safe there at 0.5 (no cut, clip 6 at 1.04). FastH3 v2, which the Story Studio examples use, was not measured.
+
 ## [0.10.0] - 2026-11-04
 
 ### Added

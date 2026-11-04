@@ -2,7 +2,7 @@
 
 Each continuing clip copies the end of the clip before it and adds its own small errors on top. Over many clips this compounds: skin, fabric and backgrounds get crisper and more etched ("burn"), the way a photocopy of a photocopy gains contrast. The [continuity check](check.md) measures it as texture drift, for example *Drift: 104% grainier than box 1.*
 
-These settings are experimental and off by default. They were compared on one six-clip chain (a woman talking to camera in a kitchen, FastH3 8-step at 960 × 544); results on other models and scenes may differ, so compare a few clips before relying on them.
+These settings are experimental and off by default. They were compared on one six-clip chain (a woman talking to camera in a kitchen, FastH3 omniref 8-step int8 at 960 × 544); results on other models and scenes may differ, so compare a few clips before relying on them. On this chain, the model changed the burn more than any setting did: see [The model matters most](#the-model-matters-most).
 
 ## What was measured
 
@@ -18,6 +18,21 @@ Texture is the finest-detail energy of each clip against clip 1 (1.00 = no chang
 | Anti-burn LoRA 0.5 via H3 Continuation Model | (1.77) | **59 at clip 2** | Cut to a close-up at the first join; rejected. |
 | Anti-burn LoRA 0.3 | 1.99 | 2.5–3.2 | No measurable effect on FastH3 int8. |
 
+## The model matters most
+
+The table above is `fasth3_omniref_8step_pruned_int8_convrot`. The same chain on MiniMax's REF2VA model (`minimax_h3_ref2va_pruned_int8_convrot` and `minimax_h3_ref2va_pruned_bf16`) with the ref2v turbo LoRA (`minimax_h3_ref2v_turbo_8step_v1.1`) burned far less in both files, so the difference comes from the model, not from int8. Other models were not measured, including FastH3 v2 (`fastvideo_fasth3_8step_v2_pruned_int8_convrot` with turbo LoRA v1.0), which the Story Studio examples render video with.
+
+| Model and anti-burn LoRA | Clip 6 texture | Joins | Result |
+| --- | --- | --- | --- |
+| REF2VA int8 | 1.19 | 1.1–1.8 | Little burn with no setting. |
+| REF2VA int8, anti-burn LoRA 0.3 | 1.16 | 1.0–1.7 | No clear effect. |
+| REF2VA int8, anti-burn LoRA 0.5 | **1.04** | 1.1–1.3 | No cut. Clip 2 rises to 1.17, then later clips settle instead of climbing. |
+| REF2VA bf16 | 1.25 | 1.0–1.8 | Like int8. |
+| REF2VA bf16, anti-burn LoRA 0.3 | 1.16 | 1.0–1.7 | Slightly lower, within what the seed can move. |
+| REF2VA bf16, anti-burn LoRA 0.5 | 1.23 | 1.1–1.5 | No cut; clip 2 rises to 1.36. |
+
+Each row is one render of this chain; differences of about 0.1 can come from the seed alone. On a 24 GB GPU a continuing clip took about 1 min 40 s on the int8 file and 2 min 40 s on the 40 GB bf16 file, which does not fit and streams from system memory.
+
 ## Context noise
 
 Tick **Context noise** in the Studio ([below](#in-the-studio)), or add `"context_noise": true` to the Timeline JSON (or send it through the [API](../automation/api.md)). For each continuing clip, the carried frames are decoded, given seeded noise that fades from strong at the start of the overlap to none at its last frame, and encoded again; only the difference the noise makes is added to the original carried latent, so the VAE's own round-trip error is not carried forward. The carried frames stay frozen while H3 samples; audio is unchanged. It costs one decode and two encodes of the overlap per continuing clip.
@@ -32,7 +47,7 @@ A node for your graph (`BasicScheduler → H3 Sigmas Tail → the sampler's sigm
 
 ## H3 Continuation Model
 
-Routes continuing clips (and bridges) to a different model, for a LoRA trained for continuations. The public H3 Anti-Burn LoRA was tested with it on FastH3 int8 and did not help (table above); its authors trained it on other turbo models, so it may behave differently on yours.
+Routes continuing clips (and bridges) to a different model, for a LoRA trained for continuations. The public H3 Anti-Burn LoRA did not help on FastH3 int8 and cut to a close-up at 0.5 ([first table](#what-was-measured)). On MiniMax's REF2VA model with the turbo LoRA, the base its authors tested it on, 0.5 caused no cut and kept later clips from climbing ([The model matters most](#the-model-matters-most)), though that model burns little without it.
 
 ## In the Studio
 

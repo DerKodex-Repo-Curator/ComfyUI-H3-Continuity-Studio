@@ -31,12 +31,12 @@ wants one setting everywhere.
 
 ## Long continuing chains
 
-Over many continuing boxes, texture builds up ("burn"); the continuity check reports it as *N% grainier* and a hitch at a join as *Holds still: 3 frames at the join.* Optional Timeline fields, measured on a six-box chain (FastH3 8-step):
+Over many continuing boxes, texture builds up ("burn"); the continuity check reports it as *N% grainier* and a hitch at a join as *Holds still: 3 frames at the join.* Optional Timeline fields, measured on a six-box chain (FastH3 omniref 8-step int8):
 
 - `"context_noise": true` cut texture growth by about a third (clip 6: 1.75 against 2.04), same framing, about 10% slower. With the **H3 Sigmas Tail** node (`BasicScheduler -> H3 Sigmas Tail -> sampler sigmas`, `segment` connected): 1.67.
 - `"continuation_guide": false` removes the join hold in moving shots; calm shots then move a little more at the join. Keep the default for calm shots.
 - `"audio_feather": N` lets the last N carried audio ticks regenerate.
-- **H3 Continuation Model** routes continuing boxes to another model, for a continuation LoRA. The public anti-burn LoRA cut to a close-up at 0.5 and did nothing at 0.3 on FastH3 int8, so do not recommend it for that model.
+- **H3 Continuation Model** routes continuing boxes to another model, for a continuation LoRA. The public anti-burn LoRA cut to a close-up at 0.5 and did nothing at 0.3 on FastH3 int8, so do not recommend it for that model. On MiniMax REF2VA (int8 ConvRot or bf16, with the ref2v turbo LoRA v1.1) the same chain barely burns without it (clip 6: 1.19); at 0.5 it caused no cut and gave 1.04. FastH3 v2 was not measured.
 
 ## Transitions inside H3
 
