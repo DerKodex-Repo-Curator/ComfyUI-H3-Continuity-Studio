@@ -60,7 +60,7 @@ def _plural(count, word):
 
 
 def prepare_segment(sequence, latent, context_frames, carry_audio, positive=None, negative=None, node="H3 Continue", *, audio_context_frames=0,
-                    noise_vae=None):
+                    noise_vae=None, audio_feather=0):
     """Carries the end of the previous segment into `latent`. Returns the latent, the conditionings
     without guides inside the carried frames, the SegmentPlan for H3 Save Segment and the number of
     removed guides. Without a previous latent nothing is carried and `latent` is returned as is."""
@@ -72,7 +72,7 @@ def prepare_segment(sequence, latent, context_frames, carry_audio, positive=None
     context = int(context_frames)
     out, carried_video, carried_audio, ticks = latents.build_continuation(
         latent, sequence.video, sequence.audio, context, carry_audio, node=node, audio_context_frames=audio_context_frames,
-        noise_vae=noise_vae)
+        noise_vae=noise_vae, audio_feather=audio_feather)
     positive, removed_positive = latents.drop_guides_before(positive, context)
     negative, removed_negative = latents.drop_guides_before(negative, context)
     plan = SegmentPlan(sequence, context, ticks, frames, size, carried_video, carried_audio)

@@ -44,11 +44,13 @@ def context_noise_delta(vae, source_video, context_frames, amplitude=0.4, seed=0
 
 
 def build_continuation(latent, source_video, source_audio, context_frames, carry_audio, node="H3 Continue", *, audio_context_frames=0,
-                       noise_vae=None):
+                       noise_vae=None, audio_feather=0):
     """Write the source's last `context_frames` frames into the start of `latent` and freeze them.
 
     Returns (latent, carried_video, carried_audio, carried_ticks); carried_audio is None and
     carried_ticks is 0 when `carry_audio` is off. With `noise_vae`, the carried video gets the paired context noise.
+    `audio_feather` lets the last carried audio ticks regenerate, rising by cosine to fully free; the returned
+    carried_audio then holds only the frozen ticks.
     """
     video, audio = split_h3_latent(latent, node)
     if "noise_mask" in latent:
@@ -86,6 +88,11 @@ def build_continuation(latent, source_video, source_audio, context_frames, carry
         audio = audio.clone()
         audio[..., target_start:end] = carried_audio
         audio_mask[..., target_start:end] = 0
+        feather = min(int(audio_feather), ticks)
+        if feather:
+            ramp = torch.arange(1, feather + 1, device=audio_mask.device, dtype=audio_mask.dtype)
+            audio_mask[..., end - feather:end] = 0.5 - 0.5 * torch.cos(torch.pi * ramp / feather)
+            carried_audio = carried_audio[..., :ticks - feather]
 
     out = dict(latent)
     out["samples"] = comfy.nested_tensor.NestedTensor((video, audio))
