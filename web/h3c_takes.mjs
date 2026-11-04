@@ -5,7 +5,8 @@ import * as model from './h3c_timeline_model.mjs?v=20261104-continuity-keys-2';
 import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261031-held-jobs-1';
 
 export const MAX_TAKES = 10;
-const TAKES_URLS = {list: '/h3c/timeline/takes', use: '/h3c/timeline/takes/use', delete: '/h3c/timeline/takes/delete'};
+const TAKES_URLS = {list: '/h3c/timeline/takes', use: '/h3c/timeline/takes/use', delete: '/h3c/timeline/takes/delete',
+  rate: '/h3c/timeline/takes/rate'};
 const STYLE_ID = 'h3ctk-style';
 const CSS = `
 .h3ctk-root { display: flex; flex-direction: column; gap: 5px; padding: 6px 8px; min-width: 0;
@@ -21,6 +22,9 @@ const CSS = `
 .h3ctk-ask { flex: 1 1 260px; overflow-wrap: anywhere; }
 .h3ct-number.h3ctk-count { width: 56px; }
 .h3ctk-render { display: inline-flex; align-items: center; gap: 6px; }
+.h3ctk-marks { display: inline-flex; align-items: center; gap: 1px; }
+.h3ctk-star { padding: 0 3px; min-width: 0; }
+.h3ctk-tag { width: 90px; }
 `;
 const WAIT = 'Wait for the Timeline’s status to catch up with the last edit.';
 const BUSY = 'Wait until this sequence’s runs finish.';
@@ -59,6 +63,19 @@ function size(bytes) {
   if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} KB`;
   if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
+
+// Where a take came from: "from box 2’s take of 11-04 07:30 (in use)", or '' for a take that carried nothing or
+// was saved before takes recorded it. inUse: the box before's take in use, {created} or null.
+export function fromText(carriedFrom, number, inUse) {
+  if (!carriedFrom || number < 2) return '';
+  return `from box ${number - 1}’s take of ${when(carriedFrom)}${inUse?.created === carriedFrom ? ' (in use)' : ''}`;
+}
+
+// "★★★★☆ · keeper", "tag: keeper" or '' for a take's rating (0-5) and tag.
+export function marksText(rating = 0, tag = '') {
+  const stars = rating ? '★'.repeat(rating) + '☆'.repeat(5 - rating) : '';
+  return [stars, tag ? (stars ? tag : `tag: ${tag}`) : ''].filter(Boolean).join(' · ');
 }
 
 const counted = ({count, bytes}) => `${count} ${count === 1 ? 'take' : 'takes'} (${size(bytes)})`;
@@ -156,9 +173,14 @@ class Section {
     if (this.root.hidden) return;
     this.titleEl.textContent = this.bridge ? 'Bridge takes' : 'Clip takes';
     const inUse = part.in_use;
-    this.inUseEl.textContent = inUse ? `In use: rendered ${when(inUse.created)} · ${seedText(inUse.seed)}` : '';
+    this.inUseEl.replaceChildren();
+    if (inUse) {
+      const from = this.bridge ? '' : fromText(inUse.carried_from, this.panel.editor.selected + 1, part.before);
+      this.inUseEl.append(`In use: rendered ${when(inUse.created)} · ${seedText(inUse.seed)}${from ? ` · ${from}` : ''} `);
+      if (this.panel.editor.host.projectAttached !== true) this.inUseEl.append(this.marks(inUse));
+    }
     this.inUseEl.hidden = !inUse;
-    this.rowsEl.replaceChildren(...(part.takes ?? []).map((take) => this.row(take, off)));
+    this.rowsEl.replaceChildren(...(part.takes ?? []).map((take) => this.row(take, off, part.before)));
     this.actions.hidden = !!part.error || this.panel.editor.host.projectAttached === true;
     this.otherButton.disabled = !!off;
     this.otherButton.title = off || `Delete every saved take of this ${this.bridge ? 'bridge' : 'box'}, keeping the take in use`;
@@ -175,7 +197,7 @@ class Section {
     this.noteEl.hidden = !note;
   }
 
-  row(take, off) {
+  row(take, off, before = null) {
     const panel = this.panel;
     const row = el('div', 'h3ctk-row');
     const why = el('span', 'h3ctk-why', take.usable ? 'Can be used' : `Can’t be used: ${take.why}`);
@@ -188,8 +210,32 @@ class Section {
     const remove = button('Delete', off || 'Delete this take’s files', () => panel.remove(this, {scope: 'take', take: take.folder}));
     remove.disabled = !!off || panel.editor.host.projectAttached === true;
     remove.hidden = panel.editor.host.projectAttached === true;
-    row.append(el('span', 'h3ctk-line', `Rendered ${when(take.created)} · ${seedText(take.seed)}`), why, play, use, remove);
+    const from = this.bridge ? '' : fromText(take.carried_from, panel.editor.selected + 1, before);
+    row.append(el('span', 'h3ctk-line', `Rendered ${when(take.created)} · ${seedText(take.seed)}${from ? ` · ${from}` : ''}`));
+    if (panel.editor.host.projectAttached !== true) row.append(this.marks(take));
+    row.append(why, play, use, remove);
     return row;
+  }
+
+  // Five stars (pressing the current rating clears it) and a short tag, saved with the render's time.
+  marks(take) {
+    const rating = take.rating ?? 0;
+    const wrap = el('span', 'h3ctk-marks');
+    wrap.title = marksText(rating, take.tag) || 'Not rated';
+    for (let n = 1; n <= 5; n += 1) {
+      const star = button(n <= rating ? '★' : '☆', n === rating ? 'Clear the rating' : `Rate ${n} of 5`,
+        () => this.panel.rate(this, take, n === rating ? 0 : n, take.tag ?? ''), 'h3ctk-star');
+      star.setAttribute('aria-pressed', String(n <= rating));
+      wrap.append(star);
+    }
+    const tag = el('input', 'h3ct-input h3ctk-tag');
+    tag.value = take.tag ?? '';
+    tag.maxLength = 40;
+    tag.placeholder = 'tag';
+    tag.title = 'A short tag for this take, such as wide or best smile';
+    tag.addEventListener('change', () => this.panel.rate(this, take, rating, tag.value));
+    wrap.append(tag);
+    return wrap;
   }
 }
 
@@ -291,6 +337,13 @@ export class TakesPanel {
       this.setNote(section, boxId, `${section.bridge ? `The bridge before box ${number}` : `Box ${number}`} now uses the take`
         + ` rendered ${when(take.created)}.`);
     });
+  }
+
+  async rate(section, take, rating, tag) {
+    const boxId = this.list.box;
+    const found = await this.editor.host.takes('rate', {created: take.created, rating, tag});
+    if (!found?.ok) return this.setNote(section, boxId, found?.error ?? 'Takes unavailable.', true);
+    if (this.editor.box()?.id === boxId) this.ask(boxId);
   }
 
   // Counts what a delete would remove, then asks before removing it.

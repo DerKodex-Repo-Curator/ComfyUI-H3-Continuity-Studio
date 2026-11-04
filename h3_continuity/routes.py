@@ -12,6 +12,7 @@ STATUS_ROUTE = "/h3c/timeline/status"
 TAKES_ROUTE = "/h3c/timeline/takes"
 USE_TAKE_ROUTE = "/h3c/timeline/takes/use"
 DELETE_TAKES_ROUTE = "/h3c/timeline/takes/delete"
+RATE_TAKE_ROUTE = "/h3c/timeline/takes/rate"
 PREPARE_ROUTE = "/h3c/timeline/prepare"
 INSTRUCTIONS_ROUTE = "/h3c/timeline/instructions"
 BIBLE_ROUTE = "/h3c/timeline/bible"
@@ -118,6 +119,10 @@ async def timeline_use_take(request):
 
 async def timeline_delete_takes(request):
     return await _takes_request(request, takes.delete)
+
+
+async def timeline_rate_take(request):
+    return await _takes_request(request, takes.rate)
 
 
 async def audio_info(request):
@@ -351,6 +356,7 @@ def register():
     routes.post(TAKES_ROUTE)(timeline_takes)
     routes.post(USE_TAKE_ROUTE)(timeline_use_take)
     routes.post(DELETE_TAKES_ROUTE)(timeline_delete_takes)
+    routes.post(RATE_TAKE_ROUTE)(timeline_rate_take)
     routes.post(PREPARE_ROUTE)(timeline_prepare)
     routes.get(INSTRUCTIONS_ROUTE)(timeline_instructions)
     routes.post(BIBLE_ROUTE)(timeline_bible)

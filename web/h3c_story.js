@@ -13,7 +13,7 @@ import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { migrateStoryDescriptionInputs, migrateSerializedStoryDescriptionInputs } from './h3c_story_inputs.mjs?v=20261003-story-inputs-2';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import * as story from './h3c_story_model.mjs?v=20261011-reference-preparation-1';
-import { StoryPanel } from './h3c_story_panel.mjs?v=20261025-story-providers-1';
+import { StoryPanel } from './h3c_story_panel.mjs?v=20261104-fork-1';
 import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261103-story-frame-guides-1';
 import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=20261014-story-library-1';
 import { parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-continuity-keys-2';
@@ -125,6 +125,7 @@ class StoryHost {
       importStory: (file) => this.importStory(file),
       exportGeneration: () => this.exportGeneration(),
       importGeneration: file => this.importGeneration(file),
+      forkGeneration: () => this.forkGeneration(),
       openStudio: () => this.openStudio(),
       settings: () => this.inputs().filter(input => input.name === 'idea_images'),
       setInput: (name, value) => this.setInput(name, value),
@@ -452,6 +453,17 @@ class StoryHost {
 
   async importGeneration(file) {
     try {const archive=parseJSON(await file.text());await importGeneration(this,archive);this.panel.say('Generation imported into this workflow. Its generator is ready.');}
+    catch(error){this.panel.say(error.message,true);}
+  }
+
+  // Branch the film: the current generation downloads as a file (the way back to it), then this workflow continues on
+  // a copy with every render and take, so alternative continuations never touch the original sequence.
+  async forkGeneration() {
+    try {
+      const archive=await exportGeneration(this);downloadGeneration(archive);
+      const result=await importGeneration(this,archive);
+      this.panel.say(`Forked into ${result.sequence}. The original stays as it was; import the downloaded file to go back to it.`);
+    }
     catch(error){this.panel.say(error.message,true);}
   }
 
