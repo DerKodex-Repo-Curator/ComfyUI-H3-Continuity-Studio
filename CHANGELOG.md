@@ -11,6 +11,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 - **Locked recordings.** An uploaded audio clip can be locked to the sequence clock: no bridge may add time inside it, so its cuts stay cuts, and the Timeline names any inserted bridge or setting that would move the picture off it.
 - **Agent skill pack.** `skills/` now holds seven skills that work together. `h3-continuity-video` is the entry, and six scoped skills cover joins and visual memory, timing, references and guides, sound and text, Story and Cast, and the API. Together they describe every feature, including visual memory, plates, RefMods, takes, the continuity check, long clips and voice clips, which the earlier single skill did not mention. `GET /h3c/timeline/instructions` serves the whole pack as `skills` (`instructions_revision` `external-instructions-v8`), and `python skills/install.py` links it into the agent skill folders on this computer.
 
+### Fixed
+
+- **A dialogue cue span with a non-numeric start** is now refused with an *H3 Timeline: dialogue …* message instead of an internal `TypeError`.
+- **Visual memory is judged with the audio lanes and cues already read.** `parse` checked each box's memory before the Timeline's audio lanes and dialogue were loaded, so every cue looked missing.
+- **Checking a dialogue cue works on plain http.** The check key needed `crypto.subtle`, which only exists on HTTPS or localhost; ComfyUI opened on a LAN address could not tick **Checked**.
+
 ### Changed
 
 - **Visual memory at a cut with speech.** When someone speaks on either side of a cut, the clip after it remembers the five frames before the cut instead of the full preceding video. H3 copied that video's lip movement onto the new shot, so the new clip's lines went out of sync. Such clips need a render. See [Visual memory](guide/continuity/visual-memory.md#how-it-works).

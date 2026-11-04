@@ -45,7 +45,7 @@ The three clips and the 29-frame bridge splice to exactly 277 frames. Native out
 
 ## Revisions, plans and idempotency
 
-- `GET /projects/{id}` returns the authored fields, current revision, normalised inspection and read-only native status. `PUT` replaces the authored body with `expected_revision`; a stale revision is `409 revision_conflict`, and an active render or take lease is `409 project_busy`.
+- `GET /projects/{id}` returns the authored fields, current revision, normalised inspection and read-only native status. The status lists each dialogue cue's place on the Timeline's clock (`dialogue.cues`, without bridge time) and `timing_conflicts`, the messages for a [locked recording](../sound/dialogue.md#lock-a-recording) that a bridge or setting would move; they warn, and do not block a plan. `PUT` replaces the authored body with `expected_revision`; a stale revision is `409 revision_conflict`, and an active render or take lease is `409 project_busy`.
 - Keys are permanently scoped to project creation or that project's job creation. Retrying a key with the same request returns the original accepted result, even after the job completes. A changed body with the same key is `409 idempotency_conflict`.
 - Jobs advance through `accepted`, `queued`, `running`, `succeeded`, `failed` or `needs_reconciliation`. After a disconnect, poll the known job ID; if the acceptance response was lost, retry the **same body and key**. Never create another production to hide uncertainty.
 - `POST /jobs/{id}/resume` reconciles existing evidence. It does not rerun a failed job or repeat an uncertain native submission.

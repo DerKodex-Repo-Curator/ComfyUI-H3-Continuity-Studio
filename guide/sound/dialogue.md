@@ -69,11 +69,18 @@ Changing what a clip is asked to say, its words, times, speakers or portrayals, 
 
 Locking never moves, cuts or re-renders anything, and it doesn't change an existing bridge: remove an inserted bridge inside the recording. All locked recordings share one clock; none is moved to fit another.
 
+!!! warning "A lock warns; it doesn't stop a render"
+    The hint line, and `timing_conflicts` in a project's status over the [API](../automation/api.md), only *name* a lock that can't hold. A bridge that would add time inside a locked recording is still planned for rendering.
+
+!!! warning "Without a lock, a bridge moves the picture, not the recording"
+    A cue's time is on its clip's own clock, which never includes bridge time. Take a recording in the full video with a cue at 4.20 s, in a clip that starts at 3.75 s, and an inserted 29-frame bridge before that clip. The clip's speech still starts 0.45 s into the clip, but the clip now starts at 4.96 s in the full video, so the picture speaks at 5.41 s while the recording says the line at 4.20 s, 1.21 s apart. Nothing warns about this when the recording is not locked. To keep a recording and its picture together, lock it and keep the cut.
+
 ## Limits
 
 - There is no automatic transcription, forced alignment or speaker detection. Cues come from a transcript, the Story or typing, and **Checked** means you listened.
 - Nothing measures lips in the rendered footage. A cue's times are where the words are in the recording; whether a render's mouths match is for you to watch.
 - Cue times are not changed to fit a clip window: a cut cue stops the clip until you extend the clip or edit the words.
+- An inserted bridge does not move cues. Only a locked recording is protected from one, and only by a warning.
 
 !!! note "Older installs"
     An older H3 Continuity install ignores dialogue cues and locks, and its Studio drops the cues and each clip's **Dialogue** choice when it saves.

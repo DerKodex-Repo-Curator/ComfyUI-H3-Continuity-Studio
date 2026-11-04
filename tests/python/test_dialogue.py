@@ -3,6 +3,7 @@ import unittest
 from unittest import mock
 
 from h3_continuity import dialogue, replacement
+from h3_continuity import timeline as rules
 
 from .helpers import box, clip, cue, parse, wav
 
@@ -102,6 +103,27 @@ class ValidationTest(unittest.TestCase):
                             "overlap")
         self.check_rejected(cues(observed=[{"id": "o1", "box": "a", "take": "t", "start": 5, "end": 5, "label": ""}]),
                             "observed")
+
+    def test_a_span_with_a_bad_start_is_a_validation_error(self):
+        for start in ("a", None, True, -1.0):
+            with self.subTest(start=start):
+                self.check_rejected(cues(cue(start=1.0, end=3.0, spans=[
+                    {"start": start, "end": 2.0, "portrayal": "voiceover"},
+                    {"start": 1.5, "end": 2.5, "portrayal": "on_screen"}])), "span start")
+
+    def test_parse_judges_memory_with_the_audio_lanes_already_read(self):
+        seen = []
+        real = rules.memory_sources
+
+        def spy(timeline, index):
+            seen.append((len(timeline.audio_clips), len(dialogue.cues(timeline))))
+            return real(timeline, index)
+
+        with mock.patch.object(rules, "memory_sources", spy):
+            parse([box("a", 107), box("b", 107, cut=True, memory="scene")], audio_clips=[clip()],
+                  dialogue=cues(cue("c1", 1.0, 2.0)))
+        self.assertTrue(seen)
+        self.assertTrue(all(item == (1, 1) for item in seen), seen)
 
     def test_parse_keeps_an_independent_copy(self):
         value = cues(cue(), observed=[{"id": "o1", "box": "a", "take": "t", "start": 1, "end": 5, "label": "nod"}])

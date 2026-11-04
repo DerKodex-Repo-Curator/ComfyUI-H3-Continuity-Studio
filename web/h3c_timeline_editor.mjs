@@ -15,7 +15,7 @@ import { CastPage } from './h3c_cast.mjs?v=20261103-replacement-bridges-1';
 import { PicturesPanel, highestSlot } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
 import { CheckPanel } from './h3c_check.mjs?v=20261005-check-4';
 import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261103-replacement-bridges-1';
-import { DialoguePanel } from './h3c_dialogue.mjs?v=20261103-replacement-bridges-1';
+import { DialoguePanel } from './h3c_dialogue.mjs?v=20261104-dialogue-key-1';
 import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261103-replacement-bridges-1';
 
 const STYLE_ID = 'h3ct-style';

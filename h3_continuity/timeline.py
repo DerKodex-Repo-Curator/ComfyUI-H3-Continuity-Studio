@@ -208,8 +208,6 @@ def parse(text):
             if not isinstance(item, dict) or type(item.get("frame")) is not int or item["frame"] < 0:
                 raise _error(f"box {index + 1} memories need a source box and a nonnegative frame")
             _text(item.get("label"), "memory description")
-        if box.memory != "cast":
-            memory_sources(parsed, index)
     parsed.audio_clips = data.get("audio_clips", [])
     if not isinstance(parsed.audio_clips, list):
         raise _error("audio_clips must be a list")
@@ -333,6 +331,10 @@ def parse(text):
                 raise _error(f"box {n} needs a plate revision or an empty string for the original")
             if revision and (revision not in revisions or revisions[revision]["slot"] != slot or not revisions[revision].get("image")):
                 raise _error(f"box {n} has a missing accepted plate for {slot}")
+    # After the audio lanes, disabled references and dialogue are parsed: whether a box speaks decides what it remembers.
+    for index, box in enumerate(parsed.boxes):
+        if box.memory != "cast":
+            memory_sources(parsed, index)
     parsed.all_bridges = _bridges(data.get("bridges", []), parsed)
     parsed.bridges = [bridge for bridge in parsed.all_bridges if bridge.get("mode") != "replace"]
     parsed.replacements = [bridge for bridge in parsed.all_bridges if bridge.get("mode") == "replace"]

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import * as dialogue from '../../web/h3c_dialogue.mjs';
 import * as model from '../../web/h3c_timeline_model.mjs';
 
@@ -13,6 +14,26 @@ test('alignment keys match h3_continuity.dialogue.alignment_key', async () => {
   const other = cue({recording: {slot: 'audio2', file: {type: 'input', filename: 'voz.wav', subfolder: 'h3'}},
     start: 12, end: 13.5, text: '¿Qué tal? — ok 😀 "quoted" \\ tab\t'});
   assert.equal(await dialogue.alignmentKey(other), '04624ecb00d6b4af2102e8d5246f477fbdf9cf46');
+});
+
+test('the plain SHA-1 matches the platform digest at every padding boundary', () => {
+  for (const length of [0, 1, 55, 56, 57, 63, 64, 65, 119, 120, 128, 1000]) {
+    const bytes = Uint8Array.from({length}, (_, i) => (i * 31 + 7) & 255);
+    assert.equal(dialogue.sha1Plain(bytes), createHash('sha1').update(bytes).digest('hex'), `${length} bytes`);
+  }
+});
+
+test('alignment keys are the same where crypto.subtle is missing (plain http)', async () => {
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  Object.defineProperty(globalThis, 'crypto', {value: {}, configurable: true});
+  try {
+    assert.equal(await dialogue.alignmentKey(cue()), '3c847fc62192e64e1dda27989d3425916e79f3e5');
+    const item = cue();
+    await dialogue.setChecked(item, true);
+    assert.equal(await dialogue.isChecked(item), true);
+  } finally {
+    if (saved) Object.defineProperty(globalThis, 'crypto', saved); else delete globalThis.crypto;
+  }
 });
 
 test('checking a cue writes its alignment key; unchecking removes it', async () => {

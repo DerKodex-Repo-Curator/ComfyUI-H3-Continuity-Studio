@@ -18,8 +18,47 @@ function pythonJSON(value) {
 export async function alignmentKey(cue) {
   const file = cue.recording?.file ?? {};
   const value = [cue.recording?.slot, ['type', 'subfolder', 'filename'].map((key) => file[key] ?? ''), cue.start, cue.end, cue.text];
-  const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(pythonJSON(value)));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return sha1Hex(new TextEncoder().encode(pythonJSON(value)));
+}
+
+// crypto.subtle exists only in secure contexts (HTTPS or localhost); ComfyUI is often opened over plain http on a LAN
+// address, where checking a cue would throw. The key is not a secret, so fall back to a plain SHA-1.
+async function sha1Hex(bytes) {
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const digest = await subtle.digest('SHA-1', bytes);
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+  return sha1Plain(bytes);
+}
+
+export function sha1Plain(bytes) {
+  const words = [];
+  const total = bytes.length * 8;
+  const padded = new Uint8Array(((bytes.length + 8) >> 6 << 6) + 64);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const view = new DataView(padded.buffer);
+  view.setUint32(padded.length - 8, Math.floor(total / 2 ** 32));
+  view.setUint32(padded.length - 4, total >>> 0);
+  let h0 = 0x67452301, h1 = 0xefcdab89, h2 = 0x98badcfe, h3 = 0x10325476, h4 = 0xc3d2e1f0;
+  const rotl = (x, n) => (x << n) | (x >>> (32 - n));
+  for (let offset = 0; offset < padded.length; offset += 64) {
+    for (let i = 0; i < 16; i += 1) words[i] = view.getUint32(offset + i * 4);
+    for (let i = 16; i < 80; i += 1) words[i] = rotl(words[i - 3] ^ words[i - 8] ^ words[i - 14] ^ words[i - 16], 1);
+    let a = h0, b = h1, c = h2, d = h3, e = h4;
+    for (let i = 0; i < 80; i += 1) {
+      let f, k;
+      if (i < 20) { f = (b & c) | (~b & d); k = 0x5a827999; }
+      else if (i < 40) { f = b ^ c ^ d; k = 0x6ed9eba1; }
+      else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8f1bbcdc; }
+      else { f = b ^ c ^ d; k = 0xca62c1d6; }
+      const next = (rotl(a, 5) + f + e + k + words[i]) >>> 0;
+      e = d; d = c; c = rotl(b, 30) >>> 0; b = a; a = next;
+    }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+  }
+  return [h0, h1, h2, h3, h4].map((n) => n.toString(16).padStart(8, '0')).join('');
 }
 
 export async function isChecked(cue) {

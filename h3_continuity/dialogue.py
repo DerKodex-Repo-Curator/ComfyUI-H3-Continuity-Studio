@@ -74,9 +74,11 @@ def validate(value):
         if not isinstance(spans, list):
             raise _error(f"{name} spans must be a list")
         previous = start
-        for span in sorted(spans, key=lambda item: item.get("start", 0) if isinstance(item, dict) else 0):
+        for span in spans:
             if not isinstance(span, dict) or span.get("portrayal") not in PORTRAYALS:
                 raise _error(f"{name} spans need an on_screen, voiceover or unknown portrayal")
+            _seconds(span.get("start"), f"{name} span start")
+        for span in sorted(spans, key=lambda item: item["start"]):
             low, high = _seconds(span.get("start"), f"{name} span start"), _seconds(span.get("end"), f"{name} span end")
             if not start <= low < high <= end:
                 raise _error(f"{name} spans must lie inside its cue")

@@ -1,7 +1,7 @@
 // The editor's Split at guide wiring, called on a stub editor: no DOM or ComfyUI is needed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TimelineEditor } from '../../web/h3c_timeline_editor.mjs?v=20261103-bridges-guide-split-1';
+import { TimelineEditor } from '../../web/h3c_timeline_editor.mjs?v=20261104-dialogue-key-1';
 import { FrameImages } from '../../web/h3c_frame_images.mjs?v=20261103-bridges-guide-split-1';
 import { parseState, serialize } from '../../web/h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
 import { guideSplitTiming, describeGuideSplitTiming } from '../../web/h3c_guide_split.mjs?v=20261103-bridges-guide-split-1';
