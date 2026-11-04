@@ -41,7 +41,7 @@ An example body (no execution selectors or graph):
 }
 ```
 
-The three clips and the 29-frame bridge splice to exactly 277 frames. Native output is 24 fps, geometry is a multiple of 32, `context_frames` is 39, 90 or 141, bridge lengths are 12, 29 or 46 frames, and at most nine reference pictures and three reference audios apply to a clip.
+The three clips and the 29-frame bridge splice to exactly 277 frames. Native output is 24 fps, geometry is a multiple of 32, `context_frames` is 22, 39, 90 or 141, bridge lengths are 12, 29 or 46 frames, and at most nine reference pictures and three reference audios apply to a clip.
 
 ## Revisions, plans and idempotency
 

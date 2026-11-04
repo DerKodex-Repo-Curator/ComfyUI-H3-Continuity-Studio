@@ -8,6 +8,7 @@ import re
 import secrets
 import uuid
 
+from .. import timing
 from .contracts import APIError, digest, schemas, validate
 from .assets import contained, file_hash
 
@@ -92,7 +93,7 @@ class TimelineAPI:
         return {"api_version": 1, "timeline_version": 1, "schemas": schemas(), "profiles": self.profiles.list(),
                 "instructions_url": "/h3c/timeline/instructions", "operations": operations,
                 "readiness": {"render": self.jobs is not None and self.artifacts is not None, "plan": self.planner is not None},
-                "limits": {"fps": 24, "geometry_multiple": 32, "context_frames": [39, 90, 141],
+                "limits": {"fps": 24, "geometry_multiple": 32, "context_frames": [int(c) for c in timing.CONTEXT_OPTIONS],
                            "bridge_frames": [12, 29, 46], "reference_images_per_box": 9, "reference_audios_per_box": 3,
                            "reference_videos_per_box": 3, "reference_video_audios_per_box": 3,
                            "max_upload_bytes": 2 * 1024**3, "project_page_size": {"default": 50, "max": 100}},

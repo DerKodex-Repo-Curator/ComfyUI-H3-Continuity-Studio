@@ -57,7 +57,7 @@ The node's own widgets control the whole sequence:
 | --- | --- |
 | `name` | The sequence folder under `output/h3_sequences`. Use a different name per project. |
 | `width`, `height` | Output size, in multiples of 32. 1024 × 576 is a reasonable start. |
-| `context_frames` | Frames each clip carries from the one before it: **39** (1.6 s), **90** (3.75 s) or **141** (5.9 s). |
+| `context_frames` | Frames each clip carries from the one before it: **22** (0.9 s), **39** (1.6 s), **90** (3.75 s) or **141** (5.9 s). |
 | `carry_audio` | Also carry and freeze the matching audio. |
 | `ref_image_size` | Reference image sizing, as in the native H3 Reference to Video node (`match` or `max`). |
 | `audio_context_frames` | Incoming audio context in 24 fps frames; `0` follows the video context. |

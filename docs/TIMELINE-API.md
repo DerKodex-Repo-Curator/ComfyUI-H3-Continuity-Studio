@@ -87,8 +87,8 @@ read-only: it neither queues work nor creates/materializes a sequence/full video
 An edit invalidates affected carry/memory/bridge dependencies. Reuse needs verified
 native media and matching API input identity, rather than merely an existing file.
 
-Native output is 24 fps. Geometry is a multiple of 32; context is 39, 90 or 141
-frames. Normal fresh generation follows `17k+5`, continuation follows its native
+Native output is 24 fps. Geometry is a multiple of 32; context is 22, 39, 90 or
+141 frames. Normal fresh generation follows `17k+5`, continuation follows its native
 grid; exact trims obey the native parser. Bridge lengths are 12/29/46 frames.
 At most nine reference pictures and three reference audios apply to a box. A short
 fresh box can remain editable while its continuation is blocked by `carry_conflict`.

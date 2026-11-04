@@ -76,8 +76,8 @@ filename inputs. Validation checks each input's link pointer, root link record,
 and source output; missing, extra, conflicting, bypassed or muted connections
 fail precisely. Updating a dormant widget cannot override a conflicting link.
 
-Width and height are integer multiples of 32 in 32..16384. Context is 39, 90, or
-141 frames (API combo values are strings). Carry audio is boolean; reference
+Width and height are integer multiples of 32 in 32..16384. Context is 22, 39, 90,
+or 141 frames (API combo values are strings). Carry audio is boolean; reference
 image size is `match` or `max`. Omitted settings retain effective template
 values. Missing API settings use native defaults 1344, 768, 39, true, `match`.
 Present graph-computed settings never fall back to defaults.

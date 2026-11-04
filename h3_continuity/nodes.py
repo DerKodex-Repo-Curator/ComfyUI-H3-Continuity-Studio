@@ -160,7 +160,7 @@ class H3C_Continue(io.ComfyNode):
                 io.Latent.Input("latent", tooltip="This run's H3 audio+video latent, e.g. from MiniMax H3 Image to "
                                                   "Video or Reference to Video."),
                 io.Combo.Input("context_frames", options=list(timing.CONTEXT_OPTIONS), default="39",
-                               tooltip="Frames carried from the previous segment: 39 = 1.6 s, 90 = 3.75 s, "
+                               tooltip="Frames carried from the previous segment: 22 = 0.9 s, 39 = 1.6 s, 90 = 3.75 s, "
                                        "141 = 5.9 s. Longer carries more memory but leaves fewer new frames."),
                 io.Boolean.Input("carry_audio", default=True,
                                  tooltip="Also carry and freeze the matching audio. Off: the whole soundtrack "
