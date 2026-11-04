@@ -1,4 +1,4 @@
-"""ComfyUI nodes: H3 Sequence, H3 Continue and H3 Save Segment."""
+"""ComfyUI nodes: H3 Sequence, H3 Continue, H3 Continuation Model and H3 Save Segment."""
 
 import datetime
 import os
@@ -201,6 +201,30 @@ class H3C_Continue(io.ComfyNode):
         if plan.carried_audio_start:
             info += f" Audio frozen at target ticks {plan.carried_audio_start}–{plan.carried_audio_start + ticks}."
         return io.NodeOutput(out, positive, negative, plan, info)
+
+
+class H3C_ContinuationModel(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="H3C_ContinuationModel",
+            display_name="H3 Continuation Model",
+            category=CATEGORY,
+            description="Samples boxes that continue the box before (and bridges) with continuation_model, for "
+                        "example the model with a LoRA trained for continuations, and every other box with model.",
+            inputs=[
+                io.Model.Input("model", tooltip="The model for boxes that start fresh or cut."),
+                SegmentType.Input("segment", tooltip="From H3 Timeline or H3 Continue."),
+                io.Model.Input("continuation_model", optional=True,
+                               tooltip="The model for continuing boxes. Unconnected: every box uses model."),
+            ],
+            outputs=[io.Model.Output(display_name="model")],
+        )
+
+    @classmethod
+    def execute(cls, model, segment, continuation_model=None) -> io.NodeOutput:
+        continues = segment.carried_video is not None
+        return io.NodeOutput(continuation_model if continues and continuation_model is not None else model)
 
 
 class H3C_SaveSegment(io.ComfyNode):
