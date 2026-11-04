@@ -279,44 +279,58 @@ def _template(value):
 PH3_IMAGE_CLASS = "H3C_PH3ImageStill"
 
 
-def renderer_for(prompt, timeline_id):
-    """A pixel-only Story uses image writing; a video output downstream keeps video writing."""
+def still_recipe_node(prompt, timeline_id):
+    """Resolve the selected still recipe without executing its generator or switch controls."""
     settings = (prompt.get(str(timeline_id)) or {}).get("inputs") or {}
     link = settings.get("still_recipe")
     if not _link(link):
-        return "video"
+        return {}
     node = prompt.get(str(link[0])) or {}
     switches = set()
     while node.get("class_type") == "LazySwitchKJ":
         if link[1] != 0 or str(link[0]) in switches:
-            return "video"
+            return {}
         switches.add(str(link[0]))
         inputs = node.get("inputs") or {}
         selected, controls = inputs.get("switch"), set()
         while _link(selected):
             control = prompt.get(str(selected[0])) or {}
             if selected[1] != 0 or control.get("class_type") != "PrimitiveBoolean" or str(selected[0]) in controls:
-                return "video"
+                return {}
             controls.add(str(selected[0]))
             selected = (control.get("inputs") or {}).get("value")
         if type(selected) is not bool:
-            return "video"
+            return {}
         link = inputs.get("on_true" if selected else "on_false")
         node = (prompt.get(str(link[0])) or {}) if _link(link) else {}
         if not _link(link) or link[1] != (1 if node.get("class_type") == PH3_IMAGE_CLASS else 0):
-            return "video"
+            return {}
     if node.get("class_type") == PH3_IMAGE_CLASS:
         # The P-H3-Image node is its own pixel generator; its recipe output is slot 1.
         if link[1] != 1:
-            return "video"
+            return {}
     else:
         raw = (node.get("inputs") or {}).get("bindings")
         try:
             bindings = json.loads(raw) if isinstance(raw, str) else raw
         except ValueError:
-            return "video"
+            return {}
         if node.get("class_type") != "H3C_StillRecipe" or not isinstance(bindings, dict) or bindings.get("adapter") != "pixels":
-            return "video"
+            return {}
+    return node
+
+
+def still_model_for(prompt, timeline_id):
+    node = still_recipe_node(prompt, timeline_id)
+    if node.get("class_type") == PH3_IMAGE_CLASS:
+        return "P-H3-Image"
+    return ""
+
+
+def renderer_for(prompt, timeline_id):
+    """A pixel-only Story uses image writing; a video output downstream keeps video writing."""
+    if not still_recipe_node(prompt, timeline_id):
+        return "video"
     def reaches(key, seen):
         key = str(key)
         if key == str(timeline_id):
@@ -470,6 +484,7 @@ def read(prompt, story_id, box_id=None, *, rewrite_all=False):
         free_vram=inputs.get("free_vram", True) is not False, total_seconds=total_seconds, thinking=thinking,
         story_thinking=story_thinking, story_model=texts["story_model"].strip(),
         story_base_url=texts["story_base_url"].strip(), renderer=renderer_for(prompt, timeline_id),
+        image_model=still_model_for(prompt, timeline_id),
         descriptions=described, links=links, snapshot=prompt if links else {}, notes=notes,
         vision_base_url=texts["vision_base_url"].strip(), vision_model=texts["vision_model"].strip(),
         reference_descriptions=dict(parsed.reference_descriptions), bible=bible, box_fields=box_fields,
@@ -523,6 +538,8 @@ def identity(ctx):
            ctx.guide, ctx.idea, ctx.shared, ctx.initial_model, ctx.initial_base_url]
     if ctx.renderer == 'image':
         key.append('image-snapshots-v1')
+        if ctx.image_model:
+            key.append(['still-model-instructions-v1', ctx.image_model])
     if ctx.timeline.timed_text is not None:
         key.append(timed_text.snapshot(ctx.timeline.timed_text, ctx.timeline.audio_clips))
     if ctx.timeline.reference_replacements:

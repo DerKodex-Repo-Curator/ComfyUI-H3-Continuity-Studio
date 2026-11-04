@@ -170,6 +170,32 @@ def planner(planning, template=None, styled=False):
     return "\n\n".join(blocks)
 
 
+# PrunaAI/P-H3-Image model card, "Prompting" and "Editing". Native labels are compiled by image_recipe.
+PH3_IMAGE = """The still generator is Pruna P-H3-Image, an image model based on MiniMax H3.
+Write for one still image, not the H3 video/audio prompt format. The prompt is rendered as written with
+the node's prompt upsampler off by default, so provide a complete, specific visual description.
+Open the visible-state description by naming the concrete medium or image type requested by the user:
+for example a documentary photograph, a frame from an anime TV series, an ink drawing or a screen print.
+Describe one main subject caught at the requested instant, the viewpoint and framing, a few supporting
+elements, material detail, and light with a physical source and direction. Follow the authored style;
+do not impose photorealism. Use focused natural prose, without repetition, keyword lists or excessive length.
+Avoid promotional quality words such as stunning, epic, cinematic, vibrant, hyper-detailed, 8k and masterpiece;
+express the requested look with concrete medium, composition, texture, color and light instead.
+For visible text requested by the user, quote each exact short string and specify its placement, then say
+"no other text". Do not invent signs, labels, lettering or text when none is requested.
+For referenced images, state what stays and what changes: preserve the assigned identity, approved layout,
+materials and props, and describe the requested pose, expression, wardrobe, camera and lighting explicitly.
+The first image delivered to P-H3-Image is the edit base; other images supply their assigned reference roles.
+The Studio selects and orders those images and compiles logical @imageN names to native <Picture N> labels
+and adds the edit instruction. Never guess picture ordinals or emit Edit <Picture 1>, subject_definitions,
+<Subject N>, video section headers, [Shot N] stages, timestamps, dialogue or sound in image prose.
+Keep supplied logical reference names and the existing JSON schema; native prompt syntax belongs to code."""
+
+
+def image_model_instructions(model):
+    return PH3_IMAGE if model == "P-H3-Image" else ""
+
+
 IMAGE_SNAPSHOTS = """Write one storyboard box as structured JSON for a still-image generator.
 Each shot needs three explicit fields:
 - opening_state: one complete visible moment at the start of the shot, including location, layout,
@@ -194,14 +220,16 @@ Every snapshot is self-contained. Preserve the same room layout, furniture, mate
 recurring props across the scene; a new angle does not rearrange the environment."""
 
 
-def image_writer(template=None):
+def image_writer(template=None, *, model=""):
     blocks = [ORDER, IMAGE_SNAPSHOTS]
+    if image_model_instructions(model):
+        blocks.append(image_model_instructions(model))
     if template is not None:
         blocks += [story_templates.write_rule(True), story_templates.block(template)]
     return "\n\n".join(blocks)
 
 
-def image_planner(planning, template=None):
+def image_planner(planning, template=None, *, model=""):
     blocks = ["Plan one portable story as storyboard boxes for still images, with narrative metadata for later video.",
               ORDER, TASK[planning], PLAN_BIBLE, BEATS,
               "Keep the story's events and exact dialogue in each beat. Each box has First/Last and shot snapshots. "
@@ -211,6 +239,8 @@ def image_planner(planning, template=None):
               "Use join kinds continue, transition, cut or new_scene with a concrete short note. "
               "Select only supplied references that this box actually needs; do not invent reference IDs.",
               BOXES[planning], FIT[planning]]
+    if image_model_instructions(model):
+        blocks.append(image_model_instructions(model))
     if template is not None:
         blocks.append(story_templates.plan_rule(True))
     return "\n\n".join(blocks)

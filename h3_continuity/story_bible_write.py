@@ -97,7 +97,7 @@ def _bible_lines(ctx):
 def plan_messages(ctx):
     """prompts.story_messages(ctx) with the bible path's planner text and the bible after the user text."""
     if ctx.renderer == "image":
-        system = instructions.image_planner(ctx.planning, ctx.template)
+        system = instructions.image_planner(ctx.planning, ctx.template, model=ctx.image_model)
     else:
         system = instructions.planner(ctx.planning, ctx.template, styled=bool(story_bible.style(ctx.bible).strip()))
     messages = prompts.story_messages(ctx, system)

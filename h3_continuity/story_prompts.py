@@ -273,6 +273,7 @@ class StoryContext:
     idea_references: dict = dataclasses.field(default_factory=dict)
     idea_picture_before: dict = dataclasses.field(default_factory=dict)
     renderer: str = "video"
+    image_model: str = ""
     story_model: str = ""
     story_base_url: str = ""
 

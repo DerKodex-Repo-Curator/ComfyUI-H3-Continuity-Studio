@@ -4,6 +4,14 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-04
+
+### Fixed
+
+- Story's image planner, snapshot writer and still-prompt preparation now use Pruna P-H3-Image prompting guidance when that still generator is selected: concrete medium and composition, directional lighting, exact requested text and explicit reference edits, without video prompt markup or quality-word padding.
+
+[Changes since v0.12.1](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.1...v0.12.2).
+
 ## [0.12.1] - 2026-11-04
 
 ### Fixed
