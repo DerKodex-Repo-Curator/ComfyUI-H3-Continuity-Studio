@@ -28,6 +28,8 @@ Copy the native subgraph into another workflow to reuse it. Connect its IMAGE to
 
 ## Connecting another image generator
 
+For P-H3-Image (Pruna AI), use the ready-made **P-H3-Image Still** node instead of writing bindings; see `guide/build/p-h3-image-stills.md` and `examples/ph3_image_story_studio.json`.
+
 Use Still Recipe bindings version 2 with `adapter: "pixels"`, a descriptive `label`, `reference_limit`, and `reference_label` containing `{index}`. Declare local node/input locators for `prompt`, reusable `instruction`, `seed`, both dimension arrays in `size`, and ordered `references`. An optional `negative` locator preserves native negative text unless a request overrides it. The generator exposes IMAGE. The Studio supplies invocation-only pixel loaders; the native graph owns all model and sampling behavior.
 
 A request exceeding the declared reference capacity fails before submission and names the required references. Computed IMAGE references, including X2 detail subgraphs, run through their captured graph connections during still generation; provenance records the source graph hash. Exporting their pixels still requires a rendered image file. Existing version-1 H3 recipes retain their native conditioning adapter.
