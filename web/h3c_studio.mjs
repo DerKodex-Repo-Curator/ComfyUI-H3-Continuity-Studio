@@ -6,6 +6,7 @@ import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
 import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
+import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261104-partial-video-1';
 
 const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
 const CENTER = ['viewer', 'story', 'cast', 'pictures', 'refmods'];
@@ -940,8 +941,10 @@ class Studio {
     this.feedbackButton.hidden = host.editor.feedbackEl.hidden;
     this.renderNavigation();
     const full = host.editor.fullLink.hidden ? null : host.editor.fullLink.getAttribute('href');
+    const partial = full ? host.editor.partialVideo : null;
     this.downloadVideo.disabled = !full;
-    this.downloadVideo.title = full ? 'Download the existing assembled full video' : 'No assembled full video is available yet.';
+    this.downloadVideo.title = partial ? `Download the partial video: ${partialTitle(partial)}`
+      : full ? 'Download the existing assembled full video' : 'No assembled full video is available yet.';
     this.downloadVideo.dataset.file = full ? host.editor.fullDownloadLink.download : '';
     const cancel = this.story?.panel?.cancelButton;
     if (cancel) {
@@ -1229,12 +1232,14 @@ class Studio {
       : entry?.video?.file ?? null;
     const takeUrl = take ? this.host.viewUrl(take) : null;
     const fullUrl = editor.fullLink.hidden ? null : editor.fullLink.getAttribute('href');
+    const partial = fullUrl ? editor.partialVideo : null;
     const view = this.view ?? (fullUrl ? 'full' : 'take');
     this.fullButton.setAttribute('aria-pressed', String(view === 'full'));
     this.takeButton.setAttribute('aria-pressed', String(view === 'take'));
     this.takeButton.textContent = box ? `Clip ${editor.selected + 1} · active take` : 'Clip take';
     this.fullButton.disabled = !fullUrl;
-    this.fullButton.title = fullUrl ? 'Play the whole Timeline' : 'No assembled full video is available yet.';
+    this.fullButton.title = partial ? `Play the partial video: ${partialTitle(partial)}`
+      : fullUrl ? 'Play the whole Timeline' : 'No assembled full video is available yet.';
     this.takeButton.disabled = !box;
     const inUse = chosen?.bridge ? editor.bridgeStatusOf(chosen.box) : chosen ? editor.statusOf(box) : null;
     this.switchButton.hidden = !inUse?.video || !['chosen', chosen.bridge ? 'bridge' : 'take'].includes(view);
@@ -1277,7 +1282,8 @@ class Studio {
       this.badge.textContent = view === 'chosen' ? this.chosenLabel(chosen) : view === 'candidate' ? this.candidate.label
         : view === 'bridge'
         ? `Bridge before clip ${editor.selected + 1}${!entry || entry.status === 'done' ? '' : ' · older take'}`
-        : view === 'take' && takeUrl && entry.status !== 'done' ? OLDER_TAKE : '';
+        : view === 'take' && takeUrl && entry.status !== 'done' ? OLDER_TAKE
+        : view === 'full' && partial ? partialBadge(partial) : '';
     }
     this.badge.hidden = !this.badge.textContent;
   }

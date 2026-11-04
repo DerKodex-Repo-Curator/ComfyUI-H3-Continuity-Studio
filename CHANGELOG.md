@@ -4,6 +4,10 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+### Added
+
+- **Partial video while repainting.** Until every clip of a Timeline that splits a video is rendered, the Studio's **Full video** and **Download video** use `<name>_partial.mp4`: the rendered clips, and the split video's own frames and sound for the others, at the Timeline's full length. The Timeline node saves the split video at render size (`<name>_source.mp4`) for it.
+
 ## [0.9.0] - 2026-11-04
 
 ### Added

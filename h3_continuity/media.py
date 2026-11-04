@@ -53,27 +53,30 @@ def _mux_audio(container, stream, waveform, sample_rate):
     container.mux(stream.encode(None))
 
 
-def write_segment_video(path, images, fps, crf, audio=None, color_space="sRGB"):
+def write_segment_video(path, images, fps, crf, audio=None, color_space="sRGB", size=None):
     """Encode `images` ([N, H, W, C], 0-1) with optional `audio` = (waveform [C, S], sample_rate).
-    Returns the encoded (width, height); odd sizes are padded by one edge pixel."""
+    Returns the encoded (width, height); odd sizes are padded by one edge pixel, unless `size` = (width, height)
+    scales every frame to it."""
     height, width = images.shape[1], images.shape[2]
-    pad_h, pad_w = height % 2, width % 2
+    pad_h, pad_w = (0, 0) if size else (height % 2, width % 2)
+    out_width, out_height = size or (width + pad_w, height + pad_h)
     hdr = color_space in ("HDR", "HDR PQ")
     with av.open(path, mode="w") as container:
-        video_stream = _add_video_stream(container, fps, width + pad_w, height + pad_h, crf, color_space)
+        video_stream = _add_video_stream(container, fps, out_width, out_height, crf, color_space)
         audio_stream = _add_audio_stream(container, *audio) if audio is not None else None
         for image in images:
             array = (image[..., :3].float().clamp(0, 1) * (65535 if hdr else 255)).round().cpu().numpy().astype(np.uint16 if hdr else np.uint8)
             if pad_h or pad_w:
                 array = np.pad(array, ((0, pad_h), (0, pad_w), (0, 0)), mode="edge")
             frame = av.VideoFrame.from_ndarray(array, format="rgb48le" if hdr else "rgb24")
-            frame = frame.reformat(format=video_stream.pix_fmt, dst_colorspace=video_stream.codec_context.colorspace)
+            frame = frame.reformat(width=out_width, height=out_height, format=video_stream.pix_fmt,
+                                   dst_colorspace=video_stream.codec_context.colorspace)
             set_video_color_properties(frame, color_space)
             container.mux(video_stream.encode(frame))
         container.mux(video_stream.encode(None))
         if audio_stream is not None:
             _mux_audio(container, audio_stream, *audio)
-    return width + pad_w, height + pad_h
+    return out_width, out_height
 
 
 def read_frames(path, indices):
@@ -150,27 +153,30 @@ def _replace(temporary, path):
         return alternative, f"{os.path.basename(path)} is open in another program, so this version is {os.path.basename(alternative)}."
 
 
-def build_full_video(path, videos, audio, crf):
+def build_full_video(path, videos, audio, crf, size=None):
     """Concatenate segment videos into `path` with `audio` = (waveform, sample_rate) or None. Each video is a path, or
-    (path, first frame, frames) for a window of it.
+    (path, first frame, frames) for a window of it. With `size` = (width, height), videos of other sizes are scaled to
+    it instead of refused.
     Packets are copied when every file has the same encoding and every window starts at its first frame (segments
     have no B-frames, so a prefix is its first packets); otherwise the frames are re-encoded.
     Returns (written path or None, note)."""
     windows = [(video, 0, None) if isinstance(video, str) else tuple(video) for video in videos]
     signatures = [_signature(video) for video, _, _ in windows]
     first = signatures[0]
-    if any(signature[2:5] != first[2:5] for signature in signatures):
+    if any(signature[4] != first[4] or (size is None and signature[2:4] != first[2:4]) for signature in signatures):
         return None, "Full video skipped: the segment videos differ in size or frame rate."
     if any(signature[5] != first[5] for signature in signatures):
         return None, "Full video skipped: the segment videos differ in color space."
-    copy = all(signature[:2] == first[:2] for signature in signatures) and all(start == 0 for _, start, _ in windows)
+    width, height = size or first[2:4]
+    copy = (all(signature[:2] == first[:2] and signature[2:4] == (width, height) for signature in signatures)
+            and all(start == 0 for _, start, _ in windows))
     temporary = path + ".tmp.mp4"
     with av.open(windows[0][0]) as template, av.open(temporary, mode="w") as container:
         color_space = first[5]
         if copy:
             video_stream = container.add_stream_from_template(template.streams.video[0], opaque=True)
         else:
-            video_stream = _add_video_stream(container, first[4], first[2], first[3], crf, color_space)
+            video_stream = _add_video_stream(container, first[4], width, height, crf, color_space)
         audio_stream = _add_audio_stream(container, *audio) if audio is not None else None
         offset, encoded = Fraction(0), 0
         for video, start, frames in windows:
@@ -182,6 +188,8 @@ def build_full_video(path, videos, audio, crf):
                         if end is not None and number >= end:
                             break
                         if number >= start:
+                            if (frame.width, frame.height) != (width, height):
+                                frame = frame.reformat(width=width, height=height)
                             # a decoded frame keeps its source time base, so numbering it there collapses the times
                             frame.pts, frame.time_base = encoded, 1 / first[4]
                             encoded += 1
