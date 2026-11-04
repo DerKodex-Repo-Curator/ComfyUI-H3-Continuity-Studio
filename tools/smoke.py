@@ -1,7 +1,7 @@
 """Smoke test one scenario: render each arm through render_scene, then a side-by-side and a JSON summary.
 
 python tools/smoke.py --spec examples/prefixstream_scenes/smoke/s2_baseline.json --graph speed_graph.json
-    [--server http://127.0.0.1:8188] [--output D:/Projects/ComfyUI_windows_portable/ComfyUI/output]
+    [--server http://127.0.0.1:8188] [--output $COMFY_ROOT/output]
     [--out .tmp/smoke/s2] [--cap 600] [--arm base]
 
 A spec is {"scene": "<path relative to the repository>" or an inline scene, "arms": {name: patch}}. A patch may hold
@@ -11,6 +11,7 @@ or null}). Projects are named ps-<scenario>-<arm>; run the batch inside one shar
 import argparse
 import copy
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -113,7 +114,9 @@ def main():
     parser.add_argument("--spec", required=True)
     parser.add_argument("--graph", required=True)
     parser.add_argument("--server", default="http://127.0.0.1:8188")
-    parser.add_argument("--output", default="D:/Projects/ComfyUI_windows_portable/ComfyUI/output")
+    comfy = os.environ.get("COMFY_ROOT")
+    parser.add_argument("--output", default=comfy and str(Path(comfy) / "output"), required=not comfy,
+                        help="ComfyUI's output folder; defaults to $COMFY_ROOT/output")
     parser.add_argument("--out")
     parser.add_argument("--cap", type=float, default=600)
     parser.add_argument("--arm", action="append", help="render only these arms")
