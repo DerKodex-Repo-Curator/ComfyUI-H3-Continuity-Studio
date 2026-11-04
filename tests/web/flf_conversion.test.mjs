@@ -20,17 +20,19 @@ test('a REF2VA clip with a First frame and extra images converts; its images bec
   assert.equal(model.describeBox(value, 0, connected, 39).mode, 'FLF2VA');
 });
 
-test('raw video and raw audio block the conversion and say why', () => {
-  const result = convert(state({first: 'image1', prompt: '@image3 dances to @audio1 like @video1.'}));
+test('raw video blocks the conversion and says why', () => {
+  const result = convert(state({first: 'image1', prompt: '@image3 dances like @video1.'}));
   assert.equal(result.ok, false);
   assert.match(result.reason, /@video1: raw video/);
-  assert.match(result.reason, /@audio1: raw audio/);
 });
 
-test('audio assigned as a RefMod no longer blocks the conversion', () => {
-  const value = state({first: 'image1', prompt: '@image3 sings @audio2.'},
-    {refmods: [{slot: 'audio2', name: 'voice', member: -1, kind: 'audio', strength: 1}]});
+test('raw audio converts and stays an audio reference after the cached image RefMods', () => {
+  const value = state({first: 'image1', prompt: '@image3 sings @audio1.'});
   assert.equal(convert(value).ok, true);
+  value.boxes[0].flf_refmods = true;
+  const info = model.describeBox(value, 0, connected, 39);
+  assert.equal(info.mode, 'FLF2VA');
+  assert.deepEqual(info.tags.filter(item => item.name === 'audio1'), [{name: 'audio1', tag: '<Audio 1>'}]);
 });
 
 test('a fresh clip without a First frame cannot convert', () => {

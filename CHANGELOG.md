@@ -4,6 +4,14 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-04
+
+### Added
+
+- **Audio in FLF2VA + cached RefMods.** A clip with this switch on no longer falls back to REF2VA because it mentions audio or has an audio-lane clip under it. The raw audio is encoded by the H3 audio VAE into the same reference REF2VA uses and numbered before any audio RefMods, so **Convert to FLF2VA** now works on clips with a soundtrack. Raw video still needs REF2VA. The Timeline needs its audio VAE connected for this.
+
+[Changes since v0.8.1](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.8.1...v0.9.0).
+
 ## [0.8.1] - 2026-11-04
 
 ### Fixed

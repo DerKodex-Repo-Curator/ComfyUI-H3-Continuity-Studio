@@ -65,9 +65,19 @@ def cached_image(pixels, vae):
         return mod, strength
 
 
-def prepare(clip, vae, images, refs):
-    """Present cached images in the compiler's order, followed by already-selected RefMods."""
+def prepare(clip, vae, images, refs, audios=(), audio_vae=None):
+    """Present cached images in the compiler's order, then the box's raw audio, then already-selected RefMods.
+
+    Raw audio needs no conversion: it becomes the same reference block native REF2VA builds for it."""
     _, prompt = refmods.backend()
     mods = [cached_image(image, vae) for image in images]
     items, blocks = prompt.prepare_references(mods + refmods.load(refs), vae)
+    if audios:
+        if audio_vae is None:
+            raise ValueError("H3 Timeline: connect the H3 audio VAE to use audio references with FLF2VA")
+        from comfy_extras import nodes_minimax_h3
+        encoded = [nodes_minimax_h3._encode_ref_audio(audio_vae, audio) for audio in audios]
+        # Cached images always have strength 1, so each has exactly one item and block ahead of the RefMods.
+        items[len(mods):len(mods)] = [{"type": "audio"} for _ in encoded]
+        blocks[len(mods):len(mods)] = [{"kind": "audio", "ref_audio_t": t, "audio_latent": z} for z, t in encoded]
     return refmods.ReferenceClip(clip, items), blocks

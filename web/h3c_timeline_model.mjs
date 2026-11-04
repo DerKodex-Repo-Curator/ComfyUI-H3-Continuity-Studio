@@ -979,8 +979,8 @@ export function describeBox(state, index, connected, context) {
   const acceptedLast = acceptedFrames.includes(box.frames - (fresh ? 1 : 0))
     || (box.flf_refmods && state.boxes[index + 1] && !isFresh(state, index + 1)
       && acceptedGuideFrames(state, index + 1, context).includes(0));
-  const rawAudio = audios.some(name => !mods.has(name));
-  if (box.flf_refmods && (!fresh || first || acceptedFirst) && !rawAudio && !videos.length) {
+  // Raw audio rides along as the same audio reference REF2VA builds; raw video has no FLF2VA form.
+  if (box.flf_refmods && (!fresh || first || acceptedFirst) && !videos.length) {
     mode = 'FLF2VA';
     const lastPresent = !!(last || acceptedLast) && (!fresh || box.frames > 1 || (last && images.includes(last)));
     const firstPresent = Number(!!(first || acceptedFirst));
@@ -990,6 +990,9 @@ export function describeBox(state, index, connected, context) {
     const ordinary = images.filter(name => !mods.has(name) && !keyframes.includes(name)).sort((a,b) => slotNumber(a)-slotNumber(b));
     const counters = {image:endpointCount*2,video:0,audio:0};
     for (const name of ordinary) tags.push({name,tag:'<Picture ' + (++counters.image) + '>'});
+    const rawAudios = audios.filter(name => !mods.has(name)).sort((a,b) => slotNumber(a)-slotNumber(b));
+    for (const name of rawAudios) tags.push({name,tag:'<Audio ' + (++counters.audio) + '>'});
+    if (rawAudios.length > MAX_REF_AUDIOS) problems.push(`${rawAudios.length} audios; H3 takes at most ${MAX_REF_AUDIOS}.`);
     const labels = {image:'Picture',video:'Video',audio:'Audio'};
     const selected = [...new Set([...images,...audios])].filter(name => mods.has(name))
       .sort((a,b) => Number(a.startsWith('audio'))-Number(b.startsWith('audio')) || slotNumber(a)-slotNumber(b));
@@ -1024,20 +1027,17 @@ export function describeBox(state, index, connected, context) {
 }
 
 // Whether a clip runs as FLF2VA once `flf_refmods` is on. Its First/Last frames and accepted endpoint guides become the
-// start and end frames, and raw images become cached image RefMods; raw videos and raw audio have no automatic conversion.
+// start and end frames, raw images become cached image RefMods and raw audio stays an audio reference; raw video has no
+// FLF2VA form.
 export function flfConversion(state, index, connected, context) {
   const trial = structuredClone(state);
   trial.boxes[index].flf_refmods = true;
   if (describeBox(trial, index, connected, context).mode === 'FLF2VA') return {ok: true, reason: ''};
   const found = mentions(assemblePrompt(state, index));
-  const mods = new Set(effectiveRefmods(state).map(ref => ref.slot));
   const list = names => [...new Set(names)].map(name => `@${name}`).join(', ');
   const reasons = [];
   const videos = found.filter(item => item.kind === 'video' || item.kind === 'video_audio').map(item => item.name);
   if (videos.length) reasons.push(`${list(videos)}: raw video can't be converted to a RefMod here. Make a video RefMod with RefForge, assign it on the RefMods page and mention that slot instead.`);
-  const audios = [...found.filter(item => item.kind === 'audio').map(item => item.name),
-    ...activeAudioClips(state, index).map(clip => clip.slot)].filter(name => !mods.has(name));
-  if (audios.length) reasons.push(`${list(audios)}: raw audio can't be converted to a RefMod here. Make an audio RefMod with RefForge and assign it to that slot on the RefMods page.`);
   const box = state.boxes[index];
   if (isFresh(state, index) && !(box.first && referenceEnabled(state, box.first)) && !acceptedGuideFrames(state, index, context).includes(0))
     reasons.push('A fresh clip needs a First frame: choose one under First & last frame or accept a First guide.');

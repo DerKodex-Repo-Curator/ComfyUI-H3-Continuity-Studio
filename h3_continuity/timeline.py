@@ -962,7 +962,8 @@ def box_slots(timeline, index, context=39):
     effective_first = "" if endpoint_first else first
     effective_last = "" if endpoint_last else last
     fresh = is_fresh(timeline, index)
-    if box.flf_refmods and (not fresh or first or endpoint_first) and not audios and not videos:
+    # Raw audio rides along as the same audio reference block REF2VA builds; raw video has no FLF2VA form.
+    if box.flf_refmods and (not fresh or first or endpoint_first) and not videos:
         if endpoint_first and played_frames(timeline, index) == 1 and last in images:
             effective_last = last  # A referenced named Last remains a text-image source; First owns frame 0.
         last_present = bool((last or endpoint_last) and (not fresh or played_frames(timeline, index) > 1
@@ -977,12 +978,16 @@ def box_slots(timeline, index, context=39):
         for name in images:
             counters["image"] += 1
             tags[name] = f"<Picture {counters['image']}>"
+        audios = sorted(audios, key=slot_number)
+        for name in audios:
+            counters["audio"] += 1
+            tags[name] = f"<Audio {counters['audio']}>"
         labels = {"image": "Picture", "video": "Video", "audio": "Audio"}
         for ref in mods:
             counters[ref["kind"]] += 1
             tags[ref["slot"]] = f"<{labels[ref['kind']]} {counters[ref['kind']]}>"
         return Slots("flf2va", sorted(images + [ref["slot"] for ref in mods if ref["kind"] != "audio"], key=slot_number),
-                     [ref["slot"] for ref in mods if ref["kind"] == "audio"],
+                     audios + [ref["slot"] for ref in mods if ref["kind"] == "audio"],
                      effective_first, effective_last if last_present else "", tags, mods)
     if not mods and not audios and not videos and set(images) <= set(keyframes):
         if endpoint_first and played_frames(timeline, index) == 1 and last in images:

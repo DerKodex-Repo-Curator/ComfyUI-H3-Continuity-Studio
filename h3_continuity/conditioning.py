@@ -61,7 +61,8 @@ def encode(plan, clip, vae, audio_vae, width, height, ref_image_size, images, au
         if cached_refs:
             references = [image for image in (first, last) if image is not None]
             references.extend(images[name] for name in slots.image_inputs)
-            clip, blocks = frame_refmods.prepare(clip, vae, references, slots.refmods)
+            clip, blocks = frame_refmods.prepare(clip, vae, references, slots.refmods,
+                                                 [audios[name] for name in slots.audio_inputs], audio_vae)
         native_last = last if (end == -1 or (first is not None and endpoints.get("first") is not None)
                               or cached_refs) else None
         positive, latent = core.MiniMaxH3ImageToVideo.execute(clip, vae, plan.prompt, width, height, plan.generated,

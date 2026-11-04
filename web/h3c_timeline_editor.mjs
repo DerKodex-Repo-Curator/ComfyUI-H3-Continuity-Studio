@@ -2,7 +2,7 @@
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import * as model from './h3c_timeline_model.mjs?v=20261104-studio-ux-1';
+import * as model from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261103-replacement-bridges-1';
 import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames } from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
 import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261104-studio-ux-1';
@@ -469,7 +469,7 @@ export class TimelineEditor {
       this.commit();
     });
     this.refmodFramesField = field('FLF2VA + cached RefMods', this.refmodFramesInput);
-    this.refmodFramesField.title = 'Experimental. Fresh clips use native First/Last endpoints. Continuous clips keep the full carried video/audio overlap without creating a still. Additional image references use cached RefMods. Use FLF2VA video model weights. Stills also reuse compressed image references and accepted guides, with less reference detail. Raw audio/video references retain REF2VA.';
+    this.refmodFramesField.title = 'Experimental. Fresh clips use native First/Last endpoints. Continuous clips keep the full carried video/audio overlap without creating a still. Additional image references use cached RefMods, and audio references are passed on as audio references. Use FLF2VA video model weights. Stills also reuse compressed image references and accepted guides, with less reference detail. Raw video references retain REF2VA.';
     this.exactInput = el('input');
     this.exactInput.type = 'checkbox';
     this.exactInput.addEventListener('change', () => {
@@ -1864,8 +1864,8 @@ export class TimelineEditor {
     if (conversion) {
       this.convertButton.disabled = !conversion.ok;
       this.convertButton.title = conversion.ok ? 'Turn on FLF2VA + cached RefMods: First/Last frames become start and end frames, '
-        + 'and mentioned images become cached RefMods. Needs FLF2VA video model weights.' : conversion.reason;
-      this.convertHint.textContent = conversion.ok ? 'First/Last become start and end frames; images become cached RefMods.' : conversion.reason;
+        + 'mentioned images become cached RefMods, and audio stays an audio reference. Needs FLF2VA video model weights.' : conversion.reason;
+      this.convertHint.textContent = conversion.ok ? 'First/Last become start and end frames; images become cached RefMods; audio stays.' : conversion.reason;
       this.convertHint.classList.toggle('problem', !conversion.ok);
     }
     this.effectivePromptEl.replaceChildren(el('summary', null, 'Effective H3 prompt and text window'));
