@@ -1023,6 +1023,27 @@ export function describeBox(state, index, connected, context) {
   return { mode, tags, guides, problems, fresh };
 }
 
+// Whether a clip runs as FLF2VA once `flf_refmods` is on. Its First/Last frames and accepted endpoint guides become the
+// start and end frames, and raw images become cached image RefMods; raw videos and raw audio have no automatic conversion.
+export function flfConversion(state, index, connected, context) {
+  const trial = structuredClone(state);
+  trial.boxes[index].flf_refmods = true;
+  if (describeBox(trial, index, connected, context).mode === 'FLF2VA') return {ok: true, reason: ''};
+  const found = mentions(assemblePrompt(state, index));
+  const mods = new Set(effectiveRefmods(state).map(ref => ref.slot));
+  const list = names => [...new Set(names)].map(name => `@${name}`).join(', ');
+  const reasons = [];
+  const videos = found.filter(item => item.kind === 'video' || item.kind === 'video_audio').map(item => item.name);
+  if (videos.length) reasons.push(`${list(videos)}: raw video can't be converted to a RefMod here. Make a video RefMod with RefForge, assign it on the RefMods page and mention that slot instead.`);
+  const audios = [...found.filter(item => item.kind === 'audio').map(item => item.name),
+    ...activeAudioClips(state, index).map(clip => clip.slot)].filter(name => !mods.has(name));
+  if (audios.length) reasons.push(`${list(audios)}: raw audio can't be converted to a RefMod here. Make an audio RefMod with RefForge and assign it to that slot on the RefMods page.`);
+  const box = state.boxes[index];
+  if (isFresh(state, index) && !(box.first && referenceEnabled(state, box.first)) && !acceptedGuideFrames(state, index, context).includes(0))
+    reasons.push('A fresh clip needs a First frame: choose one under First & last frame or accept a First guide.');
+  return {ok: false, reason: reasons.join(' ') || 'This clip still runs as REF2VA with FLF2VA + cached RefMods on.'};
+}
+
 export function seconds(frames) {
   return (frames / FPS).toFixed(1);
 }

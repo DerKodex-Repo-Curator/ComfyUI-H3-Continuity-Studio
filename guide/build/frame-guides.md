@@ -27,6 +27,8 @@ The panel offers:
 
 After you accept a guide the panel reads **Guide in use**, and the marker above shows its thumbnail. A guide never changes a render until you accept it.
 
+You can also drop an image file onto a First, Last or Shot marker (above the Timeline or in the **Shots** tab), onto the panel's image area, or onto **First frame** or **Last frame** in the **Settings** tab. The dropped image becomes that marker's guide, the same as **Upload guide…**.
+
 ### Generating candidates
 
 [![Two Qwen Image 2.1 candidates for Clip 1's First frame](../assets/screens/still-candidates.png){ align=left width=300 }](../assets/screens/still-candidates.png)
@@ -72,6 +74,16 @@ Select models you have installed; nothing is downloaded. Other pixel generators 
 ## Guides inside a shot
 
 A guide steers a frame within the same clip. It does not split the clip or rewrite its prompt. Interior guides remain usable even without a `[Shot N]` boundary, including guides in older saved projects.
+
+### A guide at any frame
+
+A Shot marker sits at the time its `[Shot N]` line gives (`At 0:02.500, …`). To guide a frame without adding a shot, open the clip's **Shots** tab and use the list under the markers:
+
+- **Guide another frame**: enter the **Frame** (0 is the clip's first frame), then press **Upload guide…** or drop an image on the row. The row is then listed as **Frame guide · guides frame N**.
+- To move a guide, change its **Frame**. Moving a Shot marker's guide takes it off the marker; the marker keeps its candidates.
+- A guide whose Shot marker was removed reads **Removed Shot N · unused** and does not affect renders. Give it a frame to use it again.
+
+Each frame can hold one guide.
 
 Keep a continuous camera move, such as a tilt from someone's feet to the ceiling, in one clip with its guides. To separate planned shots, use **Split before Shot N** in the **Shots** tab at a timed shot boundary. Each half gets its own shots and the second clip starts as a **Cut**. See [Timeline editing](timeline.md).
 

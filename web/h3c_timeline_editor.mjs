@@ -2,10 +2,10 @@
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import * as model from './h3c_timeline_model.mjs?v=20261104-continuity-keys-3';
+import * as model from './h3c_timeline_model.mjs?v=20261104-studio-ux-1';
 import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261103-replacement-bridges-1';
-import { shotFrames, frameTargets, syncTargets } from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
-import {FrameImages, targetLabel} from './h3c_frame_images.mjs?v=20261104-shot-split-only-1';
+import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames } from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
+import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261104-studio-ux-1';
 import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261104-shot-split-only-1';
 import { fillReferenceSwitches } from './h3c_reference_switches.mjs?v=20261010-image-descriptions-1';
 import { ReferenceReplacements } from './h3c_reference_replacements.mjs?v=20261011-reference-preparation-1';
@@ -21,6 +21,8 @@ import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?
 const STYLE_ID = 'h3ct-style';
 const PANEL_HEIGHT = 470;
 const JOIN_LABELS = {continue: 'Continue', transition: 'Transition', cut: 'Cut', new_scene: 'New scene'};
+// Untargeted guides need unique shot numbers; numbers from here on are free frame guides, never prompt shots.
+const FREE_GUIDE = 1000;
 const CSS = `
 .h3ct-root { display: flex; flex-direction: column; gap: 6px; width: 100%; height: ${PANEL_HEIGHT}px; overflow-y: auto; box-sizing: border-box; padding: 4px 2px;
   color: var(--input-text, #ddd); font: 14px/1.45 system-ui, sans-serif; }
@@ -206,6 +208,7 @@ const CSS = `
 .h3ct-refmod-controls { display: grid; grid-template-columns: minmax(140px,1fr); gap: 6px; margin: 6px 0; }
 .h3ct-refmod-controls > select { width: 100%; }
 .h3ct-refmod-controls .h3ct-field { justify-content: space-between; }
+.h3ct-drop-over { outline: 2px dashed #729cdd; outline-offset: -2px; }
 .h3ct-section-heading { margin: 2px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #aab1bd; }
 `;
 
@@ -417,6 +420,10 @@ export class TimelineEditor {
     this.structureEl.addEventListener('scroll', () => this.card.hide());
     this.chipsEl = el('div', 'h3ct-chips');
     this.modeEl = el('div', 'h3ct-mode');
+    this.convertButton = button('Convert to FLF2VA', '', () => { this.box().flf_refmods = true; this.commit(); });
+    this.convertHint = el('p', 'h3ct-hint');
+    this.convertRow = el('div', 'h3ct-row');
+    this.convertRow.append(this.convertButton, this.convertHint);
     this.promptProblemEl = el('p', 'h3ct-hint problem');
     this.dialogueSelect = el('select', 'h3ct-select');
     this.dialogueSelect.append(option('cues', 'From the cues'), option('manual', 'Typed in the prompt'));
@@ -536,7 +543,10 @@ export class TimelineEditor {
       return details;
     };
     const frames = el('div', 'h3ct-row');
-    frames.append(this.firstField, group('Last frame', this.lastPicker, upload('last')));
+    const lastField = group('Last frame', this.lastPicker, upload('last'));
+    imageDrop(this.firstField, file => this.dropGuide(file, 'first'));
+    imageDrop(lastField, file => this.dropGuide(file, 'last'));
+    frames.append(this.firstField, lastField);
     const joins = el('div', 'h3ct-row'); joins.append(this.cutField, this.sceneField, this.joinField);
     const length = el('div', 'h3ct-row'); length.append(this.exactField, this.framesField);
     this.frameSettings = disclosure('First & last frame', frames);
@@ -564,7 +574,7 @@ export class TimelineEditor {
     this.tabPanels.references.append(this.referenceOverviewEl, this.chipsEl,
       button('Accepted appearance plates', 'Open Shots to inspect accepted plates', () => this.setTab('still')));
     this.tabPanels.prompt.append(this.promptReferencesDetails, this.effectivePromptEl);
-    this.tabPanels.box.append(this.modeEl, this.frameSettings, this.uploadNote, this.joinSettings,
+    this.tabPanels.box.append(this.modeEl, this.convertRow, this.frameSettings, this.uploadNote, this.joinSettings,
       this.lengthSettings, this.seedSettings, this.bridgeDetails);
     this.memoryEl = el('div');
     this.memoryDetails = disclosure('Visual memory', this.memoryEl);
@@ -726,6 +736,15 @@ export class TimelineEditor {
     if (!box) return;
     this.frameImages.open(box.id, {kind:end});
     this.frameImages.chooseUpload();
+  }
+
+  // A dropped image becomes the selected clip's guide for `target` (a First, Last or Shot marker), like Upload guide….
+  dropGuide(file, target) {
+    const box = this.box();
+    if (!box) return;
+    target = typeof target === 'string' ? {kind: target} : target;
+    this.frameImages.open(box.id, target);
+    this.frameImages.upload(file, box.id, target).catch(error => this.frameImages.note(error.message));
   }
 
   // Host calls
@@ -1486,6 +1505,7 @@ export class TimelineEditor {
       pick.setAttribute('aria-label',`${targetLabel(target)} image`);
       pick.setAttribute('aria-pressed',String(this.frameImages.target.kind===target.kind&&this.frameImages.target.shot===target.shot));
       this.fillStill(pick,this.box(),target,targetLabel(target));
+      imageDrop(pick,file=>{pick.click();this.dropGuide(file,target);});
       (target.kind==='shot'?interior:endpoints).append(pick);
     }
     this.previewsEl.prepend(endpoints,...(interior.children.length?[interior]:[]));
@@ -1637,6 +1657,7 @@ export class TimelineEditor {
         mark.classList.toggle('selected',this.frameImages.boxId===box.id
           && this.frameImages.target.kind===target.kind && this.frameImages.target.shot===target.shot);
         this.fillStill(mark,box,target,`${index+1} · ${label}`);
+        imageDrop(mark,file=>{mark.click();this.dropGuide(file,target);});
         this.stillsEl.append(mark);
       }
     }
@@ -1716,11 +1737,21 @@ export class TimelineEditor {
       }
       const active = saved.target ? frameTargets(this.state,this.selected,this.host.context())
         .some(item=>item.target.kind===saved.target.kind&&item.target.shot===saved.target.shot) : shots.some(s=>s.shot===saved.shot);
-      const label = saved.target ? targetLabel(saved.target) : `Shot ${saved.shot}`;
-      const where = active ? label : `Removed ${label}`;
-      row.append(el('span', null, saved.guide ? `${where} · guides frame ${saved.frame}` : `${where} · saved still, not a guide`));
-      if (saved.target && active) continue; // The marker panel has separate guide and candidate controls.
-      row.append(button('Remove', saved.guide ? 'Stop guiding this frame and remove the saved still' : 'Remove this saved still', () => {
+      const label = saved.target ? targetLabel(saved.target) : saved.shot >= FREE_GUIDE ? 'Frame guide' : `Shot ${saved.shot}`;
+      const where = active || saved.shot >= FREE_GUIDE ? label : `Removed ${label}`;
+      // A removed marker's guide is not rendered; an untargeted guide keeps its saved frame.
+      row.append(el('span', null, !saved.guide ? `${where} · saved still, not a guide`
+        : saved.target && !active ? `${where} · unused (was frame ${saved.frame})` : `${where} · guides frame ${saved.frame}`));
+      const managed = saved.target && active; // The marker panel has separate guide and candidate controls.
+      if (managed && !(saved.guide && saved.target.kind === 'shot')) continue;
+      if (saved.guide) {
+        const frame = this.guideFrameInput(saved.frame, 'Move this guide to another frame of the clip');
+        frame.addEventListener('change', async () => {
+          if (!await this.placeGuide(row, Number(frame.value), {saved, managed})) frame.value = String(saved.frame);
+        });
+        row.append(field('Frame', frame));
+      }
+      if (!managed) row.append(button('Remove', saved.guide ? 'Stop guiding this frame and remove the saved still' : 'Remove this saved still', () => {
         box.previews = box.previews.filter((p) => p !== saved);
         this.commit();
       }));
@@ -1729,7 +1760,60 @@ export class TimelineEditor {
     if (!list.children.length) {
       list.append(el('p', 'h3ct-hint', 'Choose a First, Last or Shot marker to copy its prompt, upload a guide or generate candidates.'));
     }
+    const add = el('div', 'h3ct-row h3ct-saved-still');
+    const frame = this.guideFrameInput(Math.floor(this.lastGuideFrame() / 2), 'The clip frame the new guide steers');
+    const upload = (file) => this.placeGuide(add, Number(frame.value), {file});
+    add.append(el('span', null, 'Guide another frame'), field('Frame', frame), button('Upload guide…',
+      'Upload a picture that guides this frame without adding a shot. You can also drop an image here.', () => {
+        const input = el('input'); input.type = 'file'; input.accept = 'image/*';
+        input.addEventListener('change', () => { if (input.files[0]) upload(input.files[0]); });
+        input.click();
+      }));
+    imageDrop(add, upload);
+    list.append(add, el('p', 'h3ct-hint', `Frames count from 0 to ${this.lastGuideFrame()} in this clip. A frame guide steers that frame without changing the prompt; move a guide by changing its frame.`));
     return list;
+  }
+
+  lastGuideFrame() {
+    return this.box().frames - (model.isFresh(this.state, this.selected) ? 1 : 0);
+  }
+
+  guideFrameInput(value, title) {
+    const input = el('input', 'h3ct-number');
+    input.type = 'number'; input.min = '0'; input.max = String(this.lastGuideFrame()); input.step = '1';
+    input.value = String(value); input.title = title;
+    return input;
+  }
+
+  // Saves a guide at `frame` as an untargeted preview, which the renderer reads at its saved frame. `saved` moves an
+  // existing guide (a marker's guide leaves the marker, which keeps its candidates); `file` uploads a new one.
+  async placeGuide(row, frame, {saved, managed, file}) {
+    const boxId = this.box().id;
+    // Checked before an upload and again after it, since the Timeline can change while the file uploads.
+    const check = () => {
+      const index = this.state.boxes.findIndex(item => item.id === boxId);
+      if (index < 0) throw new Error('The clip was removed.');
+      const box = this.state.boxes[index], last = box.frames - (model.isFresh(this.state, index) ? 1 : 0);
+      if (!Number.isInteger(frame) || frame < 0 || frame > last) throw new Error(`Choose a frame from 0 to ${last}.`);
+      const others = structuredClone(this.state);
+      others.boxes[index].previews = (box.previews ?? []).filter(item => item !== saved);
+      if (acceptedGuideFrames(others, index, this.host.context()).includes(frame)) throw new Error(`Frame ${frame} already has a guide.`);
+      return box;
+    };
+    try {
+      check();
+      const guide = file ? await this.host.importGuide(file) : saved.guide;
+      const box = check();
+      const shot = Math.max(FREE_GUIDE - 1, ...(box.previews ?? []).filter(item => !item.target).map(item => item.shot)) + 1;
+      box.previews ??= [];
+      if (saved && !managed) { delete saved.target; Object.assign(saved, {shot, frame}); }
+      else { if (saved) delete saved.guide; box.previews.push({shot, frame, guide}); }
+      this.commit();
+      return true;
+    } catch (error) {
+      row.append(el('span', 'h3ct-hint problem', error.message));
+      return false;
+    }
   }
 
   renderPanelInfo() {
@@ -1756,6 +1840,15 @@ export class TimelineEditor {
     const carry = !info.fresh ? ` · ${this.host.context()} carried frames` : '';
     this.modeEl.textContent = `Runs as ${mode}${carry}${tags ? `: ${tags}` : ''}${guides}${problems}${reason ? ` · Renders again: ${reason}` : ''}`;
     this.modeEl.classList.toggle('problem', info.problems.length > 0);
+    const conversion = info.mode === 'REF2VA' ? model.flfConversion(this.state, this.selected, this.connectedSets(), context) : null;
+    this.convertRow.hidden = !conversion;
+    if (conversion) {
+      this.convertButton.disabled = !conversion.ok;
+      this.convertButton.title = conversion.ok ? 'Turn on FLF2VA + cached RefMods: First/Last frames become start and end frames, '
+        + 'and mentioned images become cached RefMods. Needs FLF2VA video model weights.' : conversion.reason;
+      this.convertHint.textContent = conversion.ok ? 'First/Last become start and end frames; images become cached RefMods.' : conversion.reason;
+      this.convertHint.classList.toggle('problem', !conversion.ok);
+    }
     this.effectivePromptEl.replaceChildren(el('summary', null, 'Effective H3 prompt and text window'));
     this.effectivePromptEl.hidden = !this.state.timed_text;
     const status = this.stale ? null : this.statusOf(box);
