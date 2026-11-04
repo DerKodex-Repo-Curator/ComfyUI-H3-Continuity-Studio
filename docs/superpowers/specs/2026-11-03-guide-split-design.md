@@ -1,6 +1,6 @@
 # Split a clip at a frame guide (guide → Last/First)
 
-**Status:** Implemented (GS1–GS6) per [the plan](../plans/2026-11-03-guide-split.md); real before/after render (GS7) pending user review. Defaults below were accepted; open questions were delegated to the assistant and resolved as listed.
+**Status:** Superseded by the [2026-11-04 removal design](../../roadmap-discipline/phases/2026-11-04-guide-split-prompt-continuity.md). The historical design below introduced guide splitting; the replacement keeps only Split before Shot N and retains independent frame guides.
 
 ## Problem
 

@@ -1,9 +1,9 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
 import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261103-replacement-bridges-1';
 
-export const number = (shot) => Number(/\d+/.exec(shot.label)[0]);
+const number = (shot) => Number(/\d+/.exec(shot.label)[0]);
 // A later shot's cut time in milliseconds of generated video (replay included), or null when it has none.
-export const start = (shot) => {
+const start = (shot) => {
   const m = /^At (\d+):(\d{2})\.(\d{3}),/i.exec(shot.value);
   return m ? (Number(m[1]) * 60 + Number(m[2])) * 1000 + Number(m[3]) : null;
 };
@@ -15,7 +15,7 @@ const shift = (text, ms) => prose(text, (part) => part.replace(/\b(\d+):(\d{2})\
   (_, m, s, f) => clock(Math.max(0, Number(m) * 60000 + Number(s) * 1000 + Number(f) - ms))));
 
 // Round up to H3's grid (17k+5 fresh, 17k continuing): a split must not steal performance time.
-export const roundUp = (frames, fresh, context) => Math.max(limits(fresh, context).min,
+const roundUp = (frames, fresh, context) => Math.max(limits(fresh, context).min,
   Math.ceil((frames - (fresh ? 5 : 0) - 1e-6) / GRID) * GRID + (fresh ? 5 : 0));
 
 export function splitTiming(state, index, shotNumber, context) {
@@ -49,10 +49,8 @@ export function splitTiming(state, index, shotNumber, context) {
   return { at, ms, cut, carry, left, right, added: left + right - box.frames };
 }
 
-// One half's prompt from the kept shots. `offset` (ms) is subtracted from timestamps; `stripFirst` drops the first
-// kept shot's own cut time; `endpoint` marks a half that ends on a guide frame (a keyframe without a named slot).
-export function halfPrompt(parsed, kept, shared, offset, first, last, duration,
-  { stripFirst = !!offset, endpoint = false } = {}) {
+// One half's prompt from the kept shots. `offset` (ms) is subtracted from timestamps and drops the first kept cut time.
+function halfPrompt(parsed, kept, shared, offset, first, last, duration) {
   const { sections, style } = parsed;
   const fields = (key) => sections?.find((s) => s.key === key)?.fields ?? [];
   const body = (key) => fields(key).map((p) => p.value).join('\n') || 'N/A';
@@ -62,7 +60,7 @@ export function halfPrompt(parsed, kept, shared, offset, first, last, duration,
       .filter(Boolean).map((n) => `[Shot ${n}]`).join(', ')));
   const scene = kept.map((s, i) => {
     let text = shift(s.value, offset);
-    if (i === 0 && stripFirst) text = text.replace(/^At \d+:\d+\.\d+, the camera cuts to (?:a new shot\.\s*)?/i, '')
+    if (i === 0 && offset) text = text.replace(/^At \d+:\d+\.\d+, the camera cuts to (?:a new shot\.\s*)?/i, '')
       .replace(/^At \d+:\d+\.\d+,\s*/i, '');
     return `[Shot ${i + 1}] ${renumberShots(text)}`;
   }).join('\n');
@@ -98,7 +96,7 @@ export function halfPrompt(parsed, kept, shared, offset, first, last, duration,
   let prompt;
   if (defs.length) {
     const types = ['reference generation'];
-    if (first || last || endpoint || defs.some((p) => /(?:first|last|key)[ -]frame/.test(p.value))) types.push('keyframe completion');
+    if (first || last || defs.some((p) => /(?:first|last|key)[ -]frame/.test(p.value))) types.push('keyframe completion');
     if (defs.some((p) => /^@audio/.test(p.label) && /audio reuse/.test(p.value))) types.push('audio reuse');
     if (defs.some((p) => /^@audio/.test(p.label) && /voice|sound|music/.test(p.value))) types.push('audio reference');
     // The old summary describes the whole box and often lists all its cast. Rebuild it from these shots.

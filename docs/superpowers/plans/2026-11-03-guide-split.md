@@ -1,5 +1,7 @@
 # Implementation plan — Split a clip at a frame guide
 
+**Status:** Historical plan, superseded by the [2026-11-04 removal design](../../roadmap-discipline/phases/2026-11-04-guide-split-prompt-continuity.md).
+
 **Spec:** [2026-11-03-guide-split-design.md](../specs/2026-11-03-guide-split-design.md) (decisions Q1–Q4 settled; open questions resolved below).
 **Ledger:** [phases/2026-11-03-guide-split.md](../../roadmap-discipline/phases/2026-11-03-guide-split.md).
 **Scope:** browser-side Timeline state edit plus tests. No Python behaviour change; the server already understands `first`/`last` guide targets, the shared continuing boundary (`timeline.frame_guides`) and `flf_refmods` (`timeline.box_slots`).
