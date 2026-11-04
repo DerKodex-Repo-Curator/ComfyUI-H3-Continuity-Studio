@@ -148,3 +148,7 @@ describes the bindings.
   that local frame on (`revision: ""` restores the original), and later boxes keep it
   until another change. A box with plate changes starts a new scene for scene
   memory. `plate_edits` are the Studio's editing records; leave them as they are.
+
+## One long video across boxes
+
+To repaint or restyle a long video box by box, connect it to `video1`, add `"video_slices": ["video1"]` to the Timeline and mention `@video1` in each box. Each box then gets only its own window of the video: its Timeline start minus the frames it carries, through every frame H3 generates for it, so the reference lines up with the carried overlap. `video_audio1` is cut the same way. A video too short for a box stops that box with the frames it has and needs.

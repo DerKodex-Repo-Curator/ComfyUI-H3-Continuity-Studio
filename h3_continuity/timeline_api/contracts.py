@@ -176,7 +176,11 @@ def _schemas():
                     "reference_descriptions": {"type": "object"}, "disabled_refs": _array(SLOT),
                     "reference_replacements": {"type": "object", "propertyNames": SLOT, "additionalProperties": {
                         "oneOf": [_object({"source": SLOT}, ("source",)), _object({"file": FILE}, ("file",))]}},
-                    "timed_text": {"type": ["object", "null"]}, "bible": {}}, ("boxes",), extra=True)
+                    "timed_text": {"type": ["object", "null"]}, "bible": {},
+                    "context_noise": BOOL, "continuation_guide": BOOL,
+                    "audio_feather": {"type": "integer", "minimum": 0, "maximum": 16},
+                    "video_slices": _array({"type": "string", "pattern": "^video[1-9][0-9]*$"}, uniqueItems=True)},
+                   ("boxes",), extra=True)
     line["not"] = {"anyOf": [{"required": ["render_box"]}, {"required": ["render_bridge"]}]}
     binding = {"oneOf": [
         _object({"kind": {"const": "reference_replacement"}, "slot": SLOT}, ("kind", "slot")),
