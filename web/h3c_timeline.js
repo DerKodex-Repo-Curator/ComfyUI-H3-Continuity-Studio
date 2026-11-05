@@ -10,7 +10,7 @@ import { api } from '../../scripts/api.js';
 import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261004-studio-1';
-import { studio } from './h3c_studio.mjs?v=20261104-history-1';
+import { studio } from './h3c_studio.mjs?v=20261105-viewer-selection-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
 import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261105-flf-endpoints-1';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
