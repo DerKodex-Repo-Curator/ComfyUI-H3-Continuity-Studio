@@ -27,12 +27,29 @@ def fit_frame_count(images, count):
     return torch.cat([images, images[-1:].expand(count - images.shape[0], -1, -1, -1)])
 
 
-def _add_video_stream(container, fps, width, height, crf, color_space="sRGB"):
-    stream = container.add_stream("libx264", rate=Fraction(fps).limit_denominator(1001))
+# Delivery codecs of saved videos. H.264 plays everywhere; HEVC (Main10 for HDR, tagged hvc1) is what phones
+# decode in hardware for 10-bit HDR and what Apple players need to show HLG.
+CODECS = {"H.264": "libx264", "HEVC": "libx265"}
+CODEC_OF_STREAM = {"h264": "H.264", "hevc": "HEVC"}
+
+
+def video_codec(path):
+    """The CODECS name of the video at `path`; H.264 for anything else."""
+    with av.open(path) as container:
+        return CODEC_OF_STREAM.get(container.streams.video[0].codec_context.name, "H.264")
+
+
+def _add_video_stream(container, fps, width, height, crf, color_space="sRGB", codec="H.264"):
+    if codec not in CODECS:
+        raise ValueError(f"Unknown video codec {codec!r}; choose one of {', '.join(CODECS)}.")
+    stream = container.add_stream(CODECS[codec], rate=Fraction(fps).limit_denominator(1001))
     stream.width, stream.height = width, height
     stream.pix_fmt = "yuv420p10le" if color_space in ("HDR", "HDR PQ") else "yuv420p"
     set_video_color_properties(stream.codec_context, color_space)
     stream.options = {"crf": str(crf), "preset": "medium"}
+    if codec == "HEVC":
+        stream.codec_tag = "hvc1"
+        stream.options["x265-params"] = "log-level=error:bframes=0"
     # decode order must equal presentation order so segments can be joined by packet copy
     stream.codec_context.max_b_frames = 0
     return stream
@@ -53,16 +70,16 @@ def _mux_audio(container, stream, waveform, sample_rate):
     container.mux(stream.encode(None))
 
 
-def write_segment_video(path, images, fps, crf, audio=None, color_space="sRGB", size=None):
-    """Encode `images` ([N, H, W, C], 0-1) with optional `audio` = (waveform [C, S], sample_rate).
-    Returns the encoded (width, height); odd sizes are padded by one edge pixel, unless `size` = (width, height)
-    scales every frame to it."""
+def write_segment_video(path, images, fps, crf, audio=None, color_space="sRGB", size=None, codec="H.264"):
+    """Encode `images` ([N, H, W, C], 0-1) with optional `audio` = (waveform [C, S], sample_rate) in `codec`
+    (a CODECS name). Returns the encoded (width, height); odd sizes are padded by one edge pixel, unless
+    `size` = (width, height) scales every frame to it."""
     height, width = images.shape[1], images.shape[2]
     pad_h, pad_w = (0, 0) if size else (height % 2, width % 2)
     out_width, out_height = size or (width + pad_w, height + pad_h)
     hdr = color_space in ("HDR", "HDR PQ")
     with av.open(path, mode="w") as container:
-        video_stream = _add_video_stream(container, fps, out_width, out_height, crf, color_space)
+        video_stream = _add_video_stream(container, fps, out_width, out_height, crf, color_space, codec)
         audio_stream = _add_audio_stream(container, *audio) if audio is not None else None
         for image in images:
             array = (image[..., :3].float().clamp(0, 1) * (65535 if hdr else 255)).round().cpu().numpy().astype(np.uint16 if hdr else np.uint8)
@@ -158,7 +175,8 @@ def build_full_video(path, videos, audio, crf, size=None):
     (path, first frame, frames) for a window of it. With `size` = (width, height), videos of other sizes are scaled to
     it instead of refused.
     Packets are copied when every file has the same encoding and every window starts at its first frame (segments
-    have no B-frames, so a prefix is its first packets); otherwise the frames are re-encoded.
+    have no B-frames, so a prefix is its first packets); otherwise the frames are re-encoded in the first video's
+    codec, so a sequence saved as HEVC stays HEVC.
     Returns (written path or None, note)."""
     windows = [(video, 0, None) if isinstance(video, str) else tuple(video) for video in videos]
     signatures = [_signature(video) for video, _, _ in windows]
@@ -175,8 +193,11 @@ def build_full_video(path, videos, audio, crf, size=None):
         color_space = first[5]
         if copy:
             video_stream = container.add_stream_from_template(template.streams.video[0], opaque=True)
+            if first[0] == "hevc":
+                video_stream.codec_tag = "hvc1"  # the mp4 muxer would otherwise write hev1, which Apple refuses
         else:
-            video_stream = _add_video_stream(container, first[4], width, height, crf, color_space)
+            video_stream = _add_video_stream(container, first[4], width, height, crf, color_space,
+                                             CODEC_OF_STREAM.get(first[0], "H.264"))
         audio_stream = _add_audio_stream(container, *audio) if audio is not None else None
         offset, encoded = Fraction(0), 0
         for video, start, frames in windows:
