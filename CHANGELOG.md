@@ -4,9 +4,20 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.6] - 2026-11-05
+
 ### Added
 
 - H3 Save Segment has a `codec` choice: H.264 (default, unchanged) or HEVC. HEVC saves 10-bit Main10 for HDR, tagged `hvc1` so Apple players show HLG, still without B-frames so segments join by packet copy. A re-encoded full video keeps the segments' codec.
+- The Viewer's **Full video** plays current rendered clips together before the Timeline is complete, skipping unfinished or stale clips. Source-video Timelines retain source-filled gaps. Partial videos omit bridges and replacements.
+- **Mux uploaded audio**, beside Full video, switches between tracks marked **In the full video** and H3 sound without rerendering clips. The choice is saved with the Timeline and applies to playback and downloads.
+
+### Fixed
+
+- Full-video playback remains available during render queues, and live previews do not replace it.
+- A missing clip MP4 no longer hides other playable clips in an ordinary partial video. Uploaded soundtrack windows stay aligned when unfinished clips are skipped.
+
+[Changes since v0.12.5](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.5...v0.12.6).
 
 ## [0.12.5] - 2026-11-05
 

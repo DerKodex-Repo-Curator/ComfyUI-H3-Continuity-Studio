@@ -3,10 +3,10 @@
 // closes, opens another Timeline or the Timeline's Story changes. Its Story page edits the Story node's inputs.
 import { liveBadge, progressText } from './h3c_render_watch.mjs?v=20261004-studio-1';
 import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
-import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
+import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261105-rendered-video-1';
 
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
-import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261104-partial-video-1';
+import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261105-rendered-video-1';
 import {historyShortcut} from './h3c_history.mjs?v=20261104-history-1';
 
 const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
@@ -359,6 +359,17 @@ export class Studio {
 
     const views = el('div', 'h3cx-switch');
     this.fullButton = button('Full video', 'Play the whole Timeline', () => this.setView('full'));
+    this.muxAudio = Object.assign(el('input'), {type: 'checkbox', checked: true});
+    this.muxAudio.addEventListener('change', () => {
+      const editor = this.host?.editor;
+      if (!editor) return;
+      if (this.muxAudio.checked) delete editor.state.mux_audio;
+      else editor.state.mux_audio = false;
+      editor.commit(false);
+    });
+    const muxLabel = el('label', 'h3cx-links');
+    muxLabel.title = 'Use uploaded tracks marked “In the full video”. Off keeps H3 sound. Clips are not rerendered.';
+    muxLabel.append(this.muxAudio, document.createTextNode('Mux uploaded audio'));
     this.takeButton = button('Clip take', 'Play the selected clip’s active take', () => this.setView('take'));
     this.switchButton = button('Compare with active take', '', () => this.switchTake());
     this.fullLinks = el('span', 'h3cx-links');
@@ -372,7 +383,7 @@ export class Studio {
     this.takeLinks.append(this.takeOpen, this.takeDownload, this.pinButton);
     this.pinMenu = el('span', 'h3cx-links h3cx-pin-menu');
     this.pinMenu.hidden = true;
-    views.append(this.fullButton, this.takeButton, this.switchButton, this.fullLinks, this.takeLinks, this.pinMenu);
+    views.append(this.fullButton, this.takeButton, this.switchButton, this.fullLinks, this.takeLinks, this.pinMenu, muxLabel);
     const stage = this.stage = el('div', 'h3cx-stage');
     this.screen = el('div', 'h3cx-screen');
     this.badge = el('span', 'h3cx-badge');
@@ -1307,6 +1318,7 @@ export class Studio {
     const fullUrl = editor.fullLink.hidden ? null : editor.fullLink.getAttribute('href');
     const partial = fullUrl ? editor.partialVideo : null;
     const view = this.view ?? (fullUrl ? 'full' : 'take');
+    this.muxAudio.checked = editor.state.mux_audio !== false;
     this.fullButton.setAttribute('aria-pressed', String(view === 'full'));
     this.takeButton.setAttribute('aria-pressed', String(view === 'take'));
     this.takeButton.textContent = box ? `Clip ${editor.selected + 1} · active take` : 'Clip take';
@@ -1329,7 +1341,7 @@ export class Studio {
     else this.takeDownload.removeAttribute('download');
 
     const runningBox = this.host.runningBox();
-    const preview = watch.running && box && runningBox === editor.selected + 1 ? watch.preview : null;
+    const preview = view !== 'full' && watch.running && box && runningBox === editor.selected + 1 ? watch.preview : null;
     const pinnable = view === 'take' && !!takeUrl && entry.status === 'done' && !preview
       && editor.cast.pinTargets(editor.selected).length > 0;
     this.pinButton.hidden = !pinnable;

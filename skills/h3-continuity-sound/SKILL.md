@@ -42,6 +42,11 @@ box (see `h3-continuity-references`).
 `"in_full_video": true` on an uploaded clip makes the full video play that recording
 instead of H3's audio:
 
+- Timeline `"mux_audio": false` (the Viewer's **Mux uploaded audio** checkbox off)
+  temporarily keeps H3 sound instead, without changing track selections or making
+  boxes stale. It defaults to true. Partial playback skips the audio windows of
+  unfinished boxes when it skips their pictures.
+
 - With at least one clip marked, the full video plays **only** the marked clips,
   each from its own window at its original speed. Overlapping clips add up within
   full scale, the video is silent where no marked clip plays, and nothing fades.

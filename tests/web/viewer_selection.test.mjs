@@ -25,7 +25,7 @@ document.createElement = tag => {
 function player() {
   const studio = Object.create(Studio.prototype);
   for (const name of ['screen', 'badge', 'hint', 'fullButton', 'takeButton', 'switchButton', 'fullLinks',
-    'takeLinks', 'takeOpen', 'takeDownload', 'pinButton', 'pinMenu', 'pinNote', 'soundtrackNote']) {
+    'takeLinks', 'takeOpen', 'takeDownload', 'pinButton', 'pinMenu', 'pinNote', 'soundtrackNote', 'muxAudio']) {
     studio[name] = document.createElement('div');
   }
   const editor = {
@@ -82,4 +82,16 @@ test('an unassociated render cannot take over the selected clip viewer', () => {
   studio.host.runningBox = () => null;
   studio.refreshPlayer({...idleWatch(), running: true, preview: {source: 'kj', mime: 'video/mp4', data: 'frame'}});
   assert.equal(studio.screen.firstElementChild.src, '/view/b.mp4');
+});
+
+test('Full video remains playable while another clip is rendering', () => {
+  const studio = player();
+  studio.view = 'full';
+  studio.host.editor.fullLink.hidden = false;
+  studio.host.editor.fullLink.setAttribute('href', '/view/seq_partial.mp4');
+  studio.host.editor.partialVideo = {rendered: 1, boxes: 3, mode: 'rendered'};
+  studio.refreshPlayer({...idleWatch(), running: true, preview: {source: 'kj', mime: 'video/mp4', data: 'frame'}});
+  assert.equal(studio.screen.firstElementChild.src, '/view/seq_partial.mp4');
+  assert.match(studio.badge.textContent, /1 of 3 clips rendered/);
+  assert.equal(studio.fullButton.disabled, false);
 });

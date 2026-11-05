@@ -35,6 +35,11 @@ and prompt. To hear the uploaded file itself in the full video, see [In the full
 
 ## In the full video
 
+The Viewer's **Mux uploaded audio** checkbox enables this replacement (on by default). Turn it off to play H3's
+generated sound while keeping your track selections. This choice is saved as `mux_audio` in Timeline JSON and only
+affects assembly: changing it does not make rendered boxes stale. Full video can also play current rendered clips
+before completion; skipped clips skip their corresponding uploaded audio windows.
+
 Tick **In the full video** in an uploaded clip's Audio settings, and the full video plays that clip instead of the
 audio H3 generated. It's off by default, and a clip from a connected Load Audio node needs its file uploaded first.
 It's independent of the reference switch: a clip can play in the full video while H3 never hears it. In the saved

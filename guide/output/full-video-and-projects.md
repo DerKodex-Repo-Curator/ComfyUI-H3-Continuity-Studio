@@ -2,13 +2,14 @@
 
 ## The full video
 
-When the last current clip finishes, **H3 Save Segment** assembles one MP4 from the saved clip videos in Timeline order. The Viewer's **Full video** plays it; **Open in new tab** opens the file and **Download** (or the top bar's **Download video**) saves it. It is stored under `output/h3_sequences/<name>/`.
+The Viewer's **Full video** plays current rendered clips together in Timeline order, even before the remaining clips finish. **Open in new tab** opens the assembled MP4 and **Download** (or the top bar's **Download video**) saves it. It is stored under `output/h3_sequences/<name>/`.
 
 - In a Timeline that [splits a video across clips](../build/references.md#one-long-video-across-clips), a *partial video* (`<name>_partial.mp4`) stands in until every clip is rendered: current clips play their render, the others play the split video at the same moment.
-- Otherwise the full-video links appear only when **every current clip is rendered**. Editing the Timeline, changing render settings or re-rendering a clip invalidates the previous export, and reopening a completed Timeline recreates a missing or outdated file. Original segment videos and archived takes are preserved.
+- Otherwise a *partial video* joins the current rendered clips and skips unfinished or stale clips. Its badge shows how many clips are included. Bridges and replacements are omitted from partial videos. Once every clip is current, the complete export takes its place. Editing the Timeline, changing render settings or re-rendering a clip invalidates the previous export. Original segment videos and archived takes are preserved.
 - Assembly copies compatible H.264 tracks and re-encodes on the CPU when encodings differ. All segments need the same size and frame rate; an incompatible or missing segment reports an export error instead of showing the older file.
 - Saved clip MP4s already exclude carried context. Audio comes from the saved decoded waveforms with the usual context trimming and overlap fade. Connect decoded images and audio to **H3 Save Segment** to include them; export generates no transitions or new soundtrack.
-- Rendered [bridges](../continuity/joins-and-bridges.md) are played between their clips, and ticked [audio clips](../sound/audio.md#in-the-full-video) replace H3's audio.
+- Rendered [bridges](../continuity/joins-and-bridges.md) are played between their clips in complete exports.
+- **Mux uploaded audio**, beside Full video, chooses the soundtrack. On (the default), [audio clips marked In the full video](../sound/audio.md#in-the-full-video) replace H3 sound; off, the video keeps H3 sound. With no tracks marked, H3 sound plays either way. Changing this choice rebuilds the assembled video without rerendering clips. When unfinished clips are skipped, their matching uploaded audio windows are skipped too.
 - Once [replacement bridges](../continuity/joins-and-bridges.md#replacement-bridges) are available, a selected, current candidate plays in place of the footage it replaces, so the video keeps its length. When the clip after it then starts partway into its file, assembly re-encodes instead of copying.
 
 ## Projects
