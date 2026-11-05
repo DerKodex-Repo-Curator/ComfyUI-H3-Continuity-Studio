@@ -8,6 +8,14 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 - H3 Save Segment has a `codec` choice: H.264 (default, unchanged) or HEVC. HEVC saves 10-bit Main10 for HDR, tagged `hvc1` so Apple players show HLG, still without B-frames so segments join by packet copy. A re-encoded full video keeps the segments' codec.
 
+## [0.12.11] - 2026-11-05
+
+### Fixed
+
+- Visual memory on a cut can reference an older saved native take instead of rejecting it because the source recipe needs another render. Box identity, latent-file and resolution checks remain, and continuations retain their existing freshness checks. Playback and audio behavior are unchanged from v0.12.10.
+
+[Changes since v0.12.10](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.10...v0.12.11).
+
 ## [0.12.5] - 2026-11-05
 
 ### Fixed
