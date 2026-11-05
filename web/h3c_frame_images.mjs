@@ -1,5 +1,5 @@
 // Marker images own editable still prompts, candidates and the acceptance transaction. Queue recovery belongs to the host.
-import {frameTargets, buildStillPrompt, applyFrameGuide, endpointGuide} from './h3c_shot_preview.mjs?v=20261105-flf-endpoints-1';
+import {frameTargets, buildStillPrompt, applyFrameGuide, endpointGuide} from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
 import {parseState, serialize} from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import {StillPromptPreparation,preparedStillPrompt,setPreparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
 
@@ -61,6 +61,7 @@ export class FrameImages {
     this.root.addEventListener('h3c-image-error',event=>this.note(event.detail));
     this.titleEl=el('strong');this.titleEl.tabIndex=-1;this.promptEl=el('textarea',null,'h3ct-text');this.promptEl.rows=5;
     this.promptEl.setAttribute('aria-label','Still image prompt');
+    this.promptEl.placeholder='Prepare all still prompts, or enter one visible instant with its subject, setting, style and lighting.';
     this.instructionEl=el('input',null,'h3ct-note');this.instructionEl.placeholder='Optional still instruction';
     this.instructionEl.setAttribute('aria-label','Still instruction');
     this.extraEl=el('textarea',null,'h3ct-text');this.extraEl.rows=2;this.extraEl.placeholder='Extra still details';
@@ -289,7 +290,7 @@ export class FrameImages {
     this.preparedHintEl.hidden=!prepared||saved?.still_prompt==null;
     this.preparedHintEl.textContent='Earlier saved prompt active. Use prepared prompt to use the new batch result; the earlier text stays saved for Undo.';
     this.preparation.render(this.boxId,this.target);
-    this.promptExcerpt.textContent=this.promptEl.value;
+    this.promptExcerpt.textContent=this.promptEl.value||this.promptEl.placeholder;
     this.guideSourceEl.hidden=!!saved?.still_source||!this.previousGuide;
     this.guideSourceEl.textContent=this.previousGuide?`Continuity: ${guideLabel(this.editor.state,this.previousGuide)} accepted guide. The requested scene controls the new image.`:'';
     const index=this.editor.state.boxes.indexOf(box),next=this.editor.state.boxes[index+1];

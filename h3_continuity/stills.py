@@ -18,7 +18,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from . import timeline as rules
 from . import image_recipe, still_scene
 from .image_recipe import _link, _scalar, _ancestry
-from . import nodes as continuity, store, takes, visual_memory, media, reference_replacements, refmods, timeline_prepare
+from . import nodes as continuity, store, takes, visual_memory, media, reference_replacements, refmods, timeline_prepare, story_bible, image_descriptions
 
 REFERENCE_PORT = re.compile(r"ref_(images|videos|video_audios|audios)\.ref_(image|video|video_audio|audio)_(\d+)")
 
@@ -615,6 +615,15 @@ def _pixel_references(body, parsed, index, frame, graph):
         if reference_replacements.kind(slot)!='image':
             continue  # Audio and motion cues do not belong to a single-frame image request.
         owner={'slot':slot,'kind':'image','roles':[slot]}
+        ids = [box.id for box in parsed.boxes]
+        for entity in (parsed.bible or {}).get('entities', []):
+            if slot in story_bible.pictures_at(entity, ids, index):
+                role = {'character': 'identity', 'place': 'location', 'prop': 'prop'}[entity['kind']]
+                owner['roles'].append(role + ': ' + entity['name'])
+        original = reference_replacements.origin(slot, replacements).get('source', slot)
+        picture = next((picture for picture in parsed.pictures if picture['slot'] == original), {})
+        if picture.get('title'):
+            owner['title'] = picture['title']
         file=plates.get(slot,{}).get('image') if slot not in parsed.reference_replacements else None
         file=file or reference_replacements.file_for(parsed,slot)
         if file:
@@ -634,6 +643,24 @@ def _pixel_references(body, parsed, index, frame, graph):
             if not _link(link):
                 raise ValueError(f'Still reference @{slot} is not connected')
             _pixel_link(owner, link, graph)
+        if owner.get('sha256'):
+            stamp = 'sha256:' + owner['sha256']
+            shared = image_descriptions.lookup(stamp)
+            if shared is not None:
+                owner['description'] = shared['text']
+            else:
+                for name in dict.fromkeys([slot, original]):
+                    saved = parsed.reference_descriptions.get(name, {})
+                    source = saved.get('source', '')
+                    if source.startswith('['):
+                        try:
+                            scene = json.loads(source)
+                            source = scene[-1] if isinstance(scene, list) and len(scene) == 4 and scene[0] == 'idea-scene-v1' else source
+                        except ValueError:
+                            pass
+                    if source == stamp:
+                        owner['description'] = saved['text']
+                        break
         refs.append(owner)
     return refs
 

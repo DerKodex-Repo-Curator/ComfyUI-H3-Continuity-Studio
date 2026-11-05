@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest import mock
 
@@ -7,7 +8,7 @@ enable_comfy_cpu()
 
 import nodes  # noqa: E402
 
-from h3_continuity import image_recipe, ph3_image_nodes as ph3, story_context  # noqa: E402
+from h3_continuity import image_recipe, ph3_image_nodes as ph3, story_context, stills, timeline  # noqa: E402
 
 FILES = {"diffusion_models": ["p-h3-image_int8_convrot.safetensors"],
          "text_encoders": ["p-h3-image_text_encoder_bf16.safetensors"], "vae": ["p-h3-image_vae_int8_convrot.safetensors"]}
@@ -47,6 +48,87 @@ def prepare(references=(), **request):
 
 
 class PrepareTest(unittest.TestCase):
+    def test_automatic_size_resolves_linked_video_dimensions_at_runtime(self):
+        saved = workflow()
+        saved['api'][NODE]['inputs'].update(width=['video_size', 0], height=['video_size', 1])
+        saved['api']['video_size'] = {'class_type': 'ResolutionSelector', 'inputs': {'megapixels': 0.7}}
+        with mock.patch('folder_paths.get_filename_list', lambda folder: list(FILES.get(folder, []))), \
+             mock.patch.dict(nodes.NODE_CLASS_MAPPINGS, {'H3C_PH3ImageStill': ph3.H3C_PH3ImageStill}):
+            result = image_recipe.prepare(recipe(), saved, {'prompt': 'A still.', 'target': {'kind': 'first'}}, [])
+        size = result['prompt']['h3c_ph3_size']
+        self.assertEqual(size, {'class_type': 'H3C_PH3StillSize', 'inputs': {'width': ['video_size', 0], 'height': ['video_size', 1]}})
+        self.assertEqual(result['prompt'][NODE]['inputs']['width'], ['h3c_ph3_size', 0])
+        self.assertEqual(result['prompt'][NODE]['inputs']['height'], ['h3c_ph3_size', 1])
+        self.assertIn('video_size', result['prompt'])
+
+    def test_explicit_still_size_bypasses_automatic_size(self):
+        result = prepare(size={'width': 1760, 'height': 2368})
+        self.assertEqual((result['prompt'][NODE]['inputs']['width'], result['prompt'][NODE]['inputs']['height']), (1760, 2368))
+        self.assertNotIn('h3c_ph3_size', result['prompt'])
+
+    def test_character_reference_is_not_resized_or_padded_to_the_canvas(self):
+        result = prepare([reference('image20', ['identity: Courier'], 'a' * 64)])
+        source = result['prompt']['h3c_still_source_0']['inputs']
+        self.assertEqual(set(source), {'source'})
+        self.assertNotIn('size', json.loads(source['source']))
+
+    def test_studio_resolution_setting_reaches_the_runtime_size_node(self):
+        saved = workflow()
+        saved['api'][NODE]['inputs']['studio_resolution'] = '4 MP'
+        with mock.patch('folder_paths.get_filename_list', lambda folder: list(FILES.get(folder, []))), \
+             mock.patch.dict(nodes.NODE_CLASS_MAPPINGS, {'H3C_PH3ImageStill': ph3.H3C_PH3ImageStill}):
+            result = image_recipe.prepare(recipe(), saved, {'prompt': 'A still.'}, [])
+        self.assertEqual(result['prompt']['h3c_ph3_size']['inputs']['resolution'], '4 MP')
+
+    def test_timeline_reference_context_keeps_cast_roles_picture_titles_and_descriptions(self):
+        entity = lambda id, kind, name, slot: dict(id=id, kind=kind, name=name, pictures=[slot], description=name, looks=[])
+        document = {'boxes': [{'id': 'b1', 'frames': 22, 'prompt': '@image20 in @image23.'}],
+                    'bible': {'entities': [entity('e1', 'character', 'Courier', 'image20'), entity('e2', 'place', 'Hall', 'image23')]},
+                    'pictures': [dict(slot=slot, title=title, file={'type':'input', 'filename':slot+'.png'})
+                                 for slot, title in [('image20','courier-sheet'), ('image23','hall-design')]],
+                    'reference_descriptions': {'image20': {'text':'One white eyebrow.', 'source':'sha256:'+'image20.png'.ljust(64,'a')}}}
+        parsed = timeline.parse(json.dumps(document))
+        body = {'prompt':'@image20 in @image23.'}
+        with mock.patch.object(stills, '_timeline_inputs', return_value={}), \
+             mock.patch('h3_continuity.image_descriptions.lookup', return_value=None), \
+             mock.patch.object(stills, 'pin_image', side_effect=lambda file: dict(file=file,sha256=file['filename'].ljust(64,'a'))):
+            refs = stills._pixel_references(body, parsed, 0, 0, {})
+        result = prepare(refs)
+        prompt = result['provenance']['effective_prompt']
+        self.assertIn('<Picture 1>: visual reference, location: Hall', prompt)
+        self.assertIn('courier-sheet', prompt)
+        self.assertIn('One white eyebrow.', prompt)
+        self.assertIn('identity: Courier', prompt)
+
+        for cached in (None, {'text':''}):
+            with self.subTest(cached=cached):
+                parsed.reference_descriptions['image20']['source']='sha256:stale'
+                with mock.patch.object(stills, '_timeline_inputs', return_value={}), \
+                     mock.patch('h3_continuity.image_descriptions.lookup', return_value=cached), \
+                     mock.patch.object(stills, 'pin_image', side_effect=lambda file: dict(file=file,sha256=file['filename'].ljust(64,'a'))):
+                    refs = stills._pixel_references(body, parsed, 0, 0, {})
+                self.assertNotIn('One white eyebrow.', prepare(refs)['provenance']['effective_prompt'])
+
+    def test_reference_context_survives_deduplication_and_uses_native_picture_labels(self):
+        approved = reference('image20', ['appearance: Courier'], 'a'*64)
+        contextual = {**reference('image20', ['identity: Courier'], 'a'*64),
+                      'title':'courier-sheet', 'description':'Match @image20 and keep the light from @image23.'}
+        result = prepare([approved, contextual, reference('image23', ['location: Hall'], 'b'*64)])
+        prompt = result['provenance']['effective_prompt']
+        self.assertIn('courier-sheet', prompt)
+        self.assertIn('Match <Picture 2> and keep the light from <Picture 1>.', prompt)
+        self.assertNotIn('@image', prompt)
+
+    def test_computed_reference_pixels_bypass_the_file_loader(self):
+        saved = workflow()
+        saved['api']['pixels'] = {'class_type':'IndependentImage', 'inputs':{}}
+        ref = {'slot':'image20','roles':['identity: Courier'],'output':['pixels',0]}
+        with mock.patch('folder_paths.get_filename_list', lambda folder: list(FILES.get(folder, []))), \
+             mock.patch.dict(nodes.NODE_CLASS_MAPPINGS, {'H3C_PH3ImageStill': ph3.H3C_PH3ImageStill}):
+            result = image_recipe.prepare(recipe(), saved, {'prompt':'A courier.'}, [ref])
+        self.assertEqual(result['prompt'][NODE]['inputs']['images.image_1'], ['pixels',0])
+        self.assertFalse(any(node['class_type']=='H3C_StillImageSource' for node in result['prompt'].values()))
+
     def test_text_to_image_binds_prompt_seed_and_size_on_the_node_and_saves_its_image(self):
         result = prepare()
         node = result["prompt"][NODE]["inputs"]

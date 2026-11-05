@@ -21,6 +21,7 @@ MAX_REFERENCES = 8
 REFERENCE_LABEL = "<Picture {index}>"
 MISSING = "(none installed)"
 OFF = "off"
+STUDIO_RESOLUTIONS = ["8 MP", "4 MP", "custom"]
 ASPECTS = {"1:1": 1.0, "4:3": 4 / 3, "3:4": 3 / 4, "3:2": 3 / 2, "2:3": 2 / 3, "16:9": 16 / 9, "9:16": 9 / 16}
 
 # input -> (ComfyUI model folder, filename must contain, filename must not contain, what to download)
@@ -89,6 +90,28 @@ def check_size(width, height):
             raise ValueError(f"P-H3-Image {label} must be a multiple of {MULTIPLE} and at least {MIN_SIZE}; got {value}.")
 
 
+class H3C_PH3StillSize(io.ComfyNode):
+    """Resolve saved dimension links without loading models or changing the video graph."""
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(node_id="H3C_PH3StillSize", display_name="P-H3 Still Size", category="H3 Continuity",
+                         inputs=[io.Int.Input("width", force_input=True, min=MIN_SIZE, max=8192),
+                                 io.Int.Input("height", force_input=True, min=MIN_SIZE, max=8192),
+                                 io.Combo.Input("resolution", options=STUDIO_RESOLUTIONS, default="8 MP", optional=True)],
+                         outputs=[io.Int.Output("width"), io.Int.Output("height")])
+
+    @classmethod
+    def execute(cls, width, height, resolution="8 MP"):
+        check_size(width, height)
+        if resolution not in STUDIO_RESOLUTIONS:
+            raise ValueError("Unknown P-H3 still resolution: " + str(resolution))
+        if resolution == "custom":
+            return io.NodeOutput(width, height)
+        area = 8388608 if resolution == "8 MP" else 4194304
+        scale = min(math.sqrt(area / (width * height)), 8192 / max(width, height))
+        return io.NodeOutput(*(max(MIN_SIZE, round(side * scale / MULTIPLE) * MULTIPLE) for side in (width, height)))
+
+
 def build(*, diffusion_model, text_encoder, vae, prompt, instruction, seed, width, height, images, prompt_upsampler=OFF):
     """(GraphBuilder, image output) of the official P-H3-Image graph. `images` maps image_N to pixels."""
     references = {name: pixels for name, pixels in sorted(images.items(), key=lambda item: int(item[0].rsplit("_", 1)[-1]))
@@ -150,12 +173,15 @@ class H3C_PH3ImageStill(io.ComfyNode):
                 io.String.Input("instruction", multiline=True, default="",
                                 tooltip="Text added after every prompt, such as a house style."),
                 io.Int.Input("seed", default=0, min=0, max=0xffffffffffffffff),
-                io.Int.Input("width", default=1024, min=MIN_SIZE, max=8192, step=MULTIPLE),
-                io.Int.Input("height", default=576, min=MIN_SIZE, max=8192, step=MULTIPLE),
+                io.Int.Input("width", default=3872, min=MIN_SIZE, max=8192, step=MULTIPLE,
+                             tooltip="Direct image width. Studio stills use this aspect at 8 MP unless an explicit still size is supplied."),
+                io.Int.Input("height", default=2176, min=MIN_SIZE, max=8192, step=MULTIPLE),
                 io.Combo.Input("prompt_upsampler", options=_options("prompt_upsampler", with_off=True), default=OFF,
                                tooltip="Off sends the prompt as written, which suits the Studio's prepared still prompts. "
                                        "Choose a p-h3-image prompt upsampler file to expand short requests (extra VRAM and time; "
                                        "not available with reference images yet)."),
+                io.Combo.Input("studio_resolution", options=STUDIO_RESOLUTIONS, default="8 MP", optional=True,
+                               tooltip="Studio still canvas: 8 MP for detail, 4 MP for less memory, or custom to use width and height exactly. Does not change video size or direct image generation."),
                 io.Autogrow.Input("images", optional=True, template=io.Autogrow.TemplateNames(
                     io.Image.Input("image"), names=[f"image_{i}" for i in range(1, MAX_REFERENCES + 1)], min=0),
                     tooltip="Reference images. image_1 is the picture the model edits; the Studio puts the scene first."),
@@ -165,7 +191,7 @@ class H3C_PH3ImageStill(io.ComfyNode):
 
     @classmethod
     def execute(cls, diffusion_model, text_encoder, vae, prompt, instruction, seed, width, height,
-                prompt_upsampler=OFF, images=None) -> io.NodeOutput:
+                prompt_upsampler=OFF, images=None, studio_resolution="8 MP") -> io.NodeOutput:
         references = {name: pixels for name, pixels in (images or {}).items() if pixels is not None}
         require_core(prompt_upsampler != OFF)
         files = {"diffusion_model": choose("diffusion_model", diffusion_model),
