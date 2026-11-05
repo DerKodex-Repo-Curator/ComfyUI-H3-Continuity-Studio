@@ -175,18 +175,22 @@ function pixelStillPrompt(state,index,target,{instruction='',extra='',referenceL
   for(const field of definitions) {
     const refs=[...field.value.matchAll(/@image[1-9]\d*\b/g)].map(m=>m[0]);
     bindings.set(field.label,refs.length?`the subject from ${refs.join(' and ')}`:visual(field.value.replace(/^is\s+/i,'')));
+    if(referenceLabel==='<Picture {index}>'&&/^(?:<(?:Subject|Picture) |@image)/.test(field.label))
+      descriptions.push(visual(field.value.replace(/^is\s+/i,'')));
   }
   const words=text=>visual(text).replace(/<Subject [1-9]\d*>|\b(?:e|subject_)[1-9]\d*\b/g,m=>bindings.get(m)??m);
   let stateText;
   if(target.kind==='last')stateText=shot?.ending_state??Object.values(reply.terminal_state??{}).filter(v=>typeof v==='string').join(' ');
   else stateText=shot?.opening_state??shot?.composition;
+  // Imported video prose needs the explicit still converter; splitting a motion sequence cannot infer its pose.
+  if(!stateText&&parsed.sections&&referenceLabel==='<Picture {index}>')return '';
   if(!stateText) {
     const selected=target.kind==='last'?parsed.shots.at(-1):parsed.shots.find(s=>Number(SHOT.exec(s.label)?.[1])===number);
     const moments=visual(selected?.value??box.prompt).split(/\b(?:then|finally)\b[, ]*/i).filter(s=>s.trim());
     stateText=(target.kind==='last'?moments.at(-1):moments[0])??'';
   }
   const shared=promptShots(state.prompt??'');
-  let text=[words(shared.sections?shared.style:state.prompt),words(state.bible?.style?.look??reply.style),...descriptions,
+  let text=[words(shared.sections?shared.style:state.prompt),words(referenceLabel==='<Picture {index}>'?parsed.style:''),words(state.bible?.style?.look??reply.style),...descriptions,
     words(shot?.viewpoint),words(stateText),visual(instruction),visual(extra),'Create one still image of this visible state.'].filter(Boolean).join('\n\n');
   if(referenceLabel==='<image{index}>')text=text.replace(/@image([1-9]\d*)\b/g,'<image$1>');
   return text;

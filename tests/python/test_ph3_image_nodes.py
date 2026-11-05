@@ -110,6 +110,23 @@ class RequirementsTest(unittest.TestCase):
 
 
 class GraphTest(unittest.TestCase):
+    def test_studio_size_uses_eight_megapixels_at_the_requested_aspect(self):
+        size = ph3.H3C_PH3StillSize.execute(736, 992).result
+        self.assertEqual(size, (2496, 3360))
+        for width, height in ((1024, 576), (1024, 1024), (608, 1408), (8192, 8192)):
+            w, h = ph3.H3C_PH3StillSize.execute(width, height).result
+            self.assertEqual((w % 32, h % 32), (0, 0))
+            self.assertLess(abs(w / h - width / height) / (width / height), 0.02)
+            self.assertLess(abs(w * h - 8388608) / 8388608, 0.02)
+        with self.assertRaisesRegex(ValueError, 'multiple of 32'):
+            ph3.H3C_PH3StillSize.execute(1000, 992)
+
+    def test_studio_resolution_can_use_four_megapixels_or_explicit_dimensions(self):
+        self.assertEqual(ph3.H3C_PH3StillSize.execute(736, 992, resolution='4 MP').result, (1760, 2368))
+        self.assertEqual(ph3.H3C_PH3StillSize.execute(736, 992, resolution='custom').result, (736, 992))
+        with self.assertRaisesRegex(ValueError, 'resolution'):
+            ph3.H3C_PH3StillSize.execute(736, 992, resolution='unknown')
+
     def test_text_to_image_is_the_official_graph(self):
         result = run(instruction="Film still.")
         found = classes(result.expand)
@@ -155,6 +172,7 @@ class GraphTest(unittest.TestCase):
     def test_registered_with_the_extension_and_expandable(self):
         from h3_continuity.extension import H3ContinuityExtension
         self.assertIn(ph3.H3C_PH3ImageStill, asyncio.run(H3ContinuityExtension().get_node_list()))
+        self.assertIn(ph3.H3C_PH3StillSize, asyncio.run(H3ContinuityExtension().get_node_list()))
         self.assertTrue(options_of(FILES)[1].enable_expand)
 
 

@@ -4,6 +4,16 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.5] - 2026-11-05
+
+### Fixed
+
+- P-H3 Studio stills default to 8 MP at the workflow's aspect ratio instead of inheriting a small video canvas. The generator offers 4 MP and custom dimensions; explicit still-size requests remain authoritative.
+- P-H3 reference pictures retain their original pixels and aspect before native conditioning, including the first character sheet. Cast roles, picture titles and saved descriptions reach the image prompt.
+- P-H3 native video prompts without authored snapshots require still-prompt preparation or manual still text. Snapshot prompts retain subject designs and scene style instead of dropping them while keeping a whole video action.
+
+[Changes since v0.12.4](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.4...v0.12.5).
+
 ## [0.12.4] - 2026-11-05
 
 ### Fixed

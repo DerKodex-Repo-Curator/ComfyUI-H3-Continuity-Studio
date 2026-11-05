@@ -150,6 +150,16 @@ class OnDemandTest(unittest.TestCase):
             self.assertTrue(execute(prompt, ["2"]))
         self.assertTrue(torch.equal(SEEN["PH3ImageConditioning"]["images.image_1"], source))
 
+    def test_studio_size_node_resolves_real_links_before_the_expanded_sampler(self):
+        size = stand_in('PH3TestVideoSize', (736, 992), ('INT', 'INT'))
+        with mock.patch.dict(nodes.NODE_CLASS_MAPPINGS, {'H3C_PH3StillSize': ph3.H3C_PH3StillSize, 'PH3TestVideoSize': size}):
+            prompt = {**prompt_with(width=['size', 0], height=['size', 1]),
+                      'size': {'class_type':'H3C_PH3StillSize', 'inputs':{'width':['video',0], 'height':['video',1]}},
+                      'video': {'class_type':'PH3TestVideoSize', 'inputs':{}},
+                      '2': {'class_type':'PH3TestPreview', 'inputs':{'image':['1',0]}}}
+            self.assertTrue(execute(prompt, ['2']))
+        self.assertEqual((SEEN['PH3ImageConditioning']['width'], SEEN['PH3ImageConditioning']['height']), (2496, 3360))
+
     def test_a_timeline_video_run_still_validates_and_runs_without_any_p_h3_image_files(self):
         video = {**prompt_with(vae=ph3.MISSING, diffusion_model=ph3.MISSING, text_encoder=ph3.MISSING),
                  "3": {"class_type": "PH3TestTimeline", "inputs": {"still_recipe": ["1", 1]}}}

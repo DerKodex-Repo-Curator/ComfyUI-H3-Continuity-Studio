@@ -160,6 +160,9 @@ def prepare(recipe, workflow, request, references):
         if match:
             match['roles'].extend(role for role in ref['roles'] if role not in match['roles'])
             match.setdefault('slots',[]).extend([ref['slot']] if ref.get('slot') else [])
+            for key in ('title', 'description'):
+                if ref.get(key) and ref[key] not in match.get(key, ''):
+                    match[key] = '\n'.join(filter(None, [match.get(key), ref[key]]))
             for asset in ref.get('assets',[]):
                 if asset not in match.setdefault('assets',[]):match['assets'].append(asset)
         else:
@@ -185,6 +188,19 @@ def prepare(recipe, workflow, request, references):
         priority = {'scene_layout': 0, 'location': 1, 'identity': 2, 'additional identity': 2, 'appearance': 3, 'prop': 4,
                     'scene anchor': 5, 'current action state': 6}
         unique.sort(key=lambda ref: (ref is not canvas, min((priority.get(role, 7) for role in _roles(ref)), default=7)))
+    if ph3 and not size:
+        node = 'h3c_ph3_size'
+        if node in graph:
+            raise ValueError('Still recipe collides with invocation size node')
+        graph[node] = {'class_type': 'H3C_PH3StillSize', 'inputs': {
+            dimension: copy.deepcopy(graph[bindings['size'][dimension][-1]['node']]['inputs'][bindings['size'][dimension][-1]['input']])
+            for dimension in ('width', 'height')}}
+        resolution = graph[ports[0]['node']]['inputs'].get('studio_resolution')
+        if resolution is not None:
+            graph[node]['inputs']['resolution'] = copy.deepcopy(resolution)
+        for slot, dimension in enumerate(('width', 'height')):
+            for loc in bindings['size'][dimension]:
+                bind(loc, [node, slot])
     tags={}; descriptions=[]
     width=graph[bindings['size']['width'][-1]['node']]['inputs'][bindings['size']['width'][-1]['input']]
     height=graph[bindings['size']['height'][-1]['node']]['inputs'][bindings['size']['height'][-1]['input']]
@@ -199,7 +215,7 @@ def prepare(recipe, workflow, request, references):
             source=copy.deepcopy(ref)
             inputs={'source':json.dumps(source)}
             # Keep calculated dimensions in native inputs so the scheduler evaluates their ancestry.
-            if at==0: inputs.update(width=copy.deepcopy(width),height=copy.deepcopy(height))
+            if at==0 and not ph3: inputs.update(width=copy.deepcopy(width),height=copy.deepcopy(height))
             graph[node]={'class_type':'H3C_StillImageSource','inputs':inputs}
             image=[node,0]
         bind(ports[at],image,True)
@@ -210,10 +226,9 @@ def prepare(recipe, workflow, request, references):
         reference_use = QWEN_REFERENCE_USE if scene else REFERENCE_USE
         usage = list(dict.fromkeys(reference_use[role.split(':',1)[0].strip()] for role in roles
                                    if role.split(':',1)[0].strip() in reference_use))
-        descriptions.append(text_label+': '+', '.join(roles)+('. '+' '.join(usage) if usage else ''))
-    # A single substitution never visits freshly inserted native tokens (e.g. <image1>) again.
-    prompt=re.sub(r'@(image[1-9]\d*|still[1-9]\d*)\b|(?<![\w@<>])(image[1-9]\d*)(?![\w>])',
-                  lambda m:tags.get((m[1] or m[2]).lower(),m[0]),body['prompt'],flags=re.I)
+        context = '. '.join(str(ref[key]) for key in ('title', 'description') if ref.get(key))
+        descriptions.append(text_label+': '+', '.join(roles)+('. '+' '.join(usage) if usage else '')+('. '+context if context else ''))
+    prompt=body['prompt']
     if descriptions:
         if scene:
             named = ('the reference image' if qwen and len(unique) == 1 else canvas['label']) if canvas else None
@@ -223,6 +238,9 @@ def prepare(recipe, workflow, request, references):
                 prompt = 'Edit <Picture 1>. ' + prompt
         else:
             prompt='Reference roles:\n'+'\n'.join(descriptions)+'\nUse each reference only for its assigned role. Follow the requested camera, pose and action; preserve the approved environment across viewpoints.\n\nRequested frame:\n'+prompt
+    # Translate the authored prose and reference context together, without visiting inserted native tokens.
+    prompt=re.sub(r'@(image[1-9]\d*|still[1-9]\d*)\b|(?<![\w@<>])(image[1-9]\d*)(?![\w>])',
+                  lambda m:tags.get((m[1] or m[2]).lower(),m[0]),prompt,flags=re.I)
     bind(bindings['prompt'],prompt)
     if bindings.get('negative') and 'negative' in body: bind(bindings['negative'],body['negative'])
     graph=_ancestry(graph,output)
