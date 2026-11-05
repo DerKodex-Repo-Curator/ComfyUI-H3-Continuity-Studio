@@ -36,7 +36,8 @@
   - *Done:* `h3_continuity/project_nodes.py` (`with_feature`, `apply_project`, `H3C_PlusReferences`, `H3C_PlusSound`, `H3C_PlusContinuity`), registered in `extension.py`. Core: three owned widgets `advanced=True` in place; `project` appended last. V1 conversion (`INPUT_TYPES`) checked.
   - *Deviation from plan step 4:* no recorded-output fixtures (no harness runs `execute` without models). Instead the 0.12.x `execute` body is renamed `_render`, unchanged (`git diff` shows only its `def` line), and a new thin `execute` merges the owned settings and forwards. `test_core_execute_unchanged_without_project` proves the forwarded arguments are identical without a project; `test_connected_add_on_changes_only_its_settings` proves only owned keys change.
   - *For Task 4:* the Studio's status requests and the Timeline API read the core widgets. The JS will mirror a connected add-on's widget values onto the core's advanced widgets so those readers see the effective value with no change.
-- [ ] **V1-4** Task 3: connected-feature walk (pure JS).
+- [x] **V1-4** Task 3: connected-feature walk (pure JS) (State: `passing` | Verification: `node --test tests/js/features.test.mjs`, 11 pass)
+  - *Done:* `web/h3c_features.mjs`: `connectedFeatures`, `activeAddOns` (muted stops the chain, bypassed passes it on, as ComfyUI runs it), `ownedSettings` (nearest add-on wins, same as the Python merge), `uiMode`, `setUiMode`.
 - [ ] **V1-5** Task 4: Studio gating and the Guided/Full toggle.
 - [ ] **V1-6** Task 5: More you can add row and the node face (socket hiding per V1-S1).
 - [ ] **V1-7** Task 6: examples/v1.
