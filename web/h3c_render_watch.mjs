@@ -63,18 +63,22 @@ export function watchEvent(watch, type, detail) {
 
 const steps = (step, total) => (total > 0 ? ` · step ${step} of ${total}` : '');
 
-export function progressText(watch, box, titleOf = () => '') {
+// feed: the Render that is posting runs a few at a time, as {held, note}. held counts the runs not in ComfyUI's queue
+// yet; note says why the last Render stopped early.
+export function progressText(watch, box, titleOf = () => '', feed = null) {
+  const held = feed?.held > 0 ? ` · ${feed.held} more to queue` : '';
   if (watch.turn) return 'ComfyUI’s queue is held while the Story writes';
   if (watch.running) {
     const waiting = Math.max(0, watch.remaining - 1);
-    return `Rendering${box ? ` box ${box}` : ''}${steps(watch.step, watch.total)}${waiting ? ` · ${waiting} more queued` : ''}`;
+    return `Rendering${box ? ` box ${box}` : ''}${steps(watch.step, watch.total)}${waiting ? ` · ${waiting} more queued` : ''}${held}`;
   }
   if (watch.failure) {
     const { node, type, message } = watch.failure;
-    return ['Render failed', titleOf(node) || type, message].filter(Boolean).join(': ');
+    return ['Render failed', titleOf(node) || type, message].filter(Boolean).join(': ') + (feed?.note ? ` ${feed.note}` : '');
   }
+  if (feed?.note) return feed.note;
   if (watch.stopped) return 'Render stopped.';
-  return watch.remaining ? `${watch.remaining} queued` : '';
+  return watch.remaining ? `${watch.remaining} queued${held}` : held.replace(/^ · /, '');
 }
 
 export function liveBadge(watch, box) {
