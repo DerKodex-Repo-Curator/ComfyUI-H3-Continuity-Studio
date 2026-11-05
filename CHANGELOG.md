@@ -4,9 +4,16 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-11-05
+
 ### Fixed
 
+- The Viewer shows a live render preview only when its rendering box is selected. Selecting another box shows that box's video or empty state.
+- First and Last frame guides are recognized as endpoints after converting to FLF2VA, including clips already converted. Accepting an endpoint guide replaces a free guide on the same frame.
+- Removing, moving or uploading Frame guides now records an Undo step.
 - P-H3-Image Still recipes now accept empty autogrow image sockets, so the Timeline can supply still references without manual image connections.
+
+[Changes since v0.12.3](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.3...v0.12.4).
 
 ## [0.12.3] - 2026-11-05
 
