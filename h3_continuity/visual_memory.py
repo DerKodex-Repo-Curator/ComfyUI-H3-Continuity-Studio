@@ -20,8 +20,10 @@ def records(timeline, index, folder, entries, is_done, width=None, height=None):
     result = []
     for number, (source, frame, label) in enumerate(rules.memory_sources(timeline, index)):
         entry = entries.get(source + 1)
+        # Cuts reference the saved take; continuations still require current memory sources.
         if (entry is None or (entry.get("timeline") or {}).get("box") != timeline.boxes[source].id
-                or not store.has_segment_latents(folder, entry) or not is_done(source, entry)):
+                or not store.has_segment_latents(folder, entry)
+                or (not rules.is_fresh(timeline, index) and not is_done(source, entry))):
             raise ValueError(f"H3 Timeline: memory source box {source + 1} needs rendering first, "
                              f"or set box {index + 1}'s Visual memory to Off")
         if ((width is not None and entry.get("latent_width") != width)
