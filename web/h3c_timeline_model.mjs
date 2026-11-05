@@ -3,7 +3,7 @@ import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-
 // decide how a box runs. Mirrors h3_continuity/timeline.py.
 import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261031-held-jobs-1';
 import {imageDescriptionPrompt, imageDescriptionSource} from './h3c_image_descriptions.mjs?v=20261010-image-descriptions-1';
-import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
+import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261105-flf-endpoints-1';
 export const FPS = 24;
 export const MAX_FRAMES = 362;
 export const GRID = 17;

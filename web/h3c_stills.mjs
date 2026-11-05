@@ -91,7 +91,8 @@ export function captureRecipe({workflow, output}, timelineId) {
   };
   const version=bindings.version ?? 1, kind=bindings.adapter ?? 'h3';
   if (![1,2].includes(version) || !['h3','pixels'].includes(kind)) fail('unsupported recipe version or adapter');
-  const references=list(bindings.references,'references');
+  // P-H3 declares all eight autogrow ports even when ComfyUI only shows the first empty socket.
+  const references=own ? bindings.references.map(({input})=>({node:String(image[0]),input})) : list(bindings.references,'references');
   const promptPort=resolve(bindings.prompt,'prompt');
   if(kind==='pixels'&&bindings.reference_label==='Image {index}'&&output[promptPort.node]?.class_type==='TextEncodeQwenImage21')bindings.reference_label='<image{index}>';
   if (version===2 && (!Number.isInteger(bindings.reference_limit) || bindings.reference_limit<0 || bindings.reference_limit>references.length)) fail('reference_limit exceeds declared ports');

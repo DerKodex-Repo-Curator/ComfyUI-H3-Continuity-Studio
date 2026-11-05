@@ -1328,7 +1328,8 @@ export class Studio {
     if (takeUrl) this.takeDownload.download = take.filename;
     else this.takeDownload.removeAttribute('download');
 
-    const preview = watch.running ? watch.preview : null;
+    const runningBox = this.host.runningBox();
+    const preview = watch.running && box && runningBox === editor.selected + 1 ? watch.preview : null;
     const pinnable = view === 'take' && !!takeUrl && entry.status === 'done' && !preview
       && editor.cast.pinTargets(editor.selected).length > 0;
     this.pinButton.hidden = !pinnable;
@@ -1340,7 +1341,7 @@ export class Studio {
     this.hint.hidden = preview?.source !== 'core';
     if (preview) {
       this.showLive(preview);
-      this.badge.textContent = liveBadge(watch, this.host.runningBox());
+      this.badge.textContent = liveBadge(watch, runningBox);
     } else if (this.moving) {
       this.endLive();
       this.showMessage(MOVING);
