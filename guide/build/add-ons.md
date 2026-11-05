@@ -15,6 +15,8 @@ Each Timeline node is in one of two modes, saved with the workflow:
 
 Switch with **Show all features** / **Simplify** in the Studio's top bar. Switching only changes what is shown.
 
+In Guided mode the Timeline node hides unconnected sockets that belong to features you have not added. A connected socket always stays. To connect negative conditioning, switch to Full; the `negative` socket then stays when you switch back.
+
 When a hidden feature already holds data, for example audio clips in a project now shown in Guided mode, the Studio shows a line such as *This project has audio or timed text. They are kept, and still rendered. Add H3 + Sound to see and edit them.* Its **Add the node** button adds the node.
 
 ## H3 + Continuity tools

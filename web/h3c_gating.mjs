@@ -1,12 +1,14 @@
 // What the Studio shows for a Timeline: Full shows every part as in 0.12.x; Guided shows the core and the features
 // whose nodes are connected. Gating hides UI only; the Timeline JSON is never changed by it.
-import {FEATURES} from './h3c_features.mjs?v=20261105-v1-1';
-import {ADD_ONS} from './h3c_more_to_add.mjs?v=20261105-v1-1';
+import {FEATURES} from './h3c_features.mjs?v=20261105-v1-2';
+import {ADD_ONS} from './h3c_more_to_add.mjs?v=20261105-v1-2';
 
 const PAGES = ['viewer', 'story', 'cast', 'pictures', 'refmods'];
 const TABS = ['prompt', 'still', 'takes', 'box'];
-const NEEDS = {story: 'story', cast: 'story', pictures: 'references', refmods: 'references', still: 'references',
-  takes: 'continuity'};
+// The feature(s) each optional page or clip tab needs; with several, any one of them shows it. Cast also holds the
+// reference preparation that Shots stills ask for, so References shows it too.
+const NEEDS = {story: ['story'], cast: ['story', 'references'], pictures: ['references'], refmods: ['references'],
+  still: ['references'], takes: ['continuity']};
 
 export function hiddenFeatures(mode, features) {
   return mode === 'full' ? [] : FEATURES.filter((feature) => !features.has(feature));
@@ -14,7 +16,7 @@ export function hiddenFeatures(mode, features) {
 
 const shown = (mode, features, names) => {
   const hidden = hiddenFeatures(mode, features);
-  return names.filter((name) => !hidden.includes(NEEDS[name]));
+  return names.filter((name) => !NEEDS[name] || NEEDS[name].some((feature) => !hidden.includes(feature)));
 };
 export const visiblePages = (mode, features) => shown(mode, features, PAGES);
 export const visibleClipTabs = (mode, features) => shown(mode, features, TABS);

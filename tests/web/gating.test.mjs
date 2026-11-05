@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {buttonNamed, installDom} from './fake_dom.mjs';
 import * as model from '../../web/h3c_timeline_model.mjs';
 import {featureNotices, hiddenFeatures, hiddenWithData, visibleClipTabs, visiblePages}
-  from '../../web/h3c_gating.mjs?v=20261105-v1-1';
-import {setUiMode, uiMode} from '../../web/h3c_features.mjs?v=20261105-v1-1';
+  from '../../web/h3c_gating.mjs?v=20261105-v1-2';
+import {setUiMode, uiMode} from '../../web/h3c_features.mjs?v=20261105-v1-2';
 
 installDom();
 
@@ -33,7 +33,8 @@ test('guided with sound adds audio and text only', () => {
 });
 
 test('each add-on opens its own pages and tabs', () => {
-  assert.deepEqual(visiblePages('guided', new Set(['references'])), ['viewer', 'pictures', 'refmods']);
+  // Cast also holds the reference preparation that Shots stills ask for.
+  assert.deepEqual(visiblePages('guided', new Set(['references'])), ['viewer', 'cast', 'pictures', 'refmods']);
   assert.deepEqual(visibleClipTabs('guided', new Set(['references'])), ['prompt', 'still', 'box']);
   assert.deepEqual(visibleClipTabs('guided', new Set(['continuity'])), ['prompt', 'takes', 'box']);
   assert.deepEqual(visiblePages('guided', new Set(['story'])), ['viewer', 'story', 'cast']);

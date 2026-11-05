@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { connectedFeatures, ownedSettings, setUiMode, uiMode } from '../../web/h3c_features.mjs?v=20261105-v1-1';
+import { connectedFeatures, mirrorPlan, ownedSettings, setUiMode, uiMode } from '../../web/h3c_features.mjs?v=20261105-v1-2';
 
 // A LiteGraph-shaped graph: nodes with typed inputs, links by id.
 function graph() {
@@ -111,6 +111,26 @@ test('owned settings come from the add-on nearest the Timeline', () => {
   assert.deepEqual(ownedSettings(g, core), {carry_audio: false, audio_context_frames: 12, ref_image_size: 'max'});
   near.mode = 4;
   assert.deepEqual(ownedSettings(g, core), {carry_audio: true, audio_context_frames: 0, ref_image_size: 'max'});
+});
+
+test('a legacy Reroute node passes the chain on', () => {
+  const g = graph(), core = timeline(g);
+  const reroute = g.add(2, 'Reroute', {inputs: ['']});
+  g.link(reroute, core, 'project');
+  g.link(addOn(g, 3, 'H3C_PlusSound'), reroute, '');
+  assert.deepEqual([...connectedFeatures(g, core)], ['sound']);
+});
+
+test('mirroring keeps the Timeline value and puts it back when the add-on goes', () => {
+  const widgets = {carry_audio: true, ref_image_size: 'match'}, read = (name) => widgets[name];
+  let plan = mirrorPlan({carry_audio: false}, read);
+  assert.deepEqual(plan, {writes: {carry_audio: false}, own: {carry_audio: true}});
+  widgets.carry_audio = false;
+  plan = mirrorPlan({carry_audio: false}, read, plan.own);
+  assert.deepEqual(plan, {writes: {}, own: {carry_audio: true}});
+  plan = mirrorPlan({}, read, plan.own);
+  assert.deepEqual(plan, {writes: {carry_audio: true}, own: {}});
+  assert.deepEqual(mirrorPlan({ref_image_size: 'match'}, read), {writes: {}, own: {}});
 });
 
 test('uiMode defaults to full when the property is absent', () => {

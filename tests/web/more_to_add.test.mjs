@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {findAll, installDom} from './fake_dom.mjs';
-import {ADD_ONS, addAddOn, missingAddOns, moreRow} from '../../web/h3c_more_to_add.mjs?v=20261105-v1-1';
-import {connectedFeatures} from '../../web/h3c_features.mjs?v=20261105-v1-1';
+import {ADD_ONS, addAddOn, missingAddOns, moreRow} from '../../web/h3c_more_to_add.mjs?v=20261105-v1-2';
+import {connectedFeatures} from '../../web/h3c_features.mjs?v=20261105-v1-2';
 
 installDom();
 
@@ -42,11 +42,22 @@ test('addAddOn wires project and chains behind an existing add-on', () => {
   assert.ok(sound.pos[0] < core.pos[0]);
   const refs = addAddOn(g, core, 'H3C_PlusReferences', g.create);
   assert.deepEqual([...connectedFeatures(g, core)].sort(), ['references', 'sound']);
-  assert.ok(refs.pos[0] < sound.pos[0]);
+  // The new add-on goes in front, next to the Timeline, with the old chain behind it.
+  const from = (node) => g.getNodeById(g.links.get(node.inputs.find((slot) => slot.name === 'project').link).origin_id);
+  assert.equal(from(core), refs);
+  assert.equal(from(refs), sound);
+  assert.ok(refs.pos[1] > sound.pos[1]);
   addAddOn(g, core, 'H3C_Story', g.create);
   assert.equal(connectedFeatures(g, core).has('story'), true);
   addAddOn(g, core, 'H3C_ContextWindows', g.create);
   assert.equal(connectedFeatures(g, core).has('long'), true);
+});
+
+test('a muted add-on in the chain cannot cut off a new one', () => {
+  const g = graph(), core = g.add(Object.assign(g.create('H3C_Timeline'), {pos: [1000, 100]}));
+  addAddOn(g, core, 'H3C_PlusSound', g.create).mode = 2;
+  addAddOn(g, core, 'H3C_PlusReferences', g.create);
+  assert.deepEqual([...connectedFeatures(g, core)], ['references']);
 });
 
 test('row lists each missing add-on, shows a benefit as text and adds it on click', () => {

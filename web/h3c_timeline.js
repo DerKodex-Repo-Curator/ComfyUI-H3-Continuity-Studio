@@ -10,9 +10,9 @@ import { api } from '../../scripts/api.js';
 import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261004-studio-1';
-import { studio } from './h3c_studio.mjs?v=20261105-v1-1';
+import { studio } from './h3c_studio.mjs?v=20261105-v1-2';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261105-v1-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261105-v1-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261105-v1-2';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
@@ -23,8 +23,8 @@ import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_prepar
 import { TakesClient } from './h3c_takes.mjs?v=20261104-take-marks-2';
 import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
 import {TimelineHistory, editingSnapshot, withLiveReceipts} from './h3c_history.mjs?v=20261104-history-1';
-import {connectedFeatures, ownedSettings, setUiMode, uiMode} from './h3c_features.mjs?v=20261105-v1-1';
-import {ADD_ONS, addAddOn, missingAddOns} from './h3c_more_to_add.mjs?v=20261105-v1-1';
+import {connectedFeatures, mirrorPlan, ownedSettings, setUiMode, uiMode} from './h3c_features.mjs?v=20261105-v1-2';
+import {ADD_ONS, addAddOn, missingAddOns} from './h3c_more_to_add.mjs?v=20261105-v1-2';
 import {socketSpecs, syncSockets} from './h3c_sockets.mjs?v=20261105-v1-1';
 
 const NODE_TYPE = 'H3C_Timeline';
@@ -335,26 +335,35 @@ export class TimelineHost {
   // Runs every second and after connection changes: the add-on chain can change anywhere in the graph. Mirrors the
   // connected add-ons' settings onto the Timeline's advanced widgets (so status checks and the Timeline API read the
   // values the engine uses), syncs the sockets to the mode, and re-gates the Studio and the face when features change.
+  // Returns whether it changed the sockets.
   watchFeatures() {
     const node = this.node, graph = node.graph;
-    if (this.removed || !graph || app.configuringGraph) return;
-    for (const [name, value] of Object.entries(ownedSettings(graph, node))) {
-      const widget = findWidget(node, name);
-      if (widget && widget.value !== value) {
-        widget.value = value;
-        this.settingChanged(name);
-      }
-    }
+    if (this.removed || !graph || app.configuringGraph) return false;
+    this.mirrorSettings(ownedSettings(graph, node));
     const mode = uiMode(node), features = connectedFeatures(graph, node);
-    if (sockets && !app.canvas?.linkConnector?.isConnecting && syncSockets(node, sockets, mode, features)) {
+    const changed = !!sockets && !app.canvas?.linkConnector?.isConnecting && syncSockets(node, sockets, mode, features);
+    if (changed) {
       this.fit();
       this.relayout();
     }
     const key = `${mode}:${[...features].sort().join()}`;
-    if (key === this.featureKey) return;
+    if (key === this.featureKey) return changed;
     this.featureKey = key;
     this.face.setMore(mode === 'guided' ? missingAddOns(features) : [], item => this.addFeature(item.feature));
     if (studio().host === this) studio().applyGate();
+    return changed;
+  }
+
+  // A connected add-on's setting replaces the Timeline's own; the Timeline's value is kept in h3c_own_settings and
+  // put back when the add-on goes. Not an edit of the Timeline, so it records no Studio Undo step.
+  mirrorSettings(owned) {
+    const node = this.node;
+    const {writes, own} = mirrorPlan(owned, name => findWidget(node, name)?.value, node.properties?.h3c_own_settings);
+    for (const [name, value] of Object.entries(writes)) findWidget(node, name).value = value;
+    node.properties ??= {};
+    if (Object.keys(own).length) node.properties.h3c_own_settings = own;
+    else delete node.properties.h3c_own_settings;
+    if (Object.keys(writes).length) this.changed();
   }
 
   // The Studio's view of this Timeline.

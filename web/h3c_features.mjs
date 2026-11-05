@@ -13,10 +13,12 @@ function linkOf(graph, id) {
   return graph?.links?.get?.(id) ?? graph?.links?.[id] ?? null;
 }
 
-function origin(graph, node, name) {
+// The node feeding `node`'s input `name`, through legacy Reroute nodes.
+function origin(graph, node, name, depth = 0) {
   const id = node?.inputs?.find((slot) => slot.name === name)?.link;
   const link = id == null ? null : linkOf(graph, id);
-  return link ? graph?.getNodeById?.(link.origin_id) ?? null : null;
+  const from = link ? graph?.getNodeById?.(link.origin_id) ?? null : null;
+  return from?.type === 'Reroute' && depth < 32 ? origin(graph, from, from.inputs?.[0]?.name, depth + 1) : from;
 }
 
 // The add-ons that deliver into `node`'s project input, nearest first, as ComfyUI runs the prompt: a muted add-on
@@ -51,6 +53,23 @@ export function ownedSettings(graph, node) {
     }
   }
   return settings;
+}
+
+// What to write to the Timeline's widgets so a connected add-on's setting replaces its own, and the Timeline's own
+// values to keep (in properties.h3c_own_settings) for when the add-on goes. `current` reads a widget's value.
+export function mirrorPlan(owned, current, own = {}) {
+  const writes = {}, kept = {...own};
+  for (const [name, value] of Object.entries(owned)) {
+    if (current(name) === undefined || current(name) === value) continue;
+    if (!(name in kept)) kept[name] = current(name);
+    writes[name] = value;
+  }
+  for (const name of Object.keys(kept)) {
+    if (name in owned) continue;
+    if (current(name) !== undefined && current(name) !== kept[name]) writes[name] = kept[name];
+    delete kept[name];
+  }
+  return {writes, own: kept};
 }
 
 export function uiMode(node) {

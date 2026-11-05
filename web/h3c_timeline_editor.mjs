@@ -616,7 +616,7 @@ export class TimelineEditor {
         this.referencesEl, this.pictures.root, this.refmodsEl, this.stillsEl, this.frameImages.preparation.root],
       sound: [this.dialogueField, this.audioLanes.root, this.audioLanes.settings, this.dialogue.root],
       continuity: [this.tabButtons.takes, this.tabPanels.takes, this.bridgeDetails, this.memoryDetails],
-      story: [cast, this.castEl]};
+      story: [cast], cast: [this.castEl]};
     for (const [feature, parts] of Object.entries(gated)) for (const part of parts) part.dataset.h3cFeature = feature;
     this.renderRefmods();
   }

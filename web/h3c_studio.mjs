@@ -8,13 +8,13 @@ import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=2026
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261104-partial-video-1';
 import {historyShortcut} from './h3c_history.mjs?v=20261104-history-1';
-import {featureNotices, hiddenFeatures, hiddenWithData, visiblePages} from './h3c_gating.mjs?v=20261105-v1-1';
-import {moreRow} from './h3c_more_to_add.mjs?v=20261105-v1-1';
+import {featureNotices, hiddenFeatures, hiddenWithData, visiblePages} from './h3c_gating.mjs?v=20261105-v1-2';
+import {moreRow} from './h3c_more_to_add.mjs?v=20261105-v1-2';
 
 const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
 const CENTER = ['viewer', 'story', 'cast', 'pictures', 'refmods'];
 // The feature each optional page needs in Guided mode (h3c_gating.mjs); untagged parts are always shown.
-const PAGE_FEATURE = {story: 'story', cast: 'story', pictures: 'references', refmods: 'references', audio: 'sound', text: 'sound'};
+const PAGE_FEATURE = {story: 'story', cast: 'cast', pictures: 'references', refmods: 'references', audio: 'sound', text: 'sound'};
 const FOCUS = ['cast', 'story', 'pictures', 'refmods', 'project'];
 const CORE_HINT = 'For a moving preview, add KJNodes’ Model Preview Override before the sampler.';
 const OLDER_TAKE = 'Older take: this clip changed after it rendered.';
@@ -198,7 +198,8 @@ const CSS = `
 .h3cx-studio[data-h3c-off~="references"] [data-h3c-feature="references"],
 .h3cx-studio[data-h3c-off~="sound"] [data-h3c-feature="sound"],
 .h3cx-studio[data-h3c-off~="continuity"] [data-h3c-feature="continuity"],
-.h3cx-studio[data-h3c-off~="story"] [data-h3c-feature="story"] { display:none !important; }
+.h3cx-studio[data-h3c-off~="story"] [data-h3c-feature="story"],
+.h3cx-studio[data-h3c-off~="story"][data-h3c-off~="references"] [data-h3c-feature="cast"] { display:none !important; }
 .h3cx-gate-notices { display:flex; flex-direction:column; gap:4px; padding:4px 12px; }
 .h3cx-gate-notices[hidden], .h3cx-more[hidden] { display:none; }
 .h3cx-gate-notice { margin:0; color:#d8c48a; font-size:12px; }
@@ -791,6 +792,7 @@ export class Studio {
     this.setReferencesVisible(snapshot.referencesVisible ?? true);
     this.setInspectorVisible(snapshot.inspectorVisible ?? innerWidth >= 900);
     this.setMobilePage(snapshot.mobilePage ?? (focus ? 'focus' : 'viewer'));
+    this.enforceGate();
     const bridge = snapshot.bridgeBox;
     this.bridgeBox = box?.id === bridge && editor.state.bridges?.some(item => item.before === bridge)
       && (editor.status == null || editor.bridgeStatusOf(bridge)?.video) ? bridge : null;
@@ -958,7 +960,7 @@ export class Studio {
   }
 
   openFocus(page, {link = true} = {}) {
-    if (!FOCUS.includes(page)) return;
+    if (!FOCUS.includes(page) || this.pageHidden(page)) return;
     this.focusPage = page;
     this.libraryPage = page === 'project' ? 'references' : page;
     this.page = page;
@@ -1073,10 +1075,28 @@ export class Studio {
     this.addedNote.hidden = !message;
   }
 
+  // Whether Guided mode hides this Studio page for the current host.
+  pageHidden(page) {
+    const host = this.host;
+    if (!host?.uiMode || !['story', 'cast', 'pictures', 'refmods'].includes(page)) return false;
+    return !visiblePages(host.uiMode(), host.features()).includes(page);
+  }
+
+  // Never leave a hidden page, clip tab or inspector panel showing, whatever opened it.
+  enforceGate() {
+    const host = this.host;
+    if (!host?.uiMode) return;
+    const off = hiddenFeatures(host.uiMode(), host.features()), editor = host.editor;
+    if (this.focusPage && this.pageHidden(this.focusPage)) this.backToViewer();
+    if (['audio', 'text'].includes(this.inspectorTarget?.kind) && off.includes('sound')) this.inspect({kind: 'clip', box: editor.box()?.id ?? null});
+    if ((editor.activeTab === 'still' && off.includes('references')) || (editor.activeTab === 'takes' && off.includes('continuity'))) editor.setTab('prompt');
+  }
+
   // Guided mode hides the parts whose H3 nodes are not connected (CSS on data-h3c-feature); Full shows all of them.
   applyGate() {
     const host = this.host;
     if (!host?.uiMode) return;
+    this.enforceGate();
     const mode = host.uiMode(), features = host.features(), off = hiddenFeatures(mode, features);
     const held = mode === 'guided' ? hiddenWithData(host.editor.state, features) : [];
     const key = JSON.stringify([mode, off, held]);
@@ -1090,11 +1110,6 @@ export class Studio {
     this.gateNotices.replaceChildren(featureNotices(held, add));
     this.moreSlot.replaceChildren(mode === 'guided' ? moreRow(features, item => add(item.feature)) : '');
     this.pageNav.hidden = visiblePages(mode, features).length < 2;
-    const hidden = name => off.includes(PAGE_FEATURE[name]);
-    if (this.focusPage && hidden(this.focusPage)) this.backToViewer();
-    if (['audio', 'text'].includes(this.inspectorTarget?.kind) && off.includes('sound')) this.inspect({kind: 'clip', box: host.editor.box()?.id ?? null});
-    const editor = host.editor;
-    if ((editor.activeTab === 'still' && off.includes('references')) || (editor.activeTab === 'takes' && off.includes('continuity'))) editor.setTab('prompt');
   }
 
   placeCancel(cancel, held) {

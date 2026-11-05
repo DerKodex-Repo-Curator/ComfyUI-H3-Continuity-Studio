@@ -1,5 +1,5 @@
 // The optional H3 nodes a Timeline can grow into, and how to add one next to it. UI only.
-import {ADD_ONS as ADD_ON_FEATURES, connectedFeatures} from './h3c_features.mjs?v=20261105-v1-1';
+import {ADD_ONS as ADD_ON_FEATURES, connectedFeatures} from './h3c_features.mjs?v=20261105-v1-2';
 
 // In the order PRODUCT.md positions them: continuity first. `benefit` is shown as text; `next` says what is left to do
 // after adding it; `advanced` ones sit apart. `wire` names how the node joins the Timeline.
@@ -29,36 +29,47 @@ function linkOf(graph, id) {
   return graph?.links?.get?.(id) ?? graph?.links?.[id] ?? null;
 }
 
-// The node whose project input is the open end of `core`'s chain of add-ons: `core` itself when nothing feeds it.
-function chainEnd(graph, core) {
-  const seen = new Set();
-  let end = core;
-  for (;;) {
-    const id = end.inputs?.find((slot) => slot.name === 'project')?.link;
+// The add-on nodes already linked into `core`'s project input, nearest first, muted or not.
+function chain(graph, core) {
+  const found = [];
+  for (let node = core; ;) {
+    const id = node.inputs?.find((slot) => slot.name === 'project')?.link;
     const link = id == null ? null : linkOf(graph, id);
     const from = link ? graph.getNodeById?.(link.origin_id) : null;
-    if (!from || !(from.type in ADD_ON_FEATURES) || seen.has(from.id)) return end;
-    seen.add(from.id);
-    end = from;
+    if (!from || !(from.type in ADD_ON_FEATURES) || found.includes(from)) return found;
+    found.push(from);
+    node = from;
   }
 }
 
-// Adds the node of `type` left of `core` (behind the last add-on already feeding it) and links it in.
+// Adds the node of `type` next to `core` and links it in. An add-on goes in front of the chain (straight into
+// `project`, with the old chain behind it), so a muted add-on further back cannot cut it off.
 export function addAddOn(graph, core, type, create) {
   const item = ADD_ONS.find((entry) => entry.type === type);
   if (!item) throw new Error(`H3 Timeline: unknown add-on ${type}`);
   const node = create(type);
   if (!node) throw new Error(`H3 Timeline: ComfyUI could not create ${item.title}; is the node pack up to date?`);
-  const target = item.wire === 'project' ? chainEnd(graph, core) : core;
+  const [x, y] = core.pos ?? [0, 0];
   const width = node.size?.[0] ?? 300;
-  const [x, y] = target.pos ?? [0, 0];
-  const below = item.wire === 'project' ? 0 : (core.size?.[1] ?? 200) + 40;
-  node.pos = item.wire === 'project' ? [x - width - 40, y] : [x, y + below];
+  if (item.wire === 'project') {
+    const behind = chain(graph, core);
+    node.pos = [x - width - 40, y + behind.length * 160];
+    graph.add(node);
+    const input = core.inputs.findIndex((slot) => slot.name === 'project');
+    const id = core.inputs[input]?.link;
+    const old = id == null ? null : linkOf(graph, id);
+    const previous = old ? graph.getNodeById?.(old.origin_id) : null;
+    const output = Math.max(0, node.outputs?.findIndex((slot) => slot.type === 'H3C_PROJECT') ?? 0);
+    node.connect(output, core, input);
+    if (previous) previous.connect(old.origin_slot, node, node.inputs.findIndex((slot) => slot.name === 'project'));
+    return node;
+  }
+  node.pos = [x, y + (core.size?.[1] ?? 200) + 40];
   graph.add(node);
   if (item.wire) {
-    const input = target.inputs?.findIndex((slot) => slot.name === item.wire);
-    const output = Math.max(0, node.outputs?.findIndex((slot) => slot.type === (item.wire === 'project' ? 'H3C_PROJECT' : 'H3C_STORY')) ?? 0);
-    if (input >= 0) node.connect(output, target, input);
+    const input = core.inputs?.findIndex((slot) => slot.name === item.wire);
+    const output = Math.max(0, node.outputs?.findIndex((slot) => slot.type === 'H3C_STORY') ?? 0);
+    if (input >= 0) node.connect(output, core, input);
   }
   return node;
 }
