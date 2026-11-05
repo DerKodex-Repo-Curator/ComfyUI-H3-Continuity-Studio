@@ -44,8 +44,9 @@ Saves the run as the next segment (the finished video without repeated frames, p
 | `segment`, `latent` | From the Timeline and the sampler. |
 | `images`, `audio` | Decoded frames and audio. Needed for the segment and full videos. |
 | `fps` | 24 unless you interpolate. |
-| `crf` | H.264 quality; lower is better and larger. |
+| `crf` | Video quality (H.264 or HEVC CRF); lower is better and larger. |
 | `color_space` | HDR videos use 10-bit BT.2020. |
+| `codec` | `H.264` (default) plays everywhere. `HEVC` is 10-bit Main10 for HDR and tagged `hvc1`, which phones decode in hardware and Apple players need to show HLG. A browser without HEVC support can't play these videos in the Studio. The full video keeps its segments' codec. |
 | `description` | Text stored with the segment, such as the prompt. |
 | `write_full_video` | Only affects the deprecated H3 Sequence chain; the Timeline always exports when every clip is done. |
 

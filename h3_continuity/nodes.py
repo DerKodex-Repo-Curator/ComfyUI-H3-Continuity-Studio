@@ -290,15 +290,21 @@ class H3C_SaveSegment(io.ComfyNode):
                 io.Boolean.Input("write_full_video", default=True,
                                  tooltip="Rebuild after each H3 Sequence segment. H3 Timeline exports when all current boxes finish."),
                 io.Int.Input("crf", default=16, min=0, max=51,
-                             tooltip="H.264 quality of the saved videos; lower is better and larger."),
+                             tooltip="Quality of the saved videos (H.264 or HEVC CRF); lower is better and larger."),
                 io.Combo.Input("color_space", options=["sRGB", "HDR", "HDR PQ"], default="sRGB", optional=True,
                                tooltip="Colorspace of the finished frames. HDR videos use 10-bit BT.2020."),
+                io.Combo.Input("codec", options=list(media.CODECS), default="H.264", optional=True,
+                               tooltip="Codec of the saved videos. H.264 plays everywhere. HEVC (10-bit for HDR) is "
+                                       "what phones decode in hardware for HDR and what Apple players need for HLG; "
+                                       "a browser without HEVC support can't play it in the Studio. The full video "
+                                       "keeps the codec of its segments."),
             ],
             outputs=[io.String.Output(display_name="info")],
         )
 
     @classmethod
-    def execute(cls, segment, latent, fps, write_full_video, crf, images=None, audio=None, description="", color_space="sRGB") -> io.NodeOutput:
+    def execute(cls, segment, latent, fps, write_full_video, crf, images=None, audio=None, description="", color_space="sRGB",
+                codec="H.264") -> io.NodeOutput:
         sequence = segment.sequence
         from .timeline_api.service import authorize_sequence, sequence_owner
         authorize_sequence(sequence.name, sequence_owner(cls), "save_segment")
@@ -324,10 +330,10 @@ class H3C_SaveSegment(io.ComfyNode):
             waveform, sample_rate = audio["waveform"][0, :2].float().cpu(), int(audio["sample_rate"])
         if "bridge" in (segment.timeline or {}):
             return cls.save_bridge(segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate,
-                                   description, notes, color_space)
+                                   description, notes, color_space, codec)
         if "replacement" in (segment.timeline or {}):
             return cls.save_replacement(segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate,
-                                        description, notes, color_space)
+                                        description, notes, color_space, codec)
 
         with SEQUENCE_LOCK:
             authorize_sequence(sequence.name, sequence_owner(cls), "save_segment")
@@ -357,7 +363,7 @@ class H3C_SaveSegment(io.ComfyNode):
             if played is not None:
                 entry["played"] = played
             if images is not None:
-                _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space)
+                _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space, codec)
             store.save_segment(folder, entry, video, audio_latent, waveform)
             manifest["segments"].append(entry)
             manifest["segments"].sort(key=lambda e: e["index"])
@@ -385,7 +391,7 @@ class H3C_SaveSegment(io.ComfyNode):
 
     @classmethod
     def save_bridge(cls, segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate, description,
-                    notes, color_space="sRGB"):
+                    notes, color_space="sRGB", codec="H.264"):
         """Saves a bridge run beside the segments, moving only the bridge's own earlier take."""
         sequence, record = segment.sequence, segment.timeline
         from .timeline_api.service import authorize_sequence, sequence_owner
@@ -411,7 +417,7 @@ class H3C_SaveSegment(io.ComfyNode):
             if segment.carried_audio_start:
                 entry['audio_pin'] = {'start_tick': segment.carried_audio_start, 'ticks': segment.carried_ticks}
             if images is not None:
-                _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space)
+                _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space, codec)
             store.save_segment(folder, entry, video, audio_latent, waveform)
             manifest.setdefault("bridges", []).append(entry)
             bridges.keep(folder, manifest, keys, now)
@@ -434,7 +440,7 @@ class H3C_SaveSegment(io.ComfyNode):
 
     @classmethod
     def save_replacement(cls, segment, video, audio_latent, frames, fps, crf, images, waveform, sample_rate,
-                         description, notes, color_space="sRGB"):
+                         description, notes, color_space="sRGB", codec="H.264"):
         """Saves a replacement candidate beside the earlier ones; nothing is moved and nothing is selected."""
         from . import replacement_candidates
         sequence, record = segment.sequence, segment.timeline
@@ -465,7 +471,7 @@ class H3C_SaveSegment(io.ComfyNode):
             if segment.carried_audio_start:
                 entry['audio_pin'] = {'start_tick': segment.carried_audio_start, 'ticks': segment.carried_ticks}
             if images is not None:
-                _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space)
+                _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space, codec)
             store.save_segment(folder, entry, video, audio_latent, waveform)
             if images is not None:
                 try:
@@ -488,7 +494,7 @@ class H3C_SaveSegment(io.ComfyNode):
             return io.NodeOutput(info, ui=ui.PreviewText(info))
 
 
-def _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space="sRGB"):
+def _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space="sRGB", codec="H.264"):
     """Writes the video of the entry's new frames, without the carried ones, and its last frame."""
     context, frames, played = entry["context_frames"], entry["frames"], entry.get("played")
     trim = timing.frames_at_fps(context, fps)
@@ -513,10 +519,11 @@ def _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, 
     if waveform is not None:
         segment_audio = (waveform[:, timing.sample_at_frame(context, sample_rate):end_sample], sample_rate)
     file = entry["stem"] + ".mp4"
-    encoded = media.write_segment_video(os.path.join(folder, file), new_images, fps, crf, segment_audio, color_space=color_space)
+    encoded = media.write_segment_video(os.path.join(folder, file), new_images, fps, crf, segment_audio,
+                                        color_space=color_space, codec=codec)
     store.save_last_frame(folder, entry, last_image)
     entry["video"] = {"file": file, "fps": fps, "width": encoded[0], "height": encoded[1], "frames": expected,
-                      "color_space": color_space}
+                      "color_space": color_space, "codec": codec}
 
 
 def _replaced(folder, manifest, record):
