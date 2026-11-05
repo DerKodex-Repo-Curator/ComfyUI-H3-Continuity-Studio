@@ -4,6 +4,10 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+### Fixed
+
+- P-H3-Image Still recipes now accept empty autogrow image sockets, so the Timeline can supply still references without manual image connections.
+
 ## [0.12.3] - 2026-11-05
 
 ### Fixed
