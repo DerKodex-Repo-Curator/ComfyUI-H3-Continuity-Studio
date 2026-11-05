@@ -34,7 +34,7 @@ A cut marked **New scene** starts a new scene and keeps that visual history whil
 1. Select the **later** clip and open **Settings → Visual memory**; choose **Selected moments**.
 2. Press **Remember a moment**. In the new row, pick the **earlier clip** and the **time** within its delivered footage. **View source moment** plays it.
 3. Describe what matters, for example `red brick house, blue door, three upstairs windows`.
-4. **Render the source clip first**. A cut can reference an older saved take after edits. Its native latents must still exist, belong to the selected box and match the target resolution. Continuing clips still require current memory sources; missing or incompatible sources stop with a clear error.
+4. **Render the source clip first**. A clip whose source is missing, stale or incompatible stops with a clear "render the source first" message.
 
 The panel lists the moments in force, for example *Clip 3 · Full video · the previous shot before this cut / Clip 1 · 0.7 s · the living room, wide view / Clip 1 · 5.0 s · the living room by the front door*, and reminds you that *H3 snaps each moment to a 17-frame boundary and reads 5 frames*. The window can therefore begin slightly before the time you picked. For a continuing source clip, the time refers to the delivered footage, and a window never starts inside the replayed overlap.
 
