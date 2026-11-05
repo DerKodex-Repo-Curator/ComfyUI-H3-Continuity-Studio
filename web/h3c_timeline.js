@@ -3,7 +3,7 @@ import {generationControl,setGenerationControl} from './h3c_generation_archive.m
 // Mounts the H3 Timeline face on H3C_Timeline nodes, edits the Timeline in the Studio, and keeps its status in sync
 // with the server. ComfyUI permits caching .mjs helpers. Bump their ?v= revision together across web/ when they change.
 import { freshProject } from './h3c_new_project.mjs?v=20261007-new-project-in-place-1';
-import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261104-story-groups-1';
+import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261105-render-restore-1';
 import { app } from '../../scripts/app.js';
 import {syncImageOutputs,compileImageOutputs} from './h3c_timeline_images.mjs?v=20261012-picture-outputs-1';
 import { api } from '../../scripts/api.js';

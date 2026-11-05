@@ -4,6 +4,14 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.7] - 2026-11-05
+
+### Fixed
+
+- Opening a saved Story in another browser or session retains its rendered videos, takes and still candidates when generator wiring and settings match. Preview selection and output display widgets no longer cause an empty render folder to be selected. Actual generator changes still create an independent sequence.
+
+[Changes since v0.12.6](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.6...v0.12.7).
+
 ## [0.12.6] - 2026-11-05
 
 ### Added
