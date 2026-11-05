@@ -97,6 +97,8 @@ class Timeline:
     audio_feather: int = 0
     # Reference video slots each box receives only its own time of, as audio clips are cut by Timeline time.
     video_slices: list = field(default_factory=list)
+    # Assembly only: marked uploads replace H3 sound when enabled.
+    mux_audio: bool = True
 
 
 @dataclass
@@ -185,6 +187,9 @@ def parse(text):
     if target is not None and (type(target) is not int or not 1 <= target <= len(boxes)):
         raise _error("render_box must be the number of a box in this timeline")
     parsed = Timeline(_text(data.get("prompt"), "the shared prompt"), [_box(raw, n) for n, raw in enumerate(boxes, 1)], target)
+    parsed.mux_audio = data.get("mux_audio", True)
+    if type(parsed.mux_audio) is not bool:
+        raise _error("mux_audio must be true or false")
     parsed.exact = [_exact(raw, n, box) for n, (raw, box) in enumerate(zip(boxes, parsed.boxes), 1)]
     for n, raw in enumerate(boxes, 1):
         if raw.get("dialogue", "cues") not in ("cues", "manual"):

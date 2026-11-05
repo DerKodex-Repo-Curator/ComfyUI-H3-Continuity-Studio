@@ -78,10 +78,13 @@ texts are under `docs/` and the user guide is under `guide/`.
   when it fits both neighbours) or deleted. The Studio can render 1 to 10 takes
   of a box at once, and the API lists and switches takes (see `h3-continuity-api`).
   Put an earlier take back rather than re-rendering when it was better.
-- **Full video.** Once every box is current, H3 Save Segment assembles
+- **Full video.** The Studio can play current rendered boxes together before completion,
+  skipping unfinished boxes (or filling gaps from a saved split-video source). Partial
+  videos omit bridges and replacements. Once every box is current, H3 Save Segment assembles
   `<name>_full.mp4` from the box videos in Timeline order. It plays rendered
   bridges on their joins, and the uploaded recording instead of H3's audio when
-  a clip is marked `in_full_video` (see `h3-continuity-sound`). Each box saves its
+  a clip is marked `in_full_video` and Timeline `mux_audio` is enabled (the default;
+  turn it off to keep H3 sound; see `h3-continuity-sound`). Each box saves its
   MP4 without carried frames, its latents (`.safetensors`) and a last-frame PNG
   under `output/h3_sequences/<name>/`. Keep the folder together, because the
   latents are what continuation, memory and bridges read.

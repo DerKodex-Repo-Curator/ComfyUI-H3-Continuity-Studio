@@ -2,7 +2,7 @@
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import * as model from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
+import * as model from './h3c_timeline_model.mjs?v=20261105-rendered-video-1';
 import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261103-replacement-bridges-1';
 import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
 import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
@@ -16,7 +16,7 @@ import { CheckPanel } from './h3c_check.mjs?v=20261104-check-holds-1';
 import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261103-replacement-bridges-1';
 import { DialoguePanel } from './h3c_dialogue.mjs?v=20261104-dialogue-key-1';
 import { ChainSettings } from './h3c_chain_settings.mjs?v=20261104-chain-settings-1';
-import { exportedVideo } from './h3c_partial_video.mjs?v=20261104-partial-video-1';
+import { exportedVideo } from './h3c_partial_video.mjs?v=20261105-rendered-video-1';
 import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261104-take-marks-2';
 
 const STYLE_ID = 'h3ct-style';
@@ -1174,7 +1174,7 @@ export class TimelineEditor {
       : `Every ${what} is rendered`;
     this.renderNextButton.disabled = this.renderButton.disabled;
     this.renderNextButton.title = remaining ? `Queue one run, for the next ${what} that is not rendered yet` : `Every ${what} is rendered`;
-    const shown = ok && !this.stale && !this.queuing ? exportedVideo(this.status) : null;
+    const shown = ok && !this.stale ? exportedVideo(this.status) : null;
     const full = shown?.file ?? null;
     this.partialVideo = shown?.partial ?? null;
     const fullUrl = full ? this.host.viewUrl(full) : null;

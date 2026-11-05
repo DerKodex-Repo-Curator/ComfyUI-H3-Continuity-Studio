@@ -129,6 +129,7 @@ export function parseState(text) {
       ? { reference_descriptions: structuredClone(data.reference_descriptions) } : {}),
     ...(record(data.reference_replacements) ? {reference_replacements:structuredClone(data.reference_replacements)} : {}),
     ...(data.context_noise === true ? {context_noise: true} : {}),
+    ...(data.mux_audio === false ? {mux_audio: false} : {}),
     ...(data.continuation_guide === false ? {continuation_guide: false} : {}),
     ...(Number.isInteger(data.audio_feather) && data.audio_feather > 0 ? {audio_feather: data.audio_feather} : {}),
     ...(Array.isArray(data.video_slices) && data.video_slices.length ? {video_slices: [...data.video_slices]} : {}),
@@ -187,6 +188,7 @@ export function serialize(state) {
     ...(state.reference_descriptions ? { reference_descriptions: state.reference_descriptions } : {}),
     ...(Object.keys(state.reference_replacements ?? {}).length ? {reference_replacements:state.reference_replacements} : {}),
     ...(state.context_noise === true ? {context_noise: true} : {}),
+    ...(state.mux_audio === false ? {mux_audio: false} : {}),
     ...(state.continuation_guide === false ? {continuation_guide: false} : {}),
     ...(state.audio_feather > 0 ? {audio_feather: state.audio_feather} : {}),
     ...(state.video_slices?.length ? {video_slices: state.video_slices} : {}),
@@ -371,6 +373,7 @@ export function editAudioClip(clip, mode, delta) {
 }
 
 export function soundtrackSlots(state) {
+  if (state.mux_audio === false) return [];
   return (state.audio_clips ?? []).filter(clip => clip.in_full_video === true && clip.file).map(clip => clip.slot).sort();
 }
 
