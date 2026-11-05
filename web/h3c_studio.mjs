@@ -8,9 +8,13 @@ import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=2026
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261104-partial-video-1';
 import {historyShortcut} from './h3c_history.mjs?v=20261104-history-1';
+import {featureNotices, hiddenFeatures, hiddenWithData} from './h3c_gating.mjs?v=20261105-v1-1';
+import {moreRow} from './h3c_more_to_add.mjs?v=20261105-v1-1';
 
 const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
 const CENTER = ['viewer', 'story', 'cast', 'pictures', 'refmods'];
+// The feature each optional page needs in Guided mode (h3c_gating.mjs); untagged parts are always shown.
+const PAGE_FEATURE = {story: 'story', cast: 'story', pictures: 'references', refmods: 'references', audio: 'sound', text: 'sound'};
 const FOCUS = ['cast', 'story', 'pictures', 'refmods', 'project'];
 const CORE_HINT = 'For a moving preview, add KJNodes’ Model Preview Override before the sampler.';
 const OLDER_TAKE = 'Older take: this clip changed after it rendered.';
@@ -40,6 +44,9 @@ const CSS = `
   --h3cx-lib: clamp(var(--h3cx-lib-min), var(--h3cx-lib-w, var(--h3cx-lib-min)), 40vw);
   --h3cx-insp: clamp(var(--h3cx-insp-min), var(--h3cx-insp-w, var(--h3cx-insp-min)), 40vw); }
 .h3cx-references-hidden .h3cx-main { grid-template-columns:minmax(0,1fr) var(--h3cx-insp); }
+/* Guided mode without H3 + References has no References column; :where keeps the mobile layouts below in charge. */
+:where(.h3cx-studio[data-h3c-off~="references"]) .h3cx-main { grid-template-columns:minmax(0,1fr) var(--h3cx-insp); }
+:where(.h3cx-studio[data-h3c-off~="references"]) .h3cx-split-lib { display:none; }
 .h3cx-center { display:flex; flex-direction:column; min-width:0; min-height:0; }
 .h3cx-center > .h3cx-player, .h3cx-center > .h3cx-focus { flex:1 1 auto; }
 .h3cx-player { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; overflow-y:auto; padding: 8px 10px; }
@@ -187,6 +194,22 @@ const CSS = `
  .h3cx-mobile-more { display:flex; flex-direction:column; gap:12px; flex:1; min-width:0; overflow:auto; padding:16px; }
  .h3cx-mobile-more > button { text-align:left; }
  .h3cx-mobile-more .h3cx-project-actions { display:flex; flex-direction:column; }
+}
+.h3cx-studio[data-h3c-off~="references"] [data-h3c-feature="references"],
+.h3cx-studio[data-h3c-off~="sound"] [data-h3c-feature="sound"],
+.h3cx-studio[data-h3c-off~="continuity"] [data-h3c-feature="continuity"],
+.h3cx-studio[data-h3c-off~="story"] [data-h3c-feature="story"] { display:none !important; }
+.h3cx-gate-notices { display:flex; flex-direction:column; gap:4px; padding:4px 12px; }
+.h3cx-gate-notices[hidden], .h3cx-more[hidden] { display:none; }
+.h3cx-gate-notice { margin:0; color:#d8c48a; font-size:12px; }
+.h3cx-gate-notice button { margin-left:6px; }
+.h3cx-more { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 12px; border-top:1px solid #2b3238;
+  color:#aab1bd; font-size:12px; }
+.h3cx-more-title { margin-right:4px; }
+.h3cx-more-add { font-size:12px; }
+@media(max-width:600px), (max-width:1100px) and (max-height:500px) {
+ .h3cx-more { flex-wrap:nowrap; overflow-x:auto; padding:4px 8px; }
+ .h3cx-more > * { flex:none; }
 }
 `;
 
@@ -347,8 +370,11 @@ export class Studio {
     this.projectActions = el('div', 'h3cx-project-actions');
     this.projectActions.append(this.undoButton, this.redoButton, this.historyButton,
       this.newProjectButton, this.projectButton, this.downloadVideo);
+    this.modeButton = button('Show all features', '', () => this.host?.setUiMode(this.host.uiMode() === 'guided' ? 'full' : 'guided'));
+    this.gateNotices = el('div');
+    this.moreSlot = el('div');
     bar.append(close, this.libraryToggle, this.inspectorToggle, this.nameEl, this.summarySlot, this.savedSlot,
-      el('span', 'h3cx-grow'), this.projectActions);
+      el('span', 'h3cx-grow'), this.modeButton, this.projectActions);
     this.bar = bar;
     this.buildHistory();
     const activity = el('div', 'h3cx-activity');
@@ -392,6 +418,7 @@ export class Studio {
     this.library = el('aside', 'h3cx-library');
     this.library.id = 'h3cx-references';
     this.library.setAttribute('aria-label', 'References');
+    this.library.dataset.h3cFeature = this.libraryToggle.dataset.h3cFeature = 'references';
     const nav = el('nav', 'h3cx-library-nav');
     nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', 'Workspace views');
     this.pageButtons = {};
@@ -399,11 +426,13 @@ export class Studio {
     for (const name of ['box', 'audio', 'text', 'timeline', ...FOCUS]) {
       this.pages[name] = el('div', 'h3cx-page');
       this.pages[name].dataset.page = name;
+      if (PAGE_FEATURE[name]) this.pages[name].dataset.h3cFeature = PAGE_FEATURE[name];
     }
     for (const name of CENTER) {
       const label = name === 'refmods' ? 'RefMods' : name[0].toUpperCase() + name.slice(1);
       this.pageButtons[name] = button(label, `Open ${label}`, () => name === 'viewer' ? this.backToViewer() : this.openFocus(name));
       this.pageButtons[name].setAttribute('role', 'tab');
+      if (PAGE_FEATURE[name]) this.pageButtons[name].dataset.h3cFeature = PAGE_FEATURE[name];
       this.pageButtons[name].id = `h3cx-tab-${name}`;
       this.pageButtons[name].setAttribute('aria-controls', `h3cx-page-${name}`);
       if (this.pages[name]) {
@@ -463,7 +492,9 @@ export class Studio {
     this.mobileMore.append(el('h2', 'h3cx-title', 'Studio tools'));
     for (const page of FOCUS.filter(name => name !== 'project')) {
       const label = page === 'refmods' ? 'RefMods' : page[0].toUpperCase() + page.slice(1);
-      this.mobileMore.append(button(label, `Open ${label}`, () => this.openFocus(page)));
+      const open = button(label, `Open ${label}`, () => this.openFocus(page));
+      if (PAGE_FEATURE[page]) open.dataset.h3cFeature = PAGE_FEATURE[page];
+      this.mobileMore.append(open);
     }
     main.append(this.mobileMore);
     this.mobileNav = el('nav', 'h3cx-mobile-nav');
@@ -476,6 +507,7 @@ export class Studio {
         else if (page === 'references') this.setReferencesVisible(true);
         else this.setMobilePage(page);
       });
+      if (page === 'references') control.dataset.h3cFeature = 'references';
       this.mobileNav.append(control);
     }
     this.track = el('footer', 'h3cx-track');
@@ -494,7 +526,7 @@ export class Studio {
     this.track.append(toolbar);
     main.append(this.splitter('lib', 'v', 'References width'), this.splitter('insp', 'v', 'Inspector width'));
     this.splitTrack = this.splitter('track', 'h', 'Timeline height');
-    root.append(bar, activity, main, this.splitTrack, this.track, this.mobileNav);
+    root.append(bar, activity, this.gateNotices, main, this.splitTrack, this.track, this.moreSlot, this.mobileNav);
     this.applyLayout();
     // Ctrl + scroll over the lane zooms about the pointer; plain scroll still pans.
     this.track.addEventListener('wheel', (event) => {
@@ -688,6 +720,7 @@ export class Studio {
     if (this.host !== host) {
       this.giveBack();
       this.host = host;
+      this.gateKey = null;
       this.historySignature = null;
       this.libraryPage = 'references';
       this.focusPage = null;
@@ -1022,6 +1055,29 @@ export class Studio {
       if (!cancel.hidden) this.stopButton.hidden = true;
     }
     this.refreshPlayer(watch);
+    this.applyGate();
+  }
+
+  // Guided mode hides the parts whose H3 nodes are not connected (CSS on data-h3c-feature); Full shows all of them.
+  applyGate() {
+    const host = this.host;
+    if (!host?.uiMode) return;
+    const mode = host.uiMode(), features = host.features(), off = hiddenFeatures(mode, features);
+    const held = mode === 'guided' ? hiddenWithData(host.editor.state, features) : [];
+    const key = JSON.stringify([mode, off, held]);
+    if (key === this.gateKey) return;
+    this.gateKey = key;
+    this.root.dataset.h3cOff = off.join(' ');
+    this.modeButton.textContent = mode === 'guided' ? 'Show all features' : 'Simplify';
+    this.modeButton.title = mode === 'guided' ? 'Show every Studio feature, connected or not. Nothing in the project changes.'
+      : 'Show only the features whose H3 nodes are connected to this Timeline. Nothing in the project changes.';
+    this.gateNotices.replaceChildren(featureNotices(held, feature => host.addFeature(feature)));
+    this.moreSlot.replaceChildren(mode === 'guided' ? moreRow(features, item => host.addFeature(item.feature)) : '');
+    const hidden = name => off.includes(PAGE_FEATURE[name]);
+    if (this.focusPage && hidden(this.focusPage)) this.backToViewer();
+    if (['audio', 'text'].includes(this.inspectorTarget?.kind) && off.includes('sound')) this.inspect({kind: 'clip', box: host.editor.box()?.id ?? null});
+    const editor = host.editor;
+    if ((editor.activeTab === 'still' && off.includes('references')) || (editor.activeTab === 'takes' && off.includes('continuity'))) editor.setTab('prompt');
   }
 
   placeCancel(cancel, held) {

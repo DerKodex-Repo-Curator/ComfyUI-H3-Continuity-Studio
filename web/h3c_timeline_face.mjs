@@ -9,6 +9,10 @@ const CSS = `
 .h3ct-face-summary, .h3ct-face-progress { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .h3ct-face-progress { min-height: 1.45em; color: #aab1bd; }
 .h3ct-face-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.h3ct-face-more { display: flex; gap: 4px 8px; flex-wrap: wrap; align-items: baseline; color: #aab1bd; font-size: 12px; }
+.h3ct-face-more[hidden] { display: none; }
+.h3ct-face-more button { padding: 0; border: 0; background: none; color: #8fb4ec; font: inherit; cursor: pointer; }
+.h3ct-face-more button:hover, .h3ct-face-more button:focus-visible { text-decoration: underline; }
 `;
 
 function el(tag, className, text) {
@@ -50,8 +54,23 @@ export class TimelineFace {
     this.generateButton = button('Generate clip', 'Generate the selected clip using its seed mode', () => editor.queueBox(1));
     const actions = el('div', 'h3ct-face-actions');
     actions.append(button('Open Studio', 'Edit this Timeline in a full-window Studio', open), this.nextButton, this.allButton, this.generateButton);
-    this.root.append(this.summaryEl, this.progressEl, actions);
+    this.moreEl = el('div', 'h3ct-face-more');
+    this.moreEl.hidden = true;
+    this.root.append(this.summaryEl, this.progressEl, actions, this.moreEl);
     this.editor = editor;
+  }
+
+  // Guided mode: the optional H3 nodes not connected yet, one short link each.
+  setMore(items, onAdd) {
+    this.moreEl.replaceChildren();
+    this.moreEl.hidden = !items.length;
+    if (!items.length) return;
+    this.moreEl.append(el('span', null, 'Add:'));
+    for (const item of items) {
+      const add = button(`+ ${item.title.replace(/^H3 \+ /, '').replace(/^H3 /, '')}`, `${item.title}: ${item.benefit}`, () => onAdd(item));
+      add.className = '';
+      this.moreEl.append(add);
+    }
   }
 
   height() { return Math.max(FACE_HEIGHT, this.root.scrollHeight); }

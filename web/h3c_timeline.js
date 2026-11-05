@@ -10,9 +10,9 @@ import { api } from '../../scripts/api.js';
 import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261004-studio-1';
-import { studio } from './h3c_studio.mjs?v=20261104-history-1';
-import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261104-history-1';
+import { studio } from './h3c_studio.mjs?v=20261105-v1-1';
+import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261105-v1-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261105-v1-1';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
@@ -23,6 +23,9 @@ import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_prepar
 import { TakesClient } from './h3c_takes.mjs?v=20261104-take-marks-2';
 import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
 import {TimelineHistory, editingSnapshot, withLiveReceipts} from './h3c_history.mjs?v=20261104-history-1';
+import {connectedFeatures, ownedSettings, setUiMode, uiMode} from './h3c_features.mjs?v=20261105-v1-1';
+import {ADD_ONS, addAddOn, missingAddOns} from './h3c_more_to_add.mjs?v=20261105-v1-1';
+import {socketSpecs, syncSockets} from './h3c_sockets.mjs?v=20261105-v1-1';
 
 const NODE_TYPE = 'H3C_Timeline';
 const STATUS_URL = '/h3c/timeline/status';
@@ -32,6 +35,8 @@ const MUTED = 2;
 const BYPASSED = 4;
 const RUN_ENDS = new Set(['execution_success', 'execution_error', 'execution_interrupted']);
 const mounted = new Set();
+// The H3 Timeline definition's sockets, read from the first node created, so Guided can put back what it hid.
+let sockets = null;
 const projectSessions = new Map();
 // ComfyUI's render progress for the whole page; every Timeline face and the Studio read it.
 let watch = idleWatch();
@@ -266,6 +271,13 @@ export class TimelineHost {
     this.hook('onConnectionsChange', () => {
       editor.render();
       this.changed();
+      setTimeout(() => this.watchFeatures(), 50);
+    });
+    // A workflow saved before 1.0.0 has no h3c_ui, so it opens in Full mode, exactly as it was. Fresh nodes are Guided.
+    this.hook('onConfigure', (info) => {
+      if (!info?.properties?.h3c_ui) setUiMode(node, 'full');
+      this.featureKey = null;
+      setTimeout(() => this.watchFeatures(), 0);
     });
     this.hook('onExecuted', (message) => {
       const status = message?.h3c_timeline?.[0];
@@ -289,6 +301,54 @@ export class TimelineHost {
     }
     mounted.add(this);
     this.showProgress();
+  }
+
+  // Guided and Full modes, and the optional H3 nodes connected to this Timeline.
+
+  uiMode() { return uiMode(this.node); }
+
+  features() { return connectedFeatures(this.node.graph, this.node); }
+
+  setUiMode(mode) {
+    setUiMode(this.node, mode);
+    this.watchFeatures();
+    this.node.setDirtyCanvas?.(true, true);
+    recordStep();
+  }
+
+  addFeature(feature) {
+    const item = ADD_ONS.find(entry => entry.feature === feature);
+    const graph = this.node.graph;
+    if (!item || !graph) return;
+    addAddOn(graph, this.node, item.type, type => globalThis.LiteGraph?.createNode?.(type));
+    graph.setDirtyCanvas?.(true, true);
+    this.watchFeatures();
+    recordStep();
+  }
+
+  // Runs every second and after connection changes: the add-on chain can change anywhere in the graph. Mirrors the
+  // connected add-ons' settings onto the Timeline's advanced widgets (so status checks and the Timeline API read the
+  // values the engine uses), syncs the sockets to the mode, and re-gates the Studio and the face when features change.
+  watchFeatures() {
+    const node = this.node, graph = node.graph;
+    if (this.removed || !graph || app.configuringGraph) return;
+    for (const [name, value] of Object.entries(ownedSettings(graph, node))) {
+      const widget = findWidget(node, name);
+      if (widget && widget.value !== value) {
+        widget.value = value;
+        this.settingChanged(name);
+      }
+    }
+    const mode = uiMode(node), features = connectedFeatures(graph, node);
+    if (sockets && !app.canvas?.linkConnector?.isConnecting && syncSockets(node, sockets, mode, features)) {
+      this.fit();
+      this.relayout();
+    }
+    const key = `${mode}:${[...features].sort().join()}`;
+    if (key === this.featureKey) return;
+    this.featureKey = key;
+    this.face.setMore(mode === 'guided' ? missingAddOns(features) : [], item => this.addFeature(item.feature));
+    if (studio().host === this) studio().applyGate();
   }
 
   // The Studio's view of this Timeline.
@@ -1147,6 +1207,7 @@ app.registerExtension({
     api.addEventListener('execution_success', () => {
       for (const host of mounted) host.schedule(0);
     });
+    setInterval(() => { for (const host of mounted) host.watchFeatures(); }, 1000);
   },
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData?.name !== NODE_TYPE) return;
@@ -1154,6 +1215,8 @@ app.registerExtension({
     nodeType.prototype.onNodeCreated = function (...args) {
       const result = onNodeCreated?.apply(this, args);
       if (!findWidget(this, 'timeline')) return result;
+      sockets ??= socketSpecs(this);
+      setUiMode(this, 'guided');
       const host = new TimelineHost(this);
       host.editor.startIfEmpty();
       host.history.reset(host.historyState());

@@ -610,6 +610,14 @@ export class TimelineEditor {
     this.castEl = this.cast.root;
     this.root.append(head, this.feedbackEl, this.referencesEl, this.pictures.root, this.refmodsEl, this.chain.root, this.castEl, this.frameImages.preparation.root, lane, this.hintEl,
       this.panelEl);
+    // In the Studio's Guided mode these stay hidden until their H3 node is connected (h3c_gating.mjs).
+    const gated = {
+      references: [this.tabButtons.still, this.tabPanels.still, this.refmodFramesField, this.promptReferencesDetails,
+        this.referencesEl, this.pictures.root, this.refmodsEl, this.stillsEl, this.frameImages.preparation.root],
+      sound: [this.dialogueField, this.audioLanes.root, this.audioLanes.settings, this.dialogue.root],
+      continuity: [this.tabButtons.takes, this.tabPanels.takes, this.bridgeDetails, this.memoryDetails],
+      story: [cast, this.castEl]};
+    for (const [feature, parts] of Object.entries(gated)) for (const part of parts) part.dataset.h3cFeature = feature;
     this.renderRefmods();
   }
 
