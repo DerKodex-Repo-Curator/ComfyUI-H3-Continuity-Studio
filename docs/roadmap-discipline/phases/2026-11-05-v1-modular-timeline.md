@@ -21,7 +21,21 @@
   - *Done:* PRODUCT.md written; spec `docs/superpowers/specs/2026-11-05-v1-modular-timeline-design.md` written and builder-checked; the builder's answers are in the spec as marked calls.
   - *Next:* User reviews and approves the spec. Main risk: spike S1 (hide unconnected sockets on the core).
 
-- [ ] **V1-2** (State: `in_progress` | Verification: `docs/superpowers/plans/2026-11-05-v1-modular-timeline.md exists, user-approved`)
+- [x] **V1-2** (State: `passing` | Verification: `docs/superpowers/plans/2026-11-05-v1-modular-timeline.md exists, user-approved`)
   - *Behavior:* Implementation plan via superpowers:writing-plans, minimal per ponytail. No code until V1-1 and V1-2 are approved. Implementation features get added to this ledger after plan approval.
   - *Done:* Plan written 2026-11-05. Spec approved (LGTM) and amended: planning found ~30 hard-coded `H3C_Timeline` checks (Timeline API profiles, native queue, takes, stills, story library, Studio); user chose to keep the id and add Guided/Full modes (`properties.h3c_ui`, absent = Full) instead of a new core id plus hidden classic.
-  - *Next:* User reviews the plan and picks subagent-driven or native execution. First task: spikes S1 (hide unconnected sockets) and S2 (advanced widgets keep positions). If S1 fails, ask the user.
+  - *Approved:* 2026-11-05, native execution in worktree `feat/v1-modular-timeline` (from origin/main c0f3a00) so it does not block other work.
+
+### Phase 15: v1.0.0 implementation (branch `feat/v1-modular-timeline`)
+
+- [x] **V1-S1** (State: `passing` | Verification: headless Chromium probe vs live 8188, frontend 1.58.x, Vue nodes on, writes blocked)
+  - *Answer:* `input.hidden` has no effect. `node.removeInput(k)` hides an unconnected socket (Autogrow groups and `audio_vae` included), and `graphToPrompt` stays valid. On load, the frontend reconciles inputs with the node definition and restores every missing socket, so saved files keep the full socket list, and links and prompts survive a round trip. Re-adding works with `node.addInput(name, type, {shape, tooltip, ...})` from the definition's own slot specs, and Autogrow still grows from a re-added slot. Rules for the build: re-apply hiding after configure, never re-add a name that is present, and never touch `check_lazy_status`.
+- [x] **V1-S2** (State: `passing` | Verification: same probe, `/object_info` patched in the browser)
+  - *Answer:* `advanced=True` on `carry_audio`, `ref_image_size` and `audio_context_frames` moves them under "Show advanced inputs"; the 0.12.x example's `widgets_values` are byte-identical before and after. An appended optional `project` input is added to old saved nodes automatically.
+- [ ] **V1-3** Task 2: `H3C_PROJECT`, three add-ons, core input, equivalence fixtures.
+- [ ] **V1-4** Task 3: connected-feature walk (pure JS).
+- [ ] **V1-5** Task 4: Studio gating and the Guided/Full toggle.
+- [ ] **V1-6** Task 5: More you can add row and the node face (socket hiding per V1-S1).
+- [ ] **V1-7** Task 6: examples/v1.
+- [ ] **V1-8** Task 7: docs, changelog, version.
+- [ ] **V1-9** Task 8: release verification (GPU run needs the user).
