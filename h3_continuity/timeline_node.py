@@ -137,7 +137,7 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
             if record:
                 full_video = _view(name, record["file"], record["sources"])
         partial = None
-        if materialize and not current and done and soundtrack is not None:
+        if materialize and not current and segments and soundtrack is not None:
             from .timeline_api.service import authorize_sequence
             authorize_sequence(name, managed_owner, "full_video")
             try:
@@ -152,7 +152,7 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
         if partial:
             status["partial_video"] = {"file": _view(name, partial["file"], partial["sources"]),
                                        "rendered": partial["rendered"], "boxes": partial["boxes"],
-                                       "mode": partial["mode"]}
+                                       "mode": partial["mode"], "older": partial["older"]}
             if parsed.all_bridges:
                 status["partial_video"]["note"] = "Bridges and replacements are left out."
         if parsed.all_bridges:

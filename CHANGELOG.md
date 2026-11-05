@@ -4,6 +4,16 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.9] - 2026-11-05
+
+### Fixed
+
+- Partial playback includes older saved takes in Timeline order instead of counting only current renders. The badge identifies older takes; rendering status remains unchanged.
+- Assembly converts the native 24 fps edit clock to delivered frame rates, preserving the full duration of interpolated 48 fps footage and its audio. Uploaded tracks retain their authored Timeline positions when older takes have different lengths.
+- Visual memory can reference older saved native latents. Missing files, incompatible resolution, wrong box identity and selected moments beyond the saved footage remain blocked; continuation checks are unchanged.
+
+[Changes since v0.12.8](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.8...v0.12.9).
+
 ## [0.12.8] - 2026-11-05
 
 ### Fixed

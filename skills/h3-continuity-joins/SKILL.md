@@ -11,6 +11,10 @@ wants one setting everywhere.
 
 ## The joins
 
+Visual memory can use an older saved take even when that source box needs rendering
+after edits. Its native latents, box identity and matching resolution are still required;
+using it as a reference does not mark the source current or relax continuation checks.
+
 | Join | Box fields | What H3 gets |
 | --- | --- | --- |
 | Continue | `cut` and `new_scene` false | The previous box's last `context_frames` frames, frozen as native context, and their audio with `carry_audio`. It also gets the previous box's saved last image as a guide at its first new frame, so the pose doesn't reset. Motion and sound carry on. |

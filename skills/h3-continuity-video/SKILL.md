@@ -78,8 +78,8 @@ texts are under `docs/` and the user guide is under `guide/`.
   when it fits both neighbours) or deleted. The Studio can render 1 to 10 takes
   of a box at once, and the API lists and switches takes (see `h3-continuity-api`).
   Put an earlier take back rather than re-rendering when it was better.
-- **Full video.** The Studio can play current rendered boxes together before completion,
-  skipping unfinished boxes (or filling gaps from a saved split-video source). Partial
+- **Full video.** The Studio can play saved rendered boxes together before completion,
+  including older takes and skipping boxes with no saved video (or filling gaps from a saved split-video source). Partial
   videos omit bridges and replacements. Once every box is current, H3 Save Segment assembles
   `<name>_full.mp4` from the box videos in Timeline order. It plays rendered
   bridges on their joins, and the uploaded recording instead of H3's audio when

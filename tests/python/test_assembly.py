@@ -119,6 +119,20 @@ class AssemblyTest(unittest.TestCase):
         parts, labels, _ = self.build([])
         self.assertEqual([(first, count) for _, first, count, _ in parts], [(0, 22), (0, 22)])
 
+    def test_interpolated_delivery_windows_use_the_delivered_frame_rate(self):
+        for entry in self.manifest["segments"]:
+            media.write_segment_video(os.path.join(self.folder, entry["video"]["file"]),
+                                      frames(22, 0).repeat_interleave(2, dim=0), 48, 16)
+            entry["video"].update(fps=48, frames=44)
+        parts = [(self.manifest["segments"][0], 6, 10, False),
+                 (self.manifest["segments"][1], 0, 22, False)]
+        written, _ = media.build_full_video(os.path.join(self.folder, "interpolated.mp4"),
+                                             nodes._video_windows(self.folder, parts), None, 16)
+        with av.open(written) as container:
+            stream = container.streams.video[0]
+            self.assertEqual(sum(1 for _ in container.decode(stream)), 64)
+            self.assertAlmostEqual(float(stream.duration * stream.time_base), 32 / 24, places=4)
+
     def test_insertion_bridges_still_insert(self):
         bridge = {"box": "b", "stem": "bridge@b", "frames": 22, "context_frames": 5, "played": 12,
                   "video": {"file": "bridge@b.mp4", "frames": 12, "fps": 24}}

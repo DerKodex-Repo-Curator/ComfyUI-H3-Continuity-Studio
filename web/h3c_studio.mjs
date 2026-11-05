@@ -6,7 +6,7 @@ import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
 import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261105-rendered-video-1';
 
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
-import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261105-rendered-video-1';
+import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261105-saved-playback-1';
 import {historyShortcut} from './h3c_history.mjs?v=20261104-history-1';
 import {compatibleVideoUrl,videoPlaybackUrl} from './h3c_video_preview.mjs?v=20261105-mobile-video-1';
 

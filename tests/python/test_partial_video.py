@@ -189,14 +189,15 @@ class PartialVideoTest(unittest.TestCase):
                                        lambda index, entry: True, materialize=True)
         self.assertEqual(status["partial_video"]["mode"], "rendered")
 
-    def test_ordinary_partial_omits_stale_clips_and_handles_no_current_video(self):
+    def test_ordinary_partial_includes_saved_takes_without_marking_them_current(self):
         self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
         record, _ = self.build(done={2})
         self.assertIsNotNone(record)
-        self.assertEqual(record["rendered"], 1)
+        self.assertEqual(record["rendered"], 2)
+        self.assertEqual(record["older"], 1)
         _, labels = decoded(os.path.join(self.folder, record["file"]))
-        self.assertEqual(labels, [(2, i) for i in range(17)])
-        self.assertEqual(self.build(done=set()), (None, ""))
+        self.assertEqual(labels, [(0, i) for i in range(22)] + [(2, i) for i in range(17)])
+        self.assertEqual(self.build(done=set())[0]["older"], 2)
 
     def test_missing_rendered_video_does_not_hide_other_playable_clips(self):
         self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
@@ -206,6 +207,37 @@ class PartialVideoTest(unittest.TestCase):
         self.assertEqual(record["rendered"], 1)
         _, labels = decoded(os.path.join(self.folder, record["file"]))
         self.assertEqual(labels, [(0, i) for i in range(22)])
+
+    def test_older_saved_takes_play_even_when_no_boxes_are_current(self):
+        self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
+        status = timeline_node._status("seq", self.folder, self.parsed, self.manifest,
+                                       lambda index, entry: False, materialize=True)
+        self.assertIn("partial_video", status)
+        self.assertEqual(status["partial_video"]["rendered"], 2)
+        self.assertEqual(status["partial_video"]["older"], 2)
+        self.assertFalse(any(item["status"] == "done" for item in status["boxes"]))
+
+    def test_saved_takes_follow_box_identity_after_reordering(self):
+        self.parsed = parse([box("c", 22), box("a", 22, cut=True), box("replacement", 22, cut=True)])
+        record, _ = self.build(done=set())
+        self.assertIsNotNone(record)
+        _, labels = decoded(os.path.join(self.folder, record["file"]))
+        self.assertEqual(labels, [(2, i) for i in range(17)] + [(0, i) for i in range(22)])
+
+    def test_interpolated_48fps_partial_preserves_full_picture_and_audio_duration(self):
+        self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
+        for entry, channel in zip(self.manifest["segments"], (0, 2)):
+            count = store.played_frames(entry) * 2
+            media.write_segment_video(os.path.join(self.folder, entry["video"]["file"]),
+                                      coded(count, channel, SEGMENT_SIZE), 48, 16)
+            entry["video"].update(fps=48, frames=count)
+        record, _ = self.build()
+        with av.open(os.path.join(self.folder, record["file"])) as container:
+            stream = container.streams.video[0]
+            self.assertAlmostEqual(float(stream.duration * stream.time_base), 39 / 24, places=4)
+            self.assertEqual(sum(1 for _ in container.decode(stream)), 78)
+        _, labels = decoded(os.path.join(self.folder, record["file"]))
+        self.assertEqual(labels, [(0, i) for i in range(44)] + [(2, i) for i in range(34)])
 
     def test_mux_switch_keeps_h3_sound_and_invalidates_the_partial_cache(self):
         self.keep()
@@ -233,6 +265,21 @@ class PartialVideoTest(unittest.TestCase):
         expected = torch.cat([ramp[:, :round(22 * RATE / 24)], ramp[:, round(39 * RATE / 24):]], dim=-1)
         self.assertEqual(rate, RATE)
         self.assertTrue(torch.equal(waveform, expected))
+
+    def test_older_take_length_does_not_move_a_later_uploaded_audio_clip(self):
+        self.parsed = parse([box("a", 39), box("b", 17), box("c", 17)])
+        lane = clip(start=56 / 24, duration=17 / 24)
+        captured = []
+        source = {"waveform": torch.full((1, 1, RATE), 0.6), "sample_rate": RATE}
+        with mock.patch.object(audio_tracks, "soundtrack_sources", return_value=[["clip"]]), \
+                mock.patch.object(audio_tracks, "read", return_value=source), \
+                mock.patch.object(media, "build_full_video", side_effect=lambda path, videos, audio, crf, size:
+                                  (captured.append(audio), (path, ""))[1]):
+            self.build(soundtrack=[lane])
+        waveform, rate = captured[0]
+        self.assertEqual(rate, RATE)
+        self.assertAlmostEqual(waveform[0, round(30 * RATE / 24)].item(), 0.6, places=5)
+        self.assertAlmostEqual(waveform[0, round(10 * RATE / 24)].item(), 0, places=5)
 
     def test_mux_choice_switches_between_uploaded_and_h3_audio_in_partial_and_full_video(self):
         path = os.path.join(self.folder, "uploaded.wav")
