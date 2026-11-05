@@ -1642,11 +1642,20 @@ export class TimelineEditor {
     }
     shotWidth=Math.max(0,shotWidth);
     for(const {box,index,start,left,right,targets,shots} of clips) {
-      const positions=new Map();let next=left;
+      const positions=new Map(),widths=new Map();let next=left;
+      // Natural layout: each shot spans from its own start to the next shot (or clip end).
+      const natural=new Map(),minNatural=24;
       shots.forEach((shot,i)=>{
+        const from=Math.max(left,shot.movieFrame/span*width);
+        const to=i+1<shots.length?shots[i+1].movieFrame/span*width-gap:right;
+        natural.set(shot.target.shot,{left:from,width:to-from});
+      });
+      const useNatural=shots.length>0&&[...natural.values()].every(n=>n.width>=minNatural);
+      if(useNatural) for(const [k,n] of natural) {positions.set(k,n.left);widths.set(k,n.width);}
+      else shots.forEach((shot,i)=>{
         const latest=right-shotWidth-(shots.length-i-1)*(shotWidth+gap);
         const position=Math.min(latest,Math.max(next,shot.movieFrame/span*width));
-        positions.set(shot.target.shot,position);next=position+shotWidth+gap;
+        positions.set(shot.target.shot,position);widths.set(shot.target.shot,shotWidth);next=position+shotWidth+gap;
       });
       for (const {target, movieFrame} of targets) {
         const label = targetLabel(target), name = target.kind === 'shot' ? `shot:${target.shot}` : target.kind;
@@ -1661,7 +1670,7 @@ export class TimelineEditor {
         if(target.kind==='shot') {
           // Keep timing gaps where possible; late or coincident shots fit inside their clip.
           mark.classList.add('interior');mark.style.left=percent(positions.get(target.shot)/width);
-          mark.style.top='76px';mark.style.width=`${shotWidth}px`;mark.style.height='66px';
+          mark.style.top='76px';mark.style.width=`${widths.get(target.shot)}px`;mark.style.height='66px';
         } else {
           mark.style.left=`calc(${percent((start+(target.kind==='last'?box.frames/2:0))/span)} + 2px)`;
           mark.style.top='4px';mark.style.width=`calc(${percent(box.frames/2/span)} - 4px)`;mark.style.height='66px';

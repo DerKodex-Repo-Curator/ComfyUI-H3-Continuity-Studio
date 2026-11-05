@@ -4,6 +4,14 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-11-05
+
+### Fixed
+
+- **Shot thumbnails on the Timeline now start where their Shot starts.** A Shot at 00:01.500 no longer paints over the first 1.5 s of its box: each Shot thumbnail spans from its own start to the next Shot (or the end of the box). Boxes whose Shots sit too close together keep the earlier packed layout.
+
+[Changes since v0.12.2](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.2...v0.12.3).
+
 ## [0.12.2] - 2026-11-04
 
 ### Fixed
