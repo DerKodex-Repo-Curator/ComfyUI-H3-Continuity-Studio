@@ -18,6 +18,10 @@ A clip is current only while its prompt, seed, length, join, pictures, RefMods, 
 
 A bridge, a memory moment or a continuing clip needs a rendered neighbour or source. Render the named clip first.
 
+## A long Render fails with "Unable to allocate" or "Cannot allocate memory"
+
+ComfyUI ran out of memory on the PC: RAM and the Windows page file together, not the GPU. The failing node is usually one that loads or decodes a whole finished video after H3 Timeline, such as a refinement or upscale step. Back-to-back runs raise the peak, and ComfyUI recovers once it idles. Render stops at the first failed run and keeps the rest unqueued, so press **Render** again after the PC has been idle for a minute. If the same clip fails twice, shorten the clip, lower the size that step works at, or make the page file larger.
+
 ## A continuing clip refuses to render
 
 After a clip that [drops frames](../build/exact-lengths.md#cuts-after-dropped-frames), the next clip must be a **Cut**, and a continuing clip needs the clip before it to play at least `context_frames` frames.

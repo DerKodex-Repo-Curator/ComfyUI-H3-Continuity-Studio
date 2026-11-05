@@ -9,10 +9,11 @@ import {syncImageOutputs,compileImageOutputs} from './h3c_timeline_images.mjs?v=
 import { api } from '../../scripts/api.js';
 import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
-import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261004-studio-1';
-import { studio } from './h3c_studio.mjs?v=20261105-viewer-selection-1';
+import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
+import { DEFAULT_AHEAD, QueueFeed, feedNote, queueAhead } from './h3c_queue_feed.mjs?v=20261105-queue-feed-1';
+import { studio } from './h3c_studio.mjs?v=20261105-queue-feed-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261105-still-quality-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261105-queue-feed-1';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
@@ -30,6 +31,7 @@ const BIBLE_URL = '/h3c/timeline/bible';
 const SETTINGS = ['width', 'height', 'context_frames', 'carry_audio', 'ref_image_size', 'audio_context_frames'];
 const MUTED = 2;
 const BYPASSED = 4;
+const QUEUE_AHEAD_SETTING = 'H3C.Timeline.QueueAhead';
 const RUN_ENDS = new Set(['execution_success', 'execution_error', 'execution_interrupted']);
 const mounted = new Set();
 const projectSessions = new Map();
@@ -325,7 +327,7 @@ export class TimelineHost {
     const busy = this.project?.busy || this.project?.project?.active_job || this.project?.project?.active_operation
       || watch.running || watch.turn || watch.remaining > 0
       || (graph?._nodes ?? []).some(node => (node.h3cStory?.job || node.h3cStory?.starting || node.h3cStory?.forkingLibrary) || node.h3cTimeline?.editor.queuing
-        || node.h3cTimeline?.editor.queueBatch || node.h3cTimeline?.submitting
+        || node.h3cTimeline?.editor.queueBatch || node.h3cTimeline?.submitting || node.h3cTimeline?.feed
         || node.h3cTimeline?.referenceClient?.busy || node.h3cTimeline?.stillClient?.active.size || node.h3cTimeline?.stillClient?.recovering || node.h3cTimeline?.editor.frameImages.generating
         || node.h3cTimeline?.editor.pictures.busy || node.h3cTimeline?.editor.cast.busy);
     return busy ? 'Finish or cancel Story writing/checking, or use Stop & clear queue, before creating a project.' : null;
@@ -395,6 +397,7 @@ export class TimelineHost {
   // Clearing the queue first means the next pending run can't start between the two calls.
   async stop() {
     if (this.project) throw new Error('API jobs retain their queue receipts. Follow this job in the project status.');
+    this.feed?.stop();
     await api.clearItems('queue');
     await api.interrupt();
   }
@@ -434,13 +437,22 @@ export class TimelineHost {
   undo() { this.history.undo(); }
   redo() { this.history.redo(); }
 
+  // Whether a Render is still posting runs to ComfyUI a few at a time.
+  feeding() { return !!this.feed; }
+
+  // What Render shows beside the buttons: ComfyUI's progress, and how a Render that queues runs a few at a time stands.
+  progress() {
+    return progressText(watch, this.runningBox(), (id) => this.titleOf(id),
+      {held: this.feed?.held ?? 0, note: this.feedMessage});
+  }
+
   showProgress() {
     syncImageOutputs(this.node, this.editor?.state);
     if (!this.face) return;
     const editor = this.editor;
     this.face.update({
       summary: editor.summaryEl.textContent,
-      progress: progressText(watch, this.runningBox(), (id) => this.titleOf(id)),
+      progress: this.progress(),
       allLabel: editor.renderButton.textContent,
       canRender: !editor.renderButton.disabled,
     });
@@ -895,33 +907,73 @@ export class TimelineHost {
   }
 
   async queue(count, box, bridge) {
+    if (this.feed) throw new Error('A Render is still queueing runs. Press Stop first, or wait for it to finish.');
     this.submitting = true;
     this.requested = box ?? null;
     this.requestedBridge = bridge ?? null;
+    this.feedMessage = null;
     const one = bridge != null ? 'one bridge' : 'one box';
     try {
       if (this.project) return await this.project.render({count: box == null && bridge == null ? 1 : count,
         boxId: box != null ? this.editor.state.boxes[box - 1]?.id : undefined, bridgeId: bridge});
       const definitions=await (await api.fetchApi('/object_info')).json();
-      for(let run=0;run<count;run++) {
-        const snapshot=await app.graphToPrompt();
-        const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
-        const outputs=videoOutputs(snapshot,id,definitions),prompt=isolateVideoPrompt(snapshot,id,outputs);
-        const target=prompt.output[id];
-        if(box!=null || bridge!=null) {
-          if(typeof target.inputs.timeline!=='string') throw new Error(`The Timeline boxes must be editable here to render ${one}.`);
-          const request=bridge!=null?{render_bridge:bridge}:{render_box:box};
-          target.inputs.timeline=stringifyJSON({...parseJSON(target.inputs.timeline),...request});
-        }
-        const queued=await this.stillRequest('/prompt',{prompt_id:crypto.randomUUID(),prompt:prompt.output,
-          partial_execution_targets:outputs,extra_data:{extra_pnginfo:{workflow:prompt.workflow}}});
-        if(queued.error) throw new Error(queued.error.message??String(queued.error));
+      const post = () => this.postRun(definitions, box, bridge, one);
+      const ahead = queueAhead(app.ui?.settings?.getSettingValue?.(QUEUE_AHEAD_SETTING));
+      if (!ahead || count <= ahead) {
+        for (let run = 0; run < count; run++) await post();
+        return;
       }
+      // Each run renders the next box that needs it, so a failure repeats down a long queue. Keep a few in ComfyUI.
+      this.feed = new QueueFeed({total: count, ahead, post,
+        cancel: ids => api.fetchApi('/queue', {method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({delete: ids})}),
+        lookup: id => this.runState(id),
+        listen: (type, handler) => {
+          const listener = event => handler(event.detail);
+          api.addEventListener(type, listener);
+          return () => api.removeEventListener(type, listener);
+        },
+        onChange: () => this.showProgress(),
+        onEnd: outcome => {
+          this.feed = null;
+          this.feedMessage = feedNote(outcome);
+          if (!this.removed) this.editor.renderHead();
+          this.showProgress();
+        }});
+      await this.feed.start();
     } catch (error) {
       this.requested = null;
       this.requestedBridge = null;
+      this.feed = null;
       throw error;
-    } finally { this.submitting = false; }
+    } finally { this.submitting = false; this.showProgress(); }
+  }
+
+  // Posts one run of the Timeline's video outputs to ComfyUI and returns its prompt id.
+  async postRun(definitions, box, bridge, one) {
+    const snapshot=await app.graphToPrompt();
+    const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+    const outputs=videoOutputs(snapshot,id,definitions),prompt=isolateVideoPrompt(snapshot,id,outputs);
+    const target=prompt.output[id];
+    if(box!=null || bridge!=null) {
+      if(typeof target.inputs.timeline!=='string') throw new Error(`The Timeline boxes must be editable here to render ${one}.`);
+      const request=bridge!=null?{render_bridge:bridge}:{render_box:box};
+      target.inputs.timeline=stringifyJSON({...parseJSON(target.inputs.timeline),...request});
+    }
+    const promptId=crypto.randomUUID();
+    const queued=await this.stillRequest('/prompt',{prompt_id:promptId,prompt:prompt.output,
+      partial_execution_targets:outputs,extra_data:{extra_pnginfo:{workflow:prompt.workflow}}});
+    if(queued.error) throw new Error(queued.error.message??String(queued.error));
+    return queued.prompt_id??promptId;
+  }
+
+  // Where ComfyUI has a run: still in its queue, or finished in its history.
+  async runState(id) {
+    const queue = await (await api.fetchApi('/queue')).json();
+    if ([...(queue.queue_running ?? []), ...(queue.queue_pending ?? [])].some(row => row[1] === id)) return 'queued';
+    const item = (await (await api.fetchApi(`/history/${id}`)).json())[id];
+    if (!item) return 'gone';
+    return item.status?.status_str === 'success' ? 'success' : 'error';
   }
 
   settingChanged(name) {
@@ -1122,6 +1174,16 @@ export class TimelineHost {
 
 app.registerExtension({
   name: 'h3c.timeline',
+  settings: [{
+    id: QUEUE_AHEAD_SETTING,
+    category: ['H3 Continuity', 'Timeline', 'Runs kept in the queue'],
+    name: 'Runs kept in ComfyUI’s queue while Render all works',
+    tooltip: 'Render all queues the next runs as earlier ones finish and stops at the first failure, so a failing box is not '
+      + 'retried down a long queue. Keep this page open while it works. 0 queues every run at once.',
+    type: 'number',
+    attrs: {min: 0, max: 100, step: 1},
+    defaultValue: DEFAULT_AHEAD,
+  }],
   setup() {
     const graphToPrompt = app.graphToPrompt;
     app.graphToPrompt = async function (...args) {

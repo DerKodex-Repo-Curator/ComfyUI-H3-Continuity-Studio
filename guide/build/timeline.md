@@ -68,6 +68,8 @@ A **bridge** is a generated move between two rendered clips; see [Joins and brid
 
 ComfyUI's **Run** button also works: each queued run renders the next clip that needs it.
 
+A long Render keeps only three runs in ComfyUI's queue. It adds one as each finishes, and stops at the first run that fails, so a clip that cannot render is not retried down the whole queue. The progress line shows how many runs are still to be queued. Keep the page open while it works; if the page closes, the runs already in ComfyUI's queue finish and the rest wait for the next **Render**. After a failure, fix the cause and press **Render** again: it carries on with the clips that are not rendered yet. **Settings → H3 Continuity → Timeline** sets the number of runs kept queued; 0 queues every run at once.
+
 A clip is **current** when its saved render still matches its prompt, seed, length, join, pictures, memory and the node's settings. Change any of those and the clip needs a render again; the Timeline says why when you point at it. A clip that **continues** another also needs a render when the clip before it renders again.
 
 !!! tip "Re-rendering one clip"

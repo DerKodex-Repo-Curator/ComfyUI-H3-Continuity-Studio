@@ -1168,7 +1168,7 @@ export class TimelineEditor {
     if (ok && !this.stale) summary += ` · ${this.status.message}`;
     this.summaryEl.textContent = summary;
     this.renderButton.textContent = count && !remaining ? '✓ All rendered' : `▶ Render ${remaining} remaining`;
-    this.renderButton.disabled = this.host.hasVideo?.()===false || !remaining || this.queuing || !this.seedInput.validity.valid;
+    this.renderButton.disabled = this.host.hasVideo?.()===false || !remaining || this.queuing || this.host.feeding?.() || !this.seedInput.validity.valid;
     this.renderButton.title = remaining
       ? `Queue ${remaining} run${remaining === 1 ? '' : 's'}, one per ${what} that is not rendered yet`
       : `Every ${what} is rendered`;

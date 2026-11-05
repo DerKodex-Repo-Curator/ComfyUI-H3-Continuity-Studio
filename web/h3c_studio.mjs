@@ -1,7 +1,7 @@
 // The Studio: the page's one full-window view of a Timeline. While open it holds the editor's regions, and the linked
 // Story's actions, story and files, in its own layout, and it gives each one back to the place it came from when it
 // closes, opens another Timeline or the Timeline's Story changes. Its Story page edits the Story node's inputs.
-import { liveBadge, progressText } from './h3c_render_watch.mjs?v=20261004-studio-1';
+import { liveBadge, progressText } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
 import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
 import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 
@@ -1006,7 +1006,7 @@ export class Studio {
     this.showStory(host.story?.() ?? null);
     this.nameEl.textContent = host.title();
     this.nameEl.title = host.sequenceName?.() ?? '';
-    this.progressEl.textContent = progressText(watch, host.runningBox(), (id) => host.titleOf(id));
+    this.progressEl.textContent = host.progress?.() ?? progressText(watch, host.runningBox(), (id) => host.titleOf(id));
     this.stopButton.hidden = host.editor.host.projectAttached === true || !(watch.running && !watch.turn);
     this.feedbackButton.hidden = host.editor.feedbackEl.hidden;
     this.renderNavigation();

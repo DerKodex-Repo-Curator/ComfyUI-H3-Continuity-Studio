@@ -8,6 +8,10 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 - H3 Save Segment has a `codec` choice: H.264 (default, unchanged) or HEVC. HEVC saves 10-bit Main10 for HDR, tagged `hvc1` so Apple players show HLG, still without B-frames so segments join by packet copy. A re-encoded full video keeps the segments' codec.
 
+### Fixed
+
+- **Render N remaining** no longer puts every run in ComfyUI's queue at once. Each queued run renders the next box that needs it, so when one run failed (a 70-box story ran the machine out of memory), every run behind it retried the same box and failed the same way. Render now keeps 3 runs in ComfyUI's queue, adds one as each succeeds, and stops at the first failed or interrupted run, taking its own waiting runs out of the queue. The setting **Runs kept in ComfyUI's queue while Render all works** changes the number; 0 restores the old behavior. Keep the page open while a long Render works.
+
 ## [0.12.5] - 2026-11-05
 
 ### Fixed
