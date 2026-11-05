@@ -1,5 +1,5 @@
 // Marker images own editable still prompts, candidates and the acceptance transaction. Queue recovery belongs to the host.
-import {frameTargets, buildStillPrompt, applyFrameGuide} from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
+import {frameTargets, buildStillPrompt, applyFrameGuide, endpointGuide} from './h3c_shot_preview.mjs?v=20261105-flf-endpoints-1';
 import {parseState, serialize} from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import {StillPromptPreparation,preparedStillPrompt,setPreparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
 
@@ -274,7 +274,8 @@ export class FrameImages {
     const box=this.editor.state.boxes.find(box=>box.id===this.boxId);
     this.renderRecovery();
     this.root.hidden=!box && !(this.editor.state.still_requests?.length);if (!box) return;
-    this.titleEl.textContent=`Clip ${this.editor.state.boxes.indexOf(box)+1} · ${targetLabel(this.target)} image${this.generatorLabel?` · ${this.generatorLabel}`:''}`;
+    const stillName=this.target.kind!=='shot'&&this.editor.runsFlf?.(this.editor.state.boxes.indexOf(box))?`${targetLabel(this.target)} frame`:targetLabel(this.target);
+    this.titleEl.textContent=`Clip ${this.editor.state.boxes.indexOf(box)+1} · ${stillName} image${this.generatorLabel?` · ${this.generatorLabel}`:''}`;
     this.uploadButton.disabled=typeof this.host.importGuide!=='function';
     const additionalReferences=this.additionalReferences??[];
     this.additionalReferencesEl.hidden=!additionalReferences.length;
@@ -297,11 +298,13 @@ export class FrameImages {
     this.boundaryHintEl.hidden=!paired;
     this.boundaryHintEl.textContent=paired?`Continuous boundary: using a guide also sets ${paired} while both clips are unrendered.`:'';
     this.acceptedEl.replaceChildren();this.candidatesEl.replaceChildren();
-    const preview=saved?.guide??saved?.images?.[0]?.file??saved?.image;
+    const guide=this.currentGuide(saved)?.guide;
+    const frameMode=this.target.kind!=='shot'&&!!this.editor.runsFlf?.(index);
+    const preview=guide??saved?.images?.[0]?.file??saved?.image;
     if(preview) {
-      this.acceptedEl.append(this.image(preview,saved?.guide?'Accepted guide':'Candidate'));
-      const caption=el('div',null,'h3ct-row');caption.append(el('span',saved?.guide?'Guide in use':'Candidate preview',saved?.guide?'h3ct-guide-status':'h3ct-hint'));
-      if(saved?.guide) caption.append(button('Remove guide',()=>this.removeGuide()),button('Use as scene anchor',()=>this.useSceneAnchor(saved.guide)));
+      this.acceptedEl.append(this.image(preview,guide?(frameMode?'Accepted frame':'Accepted guide'):'Candidate'));
+      const caption=el('div',null,'h3ct-row');caption.append(el('span',guide?(frameMode?'Frame in use':'Guide in use'):'Candidate preview',guide?'h3ct-guide-status':'h3ct-hint'));
+      if(guide) caption.append(button(frameMode?'Remove frame':'Remove guide',()=>this.removeGuide()),button('Use as scene anchor',()=>this.useSceneAnchor(guide)));
       this.acceptedEl.append(caption);
     } else this.acceptedEl.append(el('p','No image yet. Generate candidates, upload a guide or drop an image here.','h3ct-image-empty'));
     const anchors=this.editor.state.continuity?.anchors??[];
@@ -492,10 +495,20 @@ export class FrameImages {
     if (!saved?.images?.[index]) return;
     this.host.undoStep?.();saved.images.splice(index,1);this.editor.commit();this.host.undoStep?.();this.render();
   }
+  // The guide shown for the current target: its own, or for First/Last a free Frame guide on that same frame.
+  currentGuide(saved) {
+    if(saved?.guide) return {preview:saved,guide:saved.guide};
+    if(this.target.kind==='shot') return null;
+    const index=this.editor.state.boxes.findIndex(box=>box.id===this.boxId);
+    return index<0?null:endpointGuide(this.editor.state,index,this.host.context(),this.target.kind);
+  }
   removeGuide() {
-    this.live();const {box}=this.location();const saved=box.previews?.find(item=>key(itemTarget(item))===key(this.target));
+    this.live();const {box}=this.location();
+    const current=this.currentGuide(box.previews?.find(item=>key(itemTarget(item))===key(this.target)));
+    const saved=current?.preview;
     if (!saved?.guide) return;
     this.host.undoStep?.();delete saved.guide;
+    if(!saved.target&&!saved.images?.length&&!saved.image) box.previews=box.previews.filter(item=>item!==saved);
     if(this.editor.state.continuity)this.editor.state.continuity.anchors=this.editor.state.continuity.anchors.filter(anchor=>!(anchor.box===box.id&&key(anchor.target)===key(this.target)));
     this.editor.commit();this.host.undoStep?.();this.render();
   }

@@ -46,6 +46,48 @@ export function acceptedGuideFrames(state, index, context) {
   }).filter(Number.isInteger);
 }
 
+// The accepted guide that sits on a clip's First or Last frame, whether it is saved against that marker or as a free
+// "Frame guide" at the same frame (the renderer reads both the same way). Returns {preview, guide} or null.
+export function endpointGuide(state, index, context, kind) {
+  const targets = targetFrames(state, index, context);
+  const frame = (kind === 'last' ? targets.at(-1) : targets[0])?.frame;
+  if (frame == null) return null;
+  const owned = (state.boxes[index].previews ?? []).filter(p => p.guide);
+  const resolved = p => {
+    if (!p.target) return p.frame;
+    const target = p.target.kind === 'shot' && p.target.shot === 1 ? {kind: 'first'} : p.target;
+    return targets.find(item => item.target.kind === target.kind && item.target.shot === target.shot)?.frame;
+  };
+  const matches = owned.filter(p => resolved(p) === frame);
+  const preview = matches.find(p => p.target) ?? matches[0];
+  return preview ? {preview, guide: preview.guide} : null;
+}
+
+// Free "Frame guide" stills on a clip's first or last frame become its First and Last stills, so converting to FLF2VA
+// leaves one image per endpoint instead of the same picture twice. An endpoint that already owns a guide is left alone.
+export function adoptEndpointGuides(state, index, context) {
+  const box = state.boxes[index];
+  const targets = targetFrames(state, index, context);
+  const ends = [['first', targets[0].frame], ['last', targets.at(-1).frame]].filter(([kind, frame]) => kind === 'first' || frame !== 0);
+  let changed = false;
+  for (const [kind, frame] of ends) {
+    const free = (box.previews ?? []).find(p => !p.target && p.guide && p.frame === frame);
+    if (!free) continue;
+    const owner = box.previews.find(p => p.target && (p.target.kind === kind || (kind === 'first' && p.target.kind === 'shot' && p.target.shot === 1)));
+    if (owner?.guide) continue;
+    if (owner) {
+      owner.guide = free.guide; owner.frame = frame;
+      if (free.images?.length) owner.images = [...(owner.images ?? []), ...free.images];
+      box.previews = box.previews.filter(p => p !== free);
+    } else {
+      delete free.shot;
+      free.target = {kind}; free.frame = frame;
+    }
+    changed = true;
+  }
+  return changed;
+}
+
 export function syncTargets(state, context) {
   state.boxes.forEach((box,index) => {
     const targets = targetFrames(state,index,context);
@@ -215,7 +257,15 @@ export function applyFrameGuide(state, boxId, target, file, {context = 39, bound
     item.target = structuredClone(selectedTarget);item.frame = frame;item.guide = structuredClone(file);
     const position = aliases.length ? owner.previews.indexOf(aliases[0]) : owner.previews.length;
     owner.previews = owner.previews.filter(item => !aliases.includes(item));
-    owner.previews.splice(position,0,structuredClone(item));
+    const placed = structuredClone(item);
+    owner.previews.splice(position,0,placed);
+    // A free "Frame guide" on this very frame would give the clip two guides at one frame, which the renderer rejects.
+    // The guide just accepted takes the frame over; the free one keeps only its candidates, if it has any.
+    owner.previews = owner.previews.filter(other => {
+      if (other === placed || other.target || !other.guide || other.frame !== frame) return true;
+      delete other.guide;
+      return !!other.images?.length;
+    });
   };
   if (opening && !paired) box.cut = true;
   assign(index,target,resolved.frame);

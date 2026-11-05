@@ -4,8 +4,8 @@ import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-referen
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
 import * as model from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261103-replacement-bridges-1';
-import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames } from './h3c_shot_preview.mjs?v=20261012-still-prompts-1';
-import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261104-studio-ux-1';
+import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=20261105-flf-endpoints-1';
+import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261105-flf-endpoints-1';
 import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261104-shot-split-only-1';
 import { fillReferenceSwitches } from './h3c_reference_switches.mjs?v=20261010-image-descriptions-1';
 import { ReferenceReplacements } from './h3c_reference_replacements.mjs?v=20261011-reference-preparation-1';
@@ -432,7 +432,11 @@ export class TimelineEditor {
     this.structureEl.addEventListener('scroll', () => this.card.hide());
     this.chipsEl = el('div', 'h3ct-chips');
     this.modeEl = el('div', 'h3ct-mode');
-    this.convertButton = button('Convert to FLF2VA', '', () => { this.box().flf_refmods = true; this.commit(); });
+    this.convertButton = button('Convert to FLF2VA', '', () => {
+      this.box().flf_refmods = true;
+      adoptEndpointGuides(this.state, this.selected, this.host.context());
+      this.commit();
+    });
     this.convertHint = el('p', 'h3ct-hint');
     this.convertRow = el('div', 'h3ct-row');
     this.convertRow.append(this.convertButton, this.convertHint);
@@ -520,7 +524,9 @@ export class TimelineEditor {
     this.uploadNote = el('p', 'h3ct-hint h3cq-note');
     this.uploadNote.setAttribute('role', 'status');
     this.uploadNote.hidden = true;
-    this.firstField = group('First frame', this.firstPicker, upload('first'));
+    this.firstNote = el('p', 'h3ct-hint'); this.lastNote = el('p', 'h3ct-hint');
+    this.firstNote.hidden = this.lastNote.hidden = true;
+    this.firstField = group('First frame', this.firstPicker, this.firstNote, upload('first'));
     this.cutField = field('Cut', this.cutInput);
     this.cutField.title = 'Start a new shot. Visual memory supplies the preceding video as context while the new shot starts immediately';
     this.sceneField = field('New scene', this.sceneInput);
@@ -555,7 +561,7 @@ export class TimelineEditor {
       return details;
     };
     const frames = el('div', 'h3ct-row');
-    const lastField = group('Last frame', this.lastPicker, upload('last'));
+    const lastField = group('Last frame', this.lastPicker, this.lastNote, upload('last'));
     imageDrop(this.firstField, file => this.dropGuide(file, 'first'));
     imageDrop(lastField, file => this.dropGuide(file, 'last'));
     frames.append(this.firstField, lastField);
@@ -1351,6 +1357,8 @@ export class TimelineEditor {
       this.commit();
     });
     this.firstField.hidden = !model.isFresh(this.state, this.selected);
+    this.fillEndpointNote(this.firstNote, this.selected, 'first');
+    this.fillEndpointNote(this.lastNote, this.selected, 'last');
     const bible = !!this.state.bible;
     this.cutField.hidden = this.selected === 0 || bible;
     this.cutInput.checked = !!box.cut;
@@ -1606,18 +1614,45 @@ export class TimelineEditor {
     if (focused) this.castChipsEl.querySelector(`[data-key="${focused}"]`)?.focus();
   }
 
+  // A clip converted to FLF2VA + cached RefMods uses its First and Last stills as the real start and end frames of the
+  // video, not as guides, so they are named that way.
+  runsFlf(index) {
+    const box=this.state.boxes[index];
+    return !!box?.flf_refmods&&model.describeBox(this.state,index,this.connectedSets(),this.host.context()).mode==='FLF2VA';
+  }
+
+  stillName(index,target) {
+    return target.kind!=='shot'&&this.runsFlf(index)?`${targetLabel(target)} frame`:targetLabel(target);
+  }
+
+  // Under FLF2VA the accepted First/Last still is the Settings frame; say so where the picker reads None.
+  fillEndpointNote(note,index,kind) {
+    const guide=this.runsFlf(index)?endpointGuide(this.state,index,this.host.context(),kind)?.guide:null;
+    note.replaceChildren();
+    note.hidden=!guide;
+    if(!guide) return;
+    const img=el('img');img.src=this.host.viewUrl(guide);img.alt='';img.draggable=false;
+    img.style.cssText='height:32px;width:auto;vertical-align:middle;margin-right:6px;border-radius:3px';
+    note.append(img,`The accepted ${kind} still is this clip's ${kind} frame. Change it in the Shots tab.`);
+  }
+
   fillStill(mark,box,target,label) {
+    const index=this.state.boxes.indexOf(box),endpoint=target.kind!=='shot'&&index>=0;
     const saved=box.previews?.find(p=>p.target
       ? (p.target.kind==='shot'&&p.target.shot===1?target.kind==='first':p.target.kind===target.kind&&p.target.shot===target.shot)
       : (p.shot===1?target.kind==='first':target.kind==='shot'&&p.shot===target.shot));
-    const file=saved?.guide??saved?.images?.[0]?.file??saved?.image;
+    const inherited=endpoint&&!saved?.guide?endpointGuide(this.state,index,this.host.context(),target.kind):null;
+    const guide=saved?.guide??inherited?.guide;
+    const frameMode=endpoint&&this.runsFlf(index);
+    if(frameMode) label=label.replace(/(First|Last)$/,'$1 frame');
+    const file=guide??saved?.images?.[0]?.file??saved?.image;
     if(file) {
       const img=el('img');img.src=this.host.viewUrl(file);img.alt='';img.draggable=false;mark.append(img);
     } else mark.append(el('span','h3ct-still-empty','+'));
     const caption=el('span','h3ct-still-caption');
-    caption.append(el('b',null,label),el('small',null,saved?.guide?'Guide':file?'Candidate':'Add'));
-    mark.append(caption);mark.classList.toggle('accepted',!!saved?.guide);
-    mark.title+=saved?.guide?' · accepted guide':file?' · candidate':' · add image';
+    caption.append(el('b',null,label),el('small',null,guide?(frameMode?'In use':'Guide'):file?'Candidate':'Add'));
+    mark.append(caption);mark.classList.toggle('accepted',!!guide);
+    mark.title+=guide?(frameMode?' · accepted frame':' · accepted guide'):file?' · candidate':' · add image';
   }
 
   renderStills(span = this.span ?? this.defaultSpan()) {
@@ -1682,7 +1717,7 @@ export class TimelineEditor {
         });
         mark.classList.toggle('selected',this.frameImages.boxId===box.id
           && this.frameImages.target.kind===target.kind && this.frameImages.target.shot===target.shot);
-        this.fillStill(mark,box,target,`${index+1} · ${label}`);
+        this.fillStill(mark,box,target,`${index+1} · ${targetLabel(target)}`);
         imageDrop(mark,file=>{mark.click();this.dropGuide(file,target);});
         this.stillsEl.append(mark);
       }
@@ -1842,6 +1877,7 @@ export class TimelineEditor {
       box.previews ??= [];
       if (saved && !managed) { delete saved.target; Object.assign(saved, {shot, frame}); }
       else { if (saved) delete saved.guide; box.previews.push({shot, frame, guide}); }
+      if (box.flf_refmods) adoptEndpointGuides(this.state, this.state.boxes.indexOf(box), this.host.context());
       this.commit();
       return true;
     } catch (error) {
