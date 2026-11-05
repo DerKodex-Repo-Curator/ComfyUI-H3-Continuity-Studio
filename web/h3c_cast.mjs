@@ -1,7 +1,7 @@
 import {ReferencePreparationPanel} from './h3c_reference_preparation.mjs?v=20261014-reference-thumbnails-1';
 // The Studio's Cast page: the Story bible's characters, places and props, and the boxes each appears in. Every change
 // goes through the bible route, which compiles the prompts, and lands as one Timeline edit.
-import * as model from './h3c_timeline_model.mjs?v=20261105-rendered-video-1';
+import * as model from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import { fillPicturePicker, referenceChip } from './h3c_reference_pictures.mjs?v=20261010-reference-workspace-1';
 import { LONG_CLIP_SECONDS, dropVoiceClip, freeVoiceSlot, setVoiceClip, voiceClipOf } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
 

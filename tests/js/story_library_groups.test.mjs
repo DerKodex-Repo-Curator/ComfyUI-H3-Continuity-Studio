@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {StoryLibrary} from '../../web/h3c_story_library.mjs?v=20261105-render-restore-1';
+import {StoryLibrary} from '../../web/h3c_story_library.mjs?v=20261104-story-groups-1';
 import {groupStories} from '../../web/h3c_story_groups.mjs?v=20261104-story-groups-2';
 
 const rows = [

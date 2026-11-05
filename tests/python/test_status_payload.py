@@ -230,20 +230,6 @@ class StatusTest(SavedBoxes):
 
 
 class TakesTest(SavedBoxes):
-    def test_older_videos_keep_thumbnails_by_box_identity_without_becoming_current(self):
-        entry = self.manifest['segments'][0]
-        entry['video'] = {'file': 'seg_0001.mp4', 'frames': 107, 'fps': 24}
-        with open(os.path.join(self.folder, 'seg_0001_last.png'), 'wb') as image:
-            image.write(b'png')
-        timeline = self.timeline(boxes=[box('c', 107), box('a', 107), box('new', 107)], bridges=[], clips=[])
-        status = timeline_node._status('seq', self.folder, timeline, self.manifest,
-                                       lambda index, saved: False)
-        self.assertEqual(status['done'], 0)
-        self.assertEqual(status['boxes'][1]['status'], 'pending')
-        self.assertEqual(status['boxes'][1]['thumb']['filename'], 'seg_0001_last.png')
-        self.assertNotIn('thumb', status['boxes'][0])
-        self.assertNotIn('thumb', status['boxes'][2])
-
     def sequence(self, timeline):
         entries = {entry["index"]: entry for entry in self.manifest["segments"]}
         return SimpleNamespace(parsed=timeline, folder=self.folder, manifest=self.manifest, entries=entries,

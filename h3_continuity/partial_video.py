@@ -1,16 +1,17 @@
-"""Playback of saved boxes, with source-filled gaps for video_slices when its saved source is available."""
+"""Partial video for `video_slices`: the boxes rendered so far at the Timeline's full length, with the split video's own
+frames and sound in place of the others. The source reaches H3 Timeline only as a frame batch while the graph runs, so
+the node saves it into the sequence folder at render size, and the status builds the partial video from it."""
 
 import hashlib
 import json
 import os
 
-import torch
 from safetensors import safe_open
 from safetensors.torch import save_file
 
 from . import audio_tracks, media, store, timing
 from . import timeline as rules
-from .nodes import SEQUENCE_LOCK, _video_windows
+from .nodes import SEQUENCE_LOCK
 
 SOURCE_CRF = 18
 NO_FRAMES = "Partial video skipped: a rendered clip's video or audio file is missing."
@@ -66,16 +67,15 @@ def _stamp(folder, filename):
     return [filename, stat.st_mtime_ns, stat.st_size]
 
 
-def parts(parsed, manifest, done, *, include_older=False):
-    """Each box as (entry, first frame, native frames). Saved takes match by box ID when include_older;
-    source-filled repainting uses current entries. Missing boxes retain their Timeline window."""
+def parts(parsed, manifest, done):
+    """Each box in Timeline order as (saved entry, first frame, frames): its saved segment from its first frame when
+    the box is in `done` and has saved frames, else (None, the box's first frame in the Timeline, its frames)."""
     by_index = {entry["index"]: entry for entry in manifest["segments"]}
-    by_box = {(entry.get("timeline") or {}).get("box"): entry for entry in manifest["segments"]}
     found, position = [], 0
     for index in range(len(parsed.boxes)):
         count = rules.played_frames(parsed, index)
-        entry = by_box.get(parsed.boxes[index].id) if include_older else by_index.get(index + 1)
-        if (include_older or index in done) and entry is not None and entry.get("video"):
+        entry = by_index.get(index + 1)
+        if index in done and entry is not None and entry.get("video"):
             found.append((entry, 0, store.played_frames(entry)))
         else:
             found.append((None, position, count))
@@ -84,32 +84,25 @@ def parts(parsed, manifest, done, *, include_older=False):
 
 
 def build(folder, name, parsed, manifest, done, soundtrack, crf):
-    """`{name}_partial.mp4` from saved renders, filling gaps only when a split-video source is saved.
-    Marked `soundtrack` clips use the original Timeline clock; otherwise use each part's own audio.
-    The saved file is reused while its sources are unchanged.
+    """`{name}_partial.mp4` from `parts`, with the marked `soundtrack` clips, or else each saved segment's audio and the
+    source's soundtrack (silence without one). The saved file is reused while its sources are unchanged.
     Returns (manifest record or None, why it was not built or "")."""
     source = manifest.get("source")
-    if source and source.get("slot") not in parsed.video_slices:
-        source = None
-    found = parts(parsed, manifest, done, include_older=not source)
-    if not source:
-        for index, (entry, first, count) in enumerate(found):
-            if entry is not None and not os.path.isfile(os.path.join(folder, entry["video"]["file"])):
-                found[index] = (None, first, count)
+    if not source or source.get("slot") not in parsed.video_slices:
+        return None, ""
+    found = parts(parsed, manifest, done)
     rendered = [entry for entry, _, _ in found if entry is not None]
     gaps = [first + count for entry, first, count in found if entry is None]
-    if not rendered or (source and not gaps):
+    if not rendered or not gaps:
         return None, ""
-    needed = max(gaps, default=0)
-    if source and source["frames"] < needed:
+    needed = max(gaps)
+    if source["frames"] < needed:
         return None, (f"Partial video skipped: {source['slot']} has {source['frames']} frames, but the Timeline needs "
                       f"{needed}.")
-    sources = ([_stamp(folder, source["file"]), _stamp(folder, source["audio"]) if source.get("audio") else []]
-               if source else [])
+    sources = [_stamp(folder, source["file"]), _stamp(folder, source["audio"]) if source.get("audio") else []]
     if None in sources:
         return None, ""
-    older = sum(entry is not None and index not in done for index, (entry, _, _) in enumerate(found))
-    items = [["assembly", 2], ["source", source, sources], ["mux_audio", parsed.mux_audio]]
+    items = [["source", source, sources]]
     for entry, first, count in found:
         if entry is None:
             items.append([None, first, count])
@@ -120,35 +113,17 @@ def build(folder, name, parsed, manifest, done, soundtrack, crf):
             return None, NO_FRAMES
         items.append([entry, stamps, first, count])
     if soundtrack:
-        timeline_frames = [rules.played_frames(parsed, index) for index in range(len(parsed.boxes))]
-        items.append(["soundtrack", audio_tracks.soundtrack_sources(soundtrack), timeline_frames])
+        items.append(["soundtrack", audio_tracks.soundtrack_sources(soundtrack)])
     fingerprint = hashlib.sha1(json.dumps(items, sort_keys=True).encode("utf-8")).hexdigest()
     record = manifest.get("partial_video")
     if (record and record.get("sources") == fingerprint and os.path.basename(record["file"]) == record["file"]
             and os.path.isfile(os.path.join(folder, record["file"]))):
-        return {**record, "older": older}, ""
+        return record, ""
 
     if soundtrack:
-        position, needed = 0, sum(timeline_frames)
-        for length, (entry, _, count) in zip(timeline_frames, found):
-            if entry is not None:
-                needed = max(needed, position + count)
-            position += length
-        audio_parts = [(length, False) for length in timeline_frames]
-        if needed > position:
-            audio_parts.append((needed - position, True))
-        audio = audio_tracks.soundtrack_audio(soundtrack, audio_parts)
-        if not source:
-            waveform, rate = audio
-            chunks, position = [], 0
-            for length, (entry, _, count) in zip(timeline_frames, found):
-                if entry is not None:
-                    chunks.append(waveform[:, timing.sample_at_frame(position, rate):
-                                          timing.sample_at_frame(position + count, rate)])
-                position += length
-            audio = torch.cat(chunks, dim=-1), rate
+        audio = audio_tracks.soundtrack_audio(soundtrack, [(count, False) for _, _, count in found])
     else:
-        heard, pieces = _source_audio(folder, source) if source else None, []
+        heard, pieces = _source_audio(folder, source), []
         for entry, first, count in found:
             if entry is not None:
                 pieces.append((entry["context_frames"] + count, entry["context_frames"],
@@ -158,18 +133,17 @@ def build(folder, name, parsed, manifest, done, soundtrack, crf):
                 waveform, rate = heard
                 pieces.append((count, 0, waveform[:, timing.sample_at_frame(first, rate):
                                                   timing.sample_at_frame(first + count, rate)], rate))
-            elif source:
+            else:
                 pieces.append((count, 0, None, None))
         audio = media.assemble_audio(pieces)
-    windows = _video_windows(folder, [(entry or {"video": source}, first, count)
-                                      for entry, first, count in found if entry is not None or source])
+    windows = [(os.path.join(folder, entry["video"]["file"] if entry else source["file"]), first, count)
+               for entry, first, count in found]
     video = rendered[0]["video"]
     size = (video["width"], video["height"]) if video.get("width") and video.get("height") else None
     written, note = media.build_full_video(os.path.join(folder, f"{name}_partial.mp4"), windows, audio, crf, size)
     if written is None:
         return None, f"Partial video skipped: {note.removeprefix('Full video skipped: ')}"
-    record = {"file": os.path.basename(written), "sources": fingerprint, "rendered": len(rendered), "boxes": len(found),
-              "mode": "source" if source else "rendered", "older": older}
+    record = {"file": os.path.basename(written), "sources": fingerprint, "rendered": len(rendered), "boxes": len(found)}
     manifest["partial_video"] = record
     store.write_manifest(folder, manifest)
     return record, ""

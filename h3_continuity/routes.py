@@ -111,15 +111,6 @@ async def timeline_status(request):
     return web.json_response(await asyncio.to_thread(takes.status, body))
 
 
-async def video_preview(request):
-    from . import video_preview as previews
-    try:
-        path = await asyncio.to_thread(previews.preview, request.query)
-        return web.FileResponse(path, headers={'Content-Type': 'video/mp4', 'Cache-Control': 'private, no-cache'})
-    except (ValueError, OSError, RuntimeError) as error:
-        return web.json_response({'error': str(error)}, status=400)
-
-
 async def _takes_request(request, action):
     body = await _object(request)
     if body is None:
@@ -371,7 +362,6 @@ def register():
     routes = instance.routes
     story_job.JOBS.updated = lambda job: instance.send_sync("h3c-story", {"job": job.id}, job.client or None)
     routes.post(STATUS_ROUTE)(timeline_status)
-    routes.get('/h3c/video/preview')(video_preview)
     routes.post(TAKES_ROUTE)(timeline_takes)
     routes.post(USE_TAKE_ROUTE)(timeline_use_take)
     routes.post(DELETE_TAKES_ROUTE)(timeline_delete_takes)

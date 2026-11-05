@@ -1,7 +1,0 @@
-# Mobile saved-video playback
-
-The exact HTTPS workflow loads the original sequence successfully after v0.12.7. In a fresh browser at mobile width, current clips have working thumbnails and desktop video decoding succeeds. Seven older clips retain video references but status omits their thumbnails. Actual original and partial MP4s are 2496x3328, 48 fps, H.264 High 10 / yuv420p10le; Android only guarantees AVC Baseline/Main support, so a desktop decode check was insufficient.
-
-Keep original media, downloads, render status and take compatibility unchanged. Expose existing thumbnails for saved older takes by box identity. Use cached 8-bit H.264 Main SDR previews (long edge at most 720px, at most 24fps, AAC audio) for phone playback, with HDR tone mapping, and retry with that preview after a desktop decode error. Serve generated previews through a constrained output-video route using existing FFmpeg installations; serialize CPU encoding and atomically cache by source path/mtime/size. No GPU inference. Preserve original opening/download links. Set inline playback and a poster while video metadata loads.
-
-A phone-specific cached playback copy addresses existing files without changing HDR originals. Changing future render defaults would not repair saved videos; changing the originals would lose the user's deliverables. These are implementation choices within the user's continuing request to fix the same missing-media problem, including the already authorized PR/release/update/restart delivery.

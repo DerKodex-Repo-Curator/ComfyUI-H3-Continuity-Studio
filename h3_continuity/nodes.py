@@ -579,14 +579,7 @@ def _generated_audio(folder, parts):
 
 
 def _video_windows(folder, parts):
-    """Map the native 24 fps edit clock to delivered frames (which may be interpolated)."""
-    windows = []
-    for entry, first, count, *_ in parts:
-        video = entry["video"]
-        scale = video.get("fps", timing.FPS) / timing.FPS
-        start, end = round(first * scale), round((first + count) * scale)
-        windows.append((os.path.join(folder, video["file"]), start, end - start))
-    return windows
+    return [(os.path.join(folder, e["video"]["file"]), first, count) for e, first, count, *_ in parts]
 
 
 def write_previews(folder, manifest, candidate, crf, spliced=(), soundtrack=()):

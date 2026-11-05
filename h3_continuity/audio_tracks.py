@@ -95,8 +95,6 @@ def fingerprint(timeline):
 
 def marked(timeline, snapshots=None):
     """The clips the full video plays instead of H3's audio, as placed, in slot order."""
-    if not timeline.mux_audio:
-        return []
     clips = []
     for clip in sorted(timeline.audio_clips, key=lambda clip: clip['slot']):
         if clip.get('in_full_video') is not True:
