@@ -95,3 +95,19 @@ test('Full video remains playable while another clip is rendering', () => {
   assert.match(studio.badge.textContent, /1 of 3 clips rendered/);
   assert.equal(studio.fullButton.disabled, false);
 });
+
+test('saved player retries unsupported video with a compatible preview and keeps it on refresh', () => {
+  const studio=player();
+  const original='http://localhost/api/view?filename=a.mp4&subfolder=h3_sequences%2Fseq&type=output';
+  studio.showVideo(original,'/poster.png');
+  const video=studio.screen.firstElementChild;
+  assert.equal(video.playsInline,true);
+  assert.equal(video.poster,'/poster.png');
+  video.dispatchEvent(new Event('error'));
+  assert.match(video.src,/\/api\/h3c\/video\/preview\?/);
+  studio.showVideo(original,'/poster.png');
+  assert.equal(studio.screen.firstElementChild,video);
+  const fallback=video.src;
+  video.dispatchEvent(new Event('error'));
+  assert.equal(video.src,fallback,'a failed preview must not trigger a retry loop');
+});

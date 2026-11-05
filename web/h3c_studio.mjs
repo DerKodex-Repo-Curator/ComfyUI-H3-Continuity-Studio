@@ -8,6 +8,7 @@ import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=2026
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261105-rendered-video-1';
 import {historyShortcut} from './h3c_history.mjs?v=20261104-history-1';
+import {compatibleVideoUrl,videoPlaybackUrl} from './h3c_video_preview.mjs?v=20261105-mobile-video-1';
 
 const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
 const CENTER = ['viewer', 'story', 'cast', 'pictures', 'refmods'];
@@ -1363,7 +1364,7 @@ export class Studio {
       // While the status is being fetched again after an edit, the playing video stays as it is.
       if (editor.status == null && this.screen.querySelector('video:not(.h3cx-live)')) return;
       const src = view === 'full' ? fullUrl : takeUrl;
-      if (src) this.showVideo(src);
+      if (src) this.showVideo(src, view !== 'full' && entry?.thumb ? this.host.viewUrl(entry.thumb) : null);
       else this.showMessage(view === 'full' ? 'No assembled full video is available yet.' : 'Not rendered yet');
       this.badge.textContent = view === 'chosen' ? this.chosenLabel(chosen) : view === 'candidate' ? this.candidate.label
         : view === 'bridge'
@@ -1432,15 +1433,25 @@ export class Studio {
     this.refresh();
   }
 
-  showVideo(src) {
+  showVideo(src, poster) {
     const current = this.screen.firstElementChild;
     const resume = this.resumeAt;
     this.resumeAt = null;
-    if (current?.matches('video:not(.h3cx-live)') && current.getAttribute('src') === src) return;
+    if (current?.matches('video:not(.h3cx-live)') && current.dataset.source === src) return;
     const video = el('video');
     video.controls = true;
+    video.playsInline = true;
     video.preload = 'metadata';
-    video.src = src;
+    video.dataset.source = src;
+    if (poster) video.poster = poster;
+    video.src = videoPlaybackUrl(src);
+    const compatible = compatibleVideoUrl(src);
+    video.addEventListener('error', () => {
+      if (compatible && video.getAttribute('src') !== compatible) {
+        video.src = compatible;
+        video.load();
+      }
+    }, {once: true});
     if (resume) [video.currentTime, video.autoplay] = [resume.time, resume.playing];
     this.setScreen(video);
   }

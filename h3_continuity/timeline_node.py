@@ -187,6 +187,9 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
             entry = next((e for e in segments if (e.get("timeline") or {}).get("box") == box.id), None)
             if entry and entry.get("video"):
                 video = entry["video"]
+                picture = thumb(entry)
+                if picture:
+                    item['thumb'] = picture
                 item["video"] = {"file": _view(name, video["file"], entry.get("created", "")),
                                  "frames": video["frames"], "fps": video["fps"]}
             check = box_checks.status(checks.get(box.id), entry)
