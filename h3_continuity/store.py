@@ -82,7 +82,7 @@ def full_video_fingerprint(folder, manifest, bridges=(), soundtrack_sources=()):
         sources.append([entry, stamps])
     if sources and soundtrack_sources:
         sources.append(["soundtrack", list(soundtrack_sources)])
-    return hashlib.sha1(json.dumps(sources, sort_keys=True).encode("utf-8")).hexdigest() if sources else None
+    return hashlib.sha1(json.dumps([2, sources], sort_keys=True).encode("utf-8")).hexdigest() if sources else None
 
 
 def current_full_video(folder, manifest, bridges=(), soundtrack_sources=()):

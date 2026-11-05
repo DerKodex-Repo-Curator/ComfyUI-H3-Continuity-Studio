@@ -28,6 +28,10 @@ test('rendered-only previews explain missing clips without promising source foot
   assert.doesNotMatch(partialTitle(compact), /from the source/);
 });
 
+test('the preview discloses included older takes without calling them unrendered', () => {
+  assert.match(partialBadge({...partial, mode: 'rendered', older: 2}), /2 older takes/);
+});
+
 test('the uploaded-audio mux choice survives saving and reopening the Timeline', () => {
   const state = parseState('{"version":1,"boxes":[],"mux_audio":false}');
   assert.equal(state.mux_audio, false);

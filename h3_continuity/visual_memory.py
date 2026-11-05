@@ -20,13 +20,19 @@ def records(timeline, index, folder, entries, is_done, width=None, height=None):
     result = []
     for number, (source, frame, label) in enumerate(rules.memory_sources(timeline, index)):
         entry = entries.get(source + 1)
+        # Memory references the saved take, even when edits make that source need another render.
         if (entry is None or (entry.get("timeline") or {}).get("box") != timeline.boxes[source].id
-                or not store.has_segment_latents(folder, entry) or not is_done(source, entry)):
+                or not store.has_segment_latents(folder, entry)):
             raise ValueError(f"H3 Timeline: memory source box {source + 1} needs rendering first, "
                              f"or set box {index + 1}'s Visual memory to Off")
         if ((width is not None and entry.get("latent_width") != width)
                 or (height is not None and entry.get("latent_height") != height)):
             raise ValueError(f"H3 Timeline: memory source box {source + 1} has a different resolution; render it again")
+        box = timeline.boxes[index]
+        if box.memory == "selected" and frame >= store.played_frames(entry) and any(
+                item["box"] == timeline.boxes[source].id and item["frame"] == frame for item in box.memories):
+            raise ValueError(f"H3 Timeline: memory source box {source + 1}'s saved take does not contain frame {frame}; "
+                             "choose an earlier moment or render it again")
         # Two tokens are five frames. Starting on a full 17-frame cycle preserves H3's temporal phase; the first
         # cycle after the carried frames keeps the window on the source box's own frames.
         raw = window_frame(entry, frame)
