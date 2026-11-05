@@ -433,9 +433,11 @@ export class TimelineEditor {
     this.chipsEl = el('div', 'h3ct-chips');
     this.modeEl = el('div', 'h3ct-mode');
     this.convertButton = button('Convert to FLF2VA', '', () => {
+      this.host.undoStep?.();
       this.box().flf_refmods = true;
       adoptEndpointGuides(this.state, this.selected, this.host.context());
       this.commit();
+      this.host.undoStep?.();
     });
     this.convertHint = el('p', 'h3ct-hint');
     this.convertRow = el('div', 'h3ct-row');
@@ -1819,8 +1821,10 @@ export class TimelineEditor {
         controls.append(field('Frame', frame));
       }
       if (!managed) controls.append(button('Remove', saved.guide ? 'Stop guiding this frame and remove the saved still' : 'Remove this saved still', () => {
+        this.host.undoStep?.();
         box.previews = box.previews.filter((p) => p !== saved);
         this.commit();
+        this.host.undoStep?.();
       }));
       list.append(row);
     }
@@ -1873,12 +1877,14 @@ export class TimelineEditor {
       check();
       const guide = file ? await this.host.importGuide(file) : saved.guide;
       const box = check();
+      this.host.undoStep?.();
       const shot = Math.max(FREE_GUIDE - 1, ...(box.previews ?? []).filter(item => !item.target).map(item => item.shot)) + 1;
       box.previews ??= [];
       if (saved && !managed) { delete saved.target; Object.assign(saved, {shot, frame}); }
       else { if (saved) delete saved.guide; box.previews.push({shot, frame, guide}); }
       if (box.flf_refmods) adoptEndpointGuides(this.state, this.state.boxes.indexOf(box), this.host.context());
       this.commit();
+      this.host.undoStep?.();
       return true;
     } catch (error) {
       row.append(el('span', 'h3ct-hint problem', error.message));
