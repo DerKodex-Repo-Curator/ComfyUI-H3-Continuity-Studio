@@ -2,6 +2,7 @@ import hashlib
 import os
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -61,3 +62,38 @@ class VideoPreviewTest(unittest.TestCase):
                         {'filename': 'missing.mp4'}, {'filename': 'manifest.json'}):
             with self.subTest(changes=changes), self.assertRaises((ValueError, FileNotFoundError)):
                 video_preview.preview({**self.query, **changes})
+
+    def test_encoder_reads_a_private_copy_so_the_original_can_be_moved(self):
+        self.write_source()
+        run = video_preview.subprocess.run
+
+        def encode(command, **options):
+            source = Path(command[command.index('-i') + 1])
+            self.assertNotEqual(source, self.source)
+            self.assertEqual(source.read_bytes(), self.source.read_bytes())
+            with video_preview.continuity.SEQUENCE_LOCK:
+                self.source.rename(self.source.with_name('moved.mp4'))
+            return run(command, **options)
+
+        with mock.patch.object(video_preview.subprocess, 'run', side_effect=encode):
+            self.assertTrue(Path(video_preview.preview(self.query)).is_file())
+        self.assertFalse(list(self.cache.rglob('*.source.mp4')))
+
+    def test_a_cached_clip_does_not_wait_for_another_encoder(self):
+        self.write_source()
+        expected = video_preview.preview(self.query)
+        done, results = threading.Event(), []
+
+        def cached():
+            try:
+                results.append(video_preview.preview(self.query))
+            finally:
+                done.set()
+
+        with video_preview.LOCK:
+            worker = threading.Thread(target=cached)
+            worker.start()
+            ready = done.wait(1)
+        worker.join(5)
+        self.assertTrue(ready, 'cache hits must bypass the encoder lock')
+        self.assertEqual(results, [expected])
