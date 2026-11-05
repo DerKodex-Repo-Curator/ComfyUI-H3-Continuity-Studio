@@ -160,8 +160,7 @@ class Artifacts:
                 raise APIError("full_video_unavailable", "Full video could not be materialized with every planned bridge.", status=409)
             rate = next((item["audio"]["sample_rate"] for item in artifacts if item.get("audio")),None)
             soundtrack = sorted((clip for clip in project["prepared"]["timeline"].get("audio_clips",[])
-                                 if clip.get("in_full_video") is True
-                                 and project["prepared"]["timeline"].get("mux_audio", True)),key=lambda clip:clip["slot"])
+                                 if clip.get("in_full_video") is True),key=lambda clip:clip["slot"])
             if soundtrack:
                 # Native placement uses the first marked original's clock/rate,
                 # which can differ from the generated H3 unit waveforms.

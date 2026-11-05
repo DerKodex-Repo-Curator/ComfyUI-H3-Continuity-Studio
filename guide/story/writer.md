@@ -42,8 +42,6 @@ Fast writing makes one planning request and then one structured request per clip
 | **Undo last Write** | Puts the Timeline back as it was before the last Write, where you haven't changed things since. |
 | **Saved stories** | Every story written on this server, in two lists: pick a **story**, then one of its **versions** (newest first, numbered from v1). Saved entries with the same title, ignoring case, spacing and a trailing revision tag such as ` · r2`, are versions of one story. **Load version** puts the selected version into the Timeline; the version open in this workflow is marked *open now*. **Delete version** removes only that version. **Rename story** shows a name of your choosing in place of the title (empty goes back to the title), and **Delete story** removes every version after one confirmation. |
 
-Loading a saved version in another browser or session keeps its rendered videos, takes and still candidates when the generator wiring and settings match. Preview selection and output displays do not affect this. Changing the generator wiring or settings creates an independent sequence. Saved clips whose prompts or box settings have changed remain older takes until they match again.
-
 Progress shows in the Story panel and the Studio's top bar; a Write that fails or is cancelled **keeps the clips it finished**.
 
 ### Idea images

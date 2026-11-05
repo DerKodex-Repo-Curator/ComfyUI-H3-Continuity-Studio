@@ -2,8 +2,6 @@ import os
 import shutil
 import tempfile
 import unittest
-import wave
-from types import SimpleNamespace
 from unittest import mock
 
 import av
@@ -14,9 +12,8 @@ from tests.continuity_support import enable_comfy_cpu
 enable_comfy_cpu()
 
 from h3_continuity import audio_tracks, media, partial_video, store, timeline_node  # noqa: E402
-from h3_continuity.timeline_api import artifacts  # noqa: E402
 
-from .helpers import box, clip, parse  # noqa: E402
+from .helpers import box, parse  # noqa: E402
 
 RATE = 8000
 SEGMENT_SIZE = 64
@@ -148,13 +145,12 @@ class PartialVideoTest(unittest.TestCase):
         self.keep(frames=30)
         self.assertEqual(self.build(), (None, "Partial video skipped: video1 has 30 frames, but the Timeline needs 39."))
 
-    def test_without_a_source_only_current_renders_play(self):
-        record, _ = self.build()
-        self.assertEqual(record["mode"], "rendered")
+    def test_nothing_without_a_rendered_box_or_a_source(self):
+        self.assertEqual(self.build(), (None, ""))
         self.keep()
         self.assertEqual(self.build(done=set()), (None, ""))
         self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
-        self.assertEqual(self.build()[0]["mode"], "rendered", "the split was removed")
+        self.assertEqual(self.build(), (None, ""), "the split was removed")
 
     def test_the_source_is_saved_once_per_media_and_size(self):
         self.assertTrue(self.keep())
@@ -175,170 +171,6 @@ class PartialVideoTest(unittest.TestCase):
         self.assertNotIn("export_error", status)
         unbuilt = timeline_node._status("seq", self.folder, self.parsed, self.manifest, lambda index, entry: True)
         self.assertNotIn("partial_video", unbuilt, "only a materializing status builds it")
-
-    def test_ordinary_timeline_joins_current_clips_across_gaps(self):
-        self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
-        self.manifest["segments"].reverse()
-        record, note = self.build()
-        self.assertIsNotNone(record)
-        self.assertEqual(note, "")
-        self.assertEqual((record["rendered"], record["boxes"], record["mode"]), (2, 3, "rendered"))
-        _, labels = decoded(os.path.join(self.folder, record["file"]))
-        self.assertEqual(labels, [(0, i) for i in range(22)] + [(2, i) for i in range(17)])
-        status = timeline_node._status("seq", self.folder, self.parsed, self.manifest,
-                                       lambda index, entry: True, materialize=True)
-        self.assertEqual(status["partial_video"]["mode"], "rendered")
-
-    def test_ordinary_partial_includes_saved_takes_without_marking_them_current(self):
-        self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
-        record, _ = self.build(done={2})
-        self.assertIsNotNone(record)
-        self.assertEqual(record["rendered"], 2)
-        self.assertEqual(record["older"], 1)
-        _, labels = decoded(os.path.join(self.folder, record["file"]))
-        self.assertEqual(labels, [(0, i) for i in range(22)] + [(2, i) for i in range(17)])
-        self.assertEqual(self.build(done=set())[0]["older"], 2)
-
-    def test_missing_rendered_video_does_not_hide_other_playable_clips(self):
-        self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
-        os.remove(os.path.join(self.folder, "seg_0003.mp4"))
-        record, _ = self.build()
-        self.assertIsNotNone(record)
-        self.assertEqual(record["rendered"], 1)
-        _, labels = decoded(os.path.join(self.folder, record["file"]))
-        self.assertEqual(labels, [(0, i) for i in range(22)])
-
-    def test_older_saved_takes_play_even_when_no_boxes_are_current(self):
-        self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
-        status = timeline_node._status("seq", self.folder, self.parsed, self.manifest,
-                                       lambda index, entry: False, materialize=True)
-        self.assertIn("partial_video", status)
-        self.assertEqual(status["partial_video"]["rendered"], 2)
-        self.assertEqual(status["partial_video"]["older"], 2)
-        self.assertFalse(any(item["status"] == "done" for item in status["boxes"]))
-
-    def test_saved_takes_follow_box_identity_after_reordering(self):
-        self.parsed = parse([box("c", 22), box("a", 22, cut=True), box("replacement", 22, cut=True)])
-        record, _ = self.build(done=set())
-        self.assertIsNotNone(record)
-        _, labels = decoded(os.path.join(self.folder, record["file"]))
-        self.assertEqual(labels, [(2, i) for i in range(17)] + [(0, i) for i in range(22)])
-
-    def test_interpolated_48fps_partial_preserves_full_picture_and_audio_duration(self):
-        self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
-        for entry, channel in zip(self.manifest["segments"], (0, 2)):
-            count = store.played_frames(entry) * 2
-            media.write_segment_video(os.path.join(self.folder, entry["video"]["file"]),
-                                      coded(count, channel, SEGMENT_SIZE), 48, 16)
-            entry["video"].update(fps=48, frames=count)
-        record, _ = self.build()
-        with av.open(os.path.join(self.folder, record["file"])) as container:
-            stream = container.streams.video[0]
-            self.assertAlmostEqual(float(stream.duration * stream.time_base), 39 / 24, places=4)
-            self.assertEqual(sum(1 for _ in container.decode(stream)), 78)
-        _, labels = decoded(os.path.join(self.folder, record["file"]))
-        self.assertEqual(labels, [(0, i) for i in range(44)] + [(2, i) for i in range(34)])
-
-    def test_mux_switch_keeps_h3_sound_and_invalidates_the_partial_cache(self):
-        self.keep()
-        first, _ = self.build()
-        self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)],
-                            video_slices=["video1"], mux_audio=False)
-        # Invalid uploaded files must not prevent playback with H3 sound selected.
-        status = timeline_node._status("seq", self.folder, self.parsed, self.manifest,
-                                       lambda index, entry: True, materialize=True)
-        self.assertIn("partial_video", status)
-        self.assertNotEqual(status["partial_video"]["file"]["v"], first["sources"])
-
-    def test_compact_soundtrack_uses_the_original_clock_after_a_gap(self):
-        self.parsed = parse([box("a", 22), box("b", 17), box("c", 17)])
-        ramp = torch.arange(round(56 * RATE / 24), dtype=torch.float32).unsqueeze(0)
-        captured = []
-        with mock.patch.object(audio_tracks, "soundtrack_sources", return_value=[["clip"]]), \
-                mock.patch.object(audio_tracks, "soundtrack_audio", return_value=(ramp, RATE)), \
-                mock.patch.object(media, "build_full_video",
-                                  side_effect=lambda path, videos, audio, crf, size:
-                                  (captured.append(audio), (path, ""))[1]):
-            record, _ = self.build(soundtrack=[{"slot": "audio1"}])
-        self.assertIsNotNone(record)
-        waveform, rate = captured[0]
-        expected = torch.cat([ramp[:, :round(22 * RATE / 24)], ramp[:, round(39 * RATE / 24):]], dim=-1)
-        self.assertEqual(rate, RATE)
-        self.assertTrue(torch.equal(waveform, expected))
-
-    def test_older_take_length_does_not_move_a_later_uploaded_audio_clip(self):
-        self.parsed = parse([box("a", 39), box("b", 17), box("c", 17)])
-        lane = clip(start=56 / 24, duration=17 / 24)
-        captured = []
-        source = {"waveform": torch.full((1, 1, RATE), 0.6), "sample_rate": RATE}
-        with mock.patch.object(audio_tracks, "soundtrack_sources", return_value=[["clip"]]), \
-                mock.patch.object(audio_tracks, "read", return_value=source), \
-                mock.patch.object(media, "build_full_video", side_effect=lambda path, videos, audio, crf, size:
-                                  (captured.append(audio), (path, ""))[1]):
-            self.build(soundtrack=[lane])
-        waveform, rate = captured[0]
-        self.assertEqual(rate, RATE)
-        self.assertAlmostEqual(waveform[0, round(30 * RATE / 24)].item(), 0.6, places=5)
-        self.assertAlmostEqual(waveform[0, round(10 * RATE / 24)].item(), 0, places=5)
-
-    def test_mux_choice_switches_between_uploaded_and_h3_audio_in_partial_and_full_video(self):
-        path = os.path.join(self.folder, "uploaded.wav")
-        with wave.open(path, "wb") as out:
-            out.setparams((1, 2, RATE, 0, "NONE", "not compressed"))
-            out.writeframes((-13107).to_bytes(2, "little", signed=True) * (RATE * 3))
-        boxes = [box("a", 22), box("b", 17), box("c", 17)]
-        for complete in (False, True):
-            if complete:
-                self.manifest["segments"].insert(1, self.segment(2, "b", 22, 5, 1, 0.2))
-            versions = []
-            for mux, level in ((True, -0.4), (False, 0.1), (True, -0.4)):
-                parsed = parse(boxes, audio_clips=[clip(in_full_video=True)], mux_audio=mux)
-                with mock.patch.object(audio_tracks, "file_path", return_value=path):
-                    status = timeline_node._status("seq", self.folder, parsed, self.manifest,
-                                                   lambda index, entry: True, materialize=True)
-                descriptor = status["full_video"] if complete else status["partial_video"]["file"]
-                versions.append(descriptor["v"])
-                with av.open(os.path.join(self.folder, descriptor["filename"])) as container:
-                    sound = torch.from_numpy(next(container.decode(audio=0)).to_ndarray())
-                self.assertAlmostEqual(sound.float().mean().item(), level, delta=0.03)
-                self.assertEqual([item["status"] for item in status["boxes"] if item["id"] != "b"], ["done", "done"])
-            self.assertNotEqual(versions[0], versions[1])
-            self.assertEqual(versions[0], versions[2])
-
-    def test_mux_audio_is_boolean_and_can_bypass_missing_uploaded_sound(self):
-        with self.assertRaisesRegex(ValueError, "mux_audio must be true or false"):
-            parse([box("a", 22)], mux_audio="false")
-        parsed = parse([box("a", 22), box("b", 17), box("c", 17)],
-                       audio_clips=[clip(in_full_video=True)], mux_audio=False)
-        with mock.patch.object(audio_tracks, "file_path", side_effect=ValueError("file is missing")):
-            status = timeline_node._status("seq", self.folder, parsed, self.manifest,
-                                           lambda index, entry: True, materialize=True)
-        self.assertIn("partial_video", status)
-        self.assertNotIn("export_error", status)
-
-    def test_api_export_uses_h3_sample_rate_when_uploaded_mux_is_disabled(self):
-        exporter = artifacts.Artifacts.__new__(artifacts.Artifacts)
-        exporter.records = SimpleNamespace(get_blob_record=lambda kind, key: (
-            {"verified": True, "input_sha256": "input", "native_sha256": "native"} if kind == "unit"
-            else {"media": {"sample_rate": 24000}}))
-        video = self.manifest["segments"][0]["video"]["file"]
-        full = os.path.join(self.folder, "api_full.mp4")
-        media.build_full_video(full, [os.path.join(self.folder, video)],
-                               (torch.full((1, round(22 * RATE / 24)), 0.1), RATE), 16)
-        exporter._body = lambda project: {}
-        exporter._unit = lambda project, unit, status: {"filename": "api_full.mp4"}
-        # Keep real decoding/metadata validation; only replace API storage and native status.
-        exporter.snapshot = lambda project, job, descriptor, expected_frames, kind: exporter._inspect(
-            full, project, descriptor, expected_frames)
-        project = {"id": "p1", "prepared": {"settings": {"width": 64, "height": 64},
-                   "timeline": {"mux_audio": False, "audio_clips": [{"slot": "audio1", "in_full_video": True}]}},
-                   "assets": [{"asset_id": "a1", "bindings": [{"kind": "audio_clip", "slot": "audio1"}]}]}
-        job = {"id": "j1", "revision": 1, "profile_sha256": "profile", "owner_token": "owner", "plan": {
-            "total_frames": 22, "units": [{"id": "box:a", "kind": "box", "frames": 22, "input_sha256": "input"}]}}
-        native = SimpleNamespace(status=lambda *args, **kwargs: {"ok": True, "full_video": {"filename": "api_full.mp4"}})
-        with mock.patch.object(artifacts, "native_status", return_value={"unit_evidence": {"box:a": "native"}}):
-            delivered = exporter.finalize(project, job, native)
-        self.assertEqual(delivered[-1]["audio"]["sample_rate"], RATE)
 
 
 if __name__ == "__main__":

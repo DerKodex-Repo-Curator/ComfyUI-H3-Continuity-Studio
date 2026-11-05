@@ -38,22 +38,11 @@ export function sameStoryWiring(a,b) {
       if(current.extra)delete current.extra.ds;
       for(const node of current.nodes??[]) {
         for(const key of ['pos','size','order','title','showAdvanced'])delete node[key];
-        const widgets=(node.inputs??[]).filter(input=>input.widget);
-        // Orrery's comparison DOM widget is display-only; unknown extra controls stay significant.
-        if(node.type==='OrreryRefinementResult'&&Array.isArray(node.widgets_values)
-          &&node.widgets_values.length===widgets.length+1&&node.widgets_values_named&&widgets.length
-          &&Object.hasOwn(node.widgets_values_named,'comparison')&&!widgets.some(input=>input.widget.name==='comparison')
-          &&stringifyJSON(node.widgets_values.at(-1))===stringifyJSON(node.widgets_values_named.comparison)
-          &&widgets.every((input,index)=>Object.hasOwn(node.widgets_values_named,input.widget.name)
-            &&stringifyJSON(node.widgets_values[index])===stringifyJSON(node.widgets_values_named[input.widget.name])))
-          node.widgets_values=node.widgets_values.slice(0,widgets.length);
-        delete node.widgets_values_named;
-        if(Array.isArray(node.widgets_values)&&!node.widgets_values.length)delete node.widgets_values;
         if(['H3C_Story','H3C_Timeline'].includes(node.type)) {
           node.widgets_values=Object.fromEntries(Object.entries(savedFields(current,node)).filter(([name])=>!CONTENT_FIELDS.has(name)));
           delete node.widgets_values_named;
           // Uploaded guide and asset registries record media, not generator wiring.
-          for(const key of ['h3c_library_revision','h3c_fork_sequence','h3c_project','h3c_asset_bindings','h3c_generation_import','h3c_manual_guides','h3c_uploaded_assets','h3c_image_output_box'])
+          for(const key of ['h3c_library_revision','h3c_fork_sequence','h3c_project','h3c_asset_bindings','h3c_generation_import','h3c_manual_guides','h3c_uploaded_assets'])
             if(node.properties)delete node.properties[key];
         }
         if(textNodes.has(String(node.id))){delete node.widgets_values;delete node.widgets_values_named;}

@@ -3,17 +3,17 @@ import {generationControl,setGenerationControl} from './h3c_generation_archive.m
 // Mounts the H3 Timeline face on H3C_Timeline nodes, edits the Timeline in the Studio, and keeps its status in sync
 // with the server. ComfyUI permits caching .mjs helpers. Bump their ?v= revision together across web/ when they change.
 import { freshProject } from './h3c_new_project.mjs?v=20261007-new-project-in-place-1';
-import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261105-render-restore-1';
+import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261104-story-groups-1';
 import { app } from '../../scripts/app.js';
 import {syncImageOutputs,compileImageOutputs} from './h3c_timeline_images.mjs?v=20261012-picture-outputs-1';
 import { api } from '../../scripts/api.js';
 import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261004-studio-1';
-import { studio } from './h3c_studio.mjs?v=20261105-saved-playback-1';
+import { studio } from './h3c_studio.mjs?v=20261105-viewer-selection-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261105-saved-playback-1';
-import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261105-rendered-video-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261105-still-quality-1';
+import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
 import { voiceRefs } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
