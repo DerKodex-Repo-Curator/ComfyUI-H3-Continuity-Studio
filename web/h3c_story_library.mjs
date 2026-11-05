@@ -39,8 +39,11 @@ export function sameStoryWiring(a,b) {
       for(const node of current.nodes??[]) {
         for(const key of ['pos','size','order','title','showAdvanced'])delete node[key];
         const widgets=(node.inputs??[]).filter(input=>input.widget);
-        // Named values identify trailing output displays only when input positions are unambiguous.
-        if(Array.isArray(node.widgets_values)&&node.widgets_values_named&&widgets.length
+        // Orrery's comparison DOM widget is display-only; unknown extra controls stay significant.
+        if(node.type==='OrreryRefinementResult'&&Array.isArray(node.widgets_values)
+          &&node.widgets_values.length===widgets.length+1&&node.widgets_values_named&&widgets.length
+          &&Object.hasOwn(node.widgets_values_named,'comparison')&&!widgets.some(input=>input.widget.name==='comparison')
+          &&stringifyJSON(node.widgets_values.at(-1))===stringifyJSON(node.widgets_values_named.comparison)
           &&widgets.every((input,index)=>Object.hasOwn(node.widgets_values_named,input.widget.name)
             &&stringifyJSON(node.widgets_values[index])===stringifyJSON(node.widgets_values_named[input.widget.name])))
           node.widgets_values=node.widgets_values.slice(0,widgets.length);

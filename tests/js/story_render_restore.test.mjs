@@ -12,7 +12,7 @@ function savedStory() {
     {id:2,type:'H3C_Story',inputs:['state'].map(widget),widgets_values:['{"timeline":"1"}']},
     {id:3,type:'CLIPLoader',inputs:['clip_name'].map(widget),widgets_values:['model.safetensors']},
     {id:4,type:'GetImageSize',inputs:[{name:'image',link:1}]},
-    {id:5,type:'Result',inputs:['filename_prefix'].map(widget),widgets_values:['rebuild'],
+    {id:5,type:'OrreryRefinementResult',inputs:['filename_prefix'].map(widget),widgets_values:['rebuild'],
       widgets_values_named:{filename_prefix:'rebuild'}},
   ],links:[[1,1,0,4,0,'IMAGE']]}};
 }
@@ -68,6 +68,24 @@ test('unlabelled trailing values are preserved when display widgets cannot be id
   const saved=savedStory();delete saved.workflow.nodes[4].widgets_values_named;
   saved.workflow.nodes[4].widgets_values.push('setting');
   const current=structuredClone(saved.workflow);current.nodes[4].widgets_values[1]='changed';
+  assert.equal(savedStoryContent(saved,current).renders,false);
+});
+
+test('custom-node controls absent from input sockets still affect generator compatibility', () => {
+  const saved=savedStory();saved.workflow.nodes.push({id:6,type:'CustomCombo',
+    inputs:['value'].map(widget),widgets_values:['first',0,'first','second'],
+    widgets_values_named:{value:'first',index:0,option1:'first',option2:'second'}});
+  const current=structuredClone(saved.workflow);
+  current.nodes.at(-1).widgets_values[3]='different';current.nodes.at(-1).widgets_values_named.option2='different';
+  assert.equal(savedStoryContent(saved,current).renders,false);
+});
+
+test('seed control changes remain significant even when named input positions match', () => {
+  const saved=savedStory();saved.workflow.nodes.push({id:6,type:'RandomNoise',
+    inputs:['noise_seed'].map(widget),widgets_values:[1,'fixed'],
+    widgets_values_named:{noise_seed:1,control_after_generate:'fixed'}});
+  const current=structuredClone(saved.workflow);
+  current.nodes.at(-1).widgets_values[1]='randomize';current.nodes.at(-1).widgets_values_named.control_after_generate='randomize';
   assert.equal(savedStoryContent(saved,current).renders,false);
 });
 
