@@ -1,18 +1,24 @@
 // The optional H3 nodes a Timeline can grow into, and how to add one next to it. UI only.
 import {ADD_ONS as ADD_ON_FEATURES, connectedFeatures} from './h3c_features.mjs?v=20261105-v1-1';
 
-// One plain sentence per node about what it does for the user's video. `wire` names how it joins the Timeline.
+// In the order PRODUCT.md positions them: continuity first. `benefit` is shown as text; `next` says what is left to do
+// after adding it; `advanced` ones sit apart. `wire` names how the node joins the Timeline.
 export const ADD_ONS = [
-  {type: 'H3C_PlusReferences', feature: 'references', title: 'H3 + References', wire: 'project',
-    benefit: 'Use pictures as references and pick first and last frames, so people and places look the same.'},
-  {type: 'H3C_PlusSound', feature: 'sound', title: 'H3 + Sound', wire: 'project',
-    benefit: 'Add audio lanes, dialogue and timed text that H3 hears and carries across joins.'},
-  {type: 'H3C_PlusContinuity', feature: 'continuity', title: 'H3 + Continuity tools', wire: 'project',
-    benefit: 'Compare takes, bridge cuts with new frames, and let a clip remember earlier clips.'},
-  {type: 'H3C_Story', feature: 'story', title: 'H3 Story', wire: 'story',
-    benefit: 'Write every clip prompt from one idea with a language model you connect.'},
-  {type: 'H3C_ContextWindows', feature: 'long', title: 'H3 Context Windows', wire: null,
-    benefit: 'Render one clip longer than H3’s 362 frames. Place it between your model loader and sampler.'},
+  {type: 'H3C_PlusContinuity', feature: 'continuity', title: 'H3 + Continuity tools', short: 'Continuity tools', wire: 'project',
+    benefit: 'Keep people and places the same across cuts: takes, bridges and visual memory.',
+    next: 'Takes, bridges and visual memory are now in the Studio.'},
+  {type: 'H3C_PlusReferences', feature: 'references', title: 'H3 + References', short: 'References', wire: 'project',
+    benefit: 'Use pictures as references and pick first and last frames.',
+    next: 'Connect pictures to the Timeline’s image inputs, then mention them as @image1.'},
+  {type: 'H3C_Story', feature: 'story', title: 'H3 Story', short: 'Story', wire: 'story',
+    benefit: 'Write every clip prompt from one idea with a language model you connect.',
+    next: 'Set its API URL and model on the node; the endpoint may cost money.'},
+  {type: 'H3C_PlusSound', feature: 'sound', title: 'H3 + Sound', short: 'Sound', wire: 'project',
+    benefit: 'Add audio lanes, dialogue and timed text that H3 hears and carries across joins.',
+    next: 'Connect an audio VAE to the Timeline’s audio_vae input to use audio clips.'},
+  {type: 'H3C_ContextWindows', feature: 'long', title: 'H3 Context Windows', short: 'Context Windows', wire: null, advanced: true,
+    benefit: 'Render one clip longer than H3’s 362 frames.',
+    next: 'It is not connected: place it between your model loader and the sampler.'},
 ];
 
 export function missingAddOns(features) {
@@ -66,21 +72,31 @@ function el(tag, className, text) {
   return node;
 }
 
-// "More you can add": one quiet row of the optional nodes that are not in use yet. Empty when all are.
+function addButton(item, onAdd, hint) {
+  const add = el('button', 'h3ct-button h3cx-more-add', `+ ${item.short}`);
+  add.type = 'button';
+  add.title = `Add ${item.title} to this Timeline`;
+  const show = () => { hint.textContent = item.benefit; };
+  add.addEventListener('mouseenter', show);
+  add.addEventListener('focus', show);
+  add.addEventListener('click', (event) => { event.preventDefault?.(); onAdd(item); });
+  return add;
+}
+
+// "Add to this Timeline": one quiet row of the optional nodes not in use yet, with the benefit of the one under the
+// pointer (or the first) as visible text. Empty when all are in use.
 export function moreRow(features, onAdd) {
   const root = el('section', 'h3cx-more');
-  root.setAttribute('aria-label', 'More you can add');
+  root.setAttribute('aria-label', 'Add to this Timeline');
   const missing = missingAddOns(features);
   root.hidden = !missing.length;
   if (!missing.length) return root;
-  root.append(el('span', 'h3cx-more-title', 'More you can add'));
-  for (const item of missing) {
-    const add = el('button', 'h3ct-button h3cx-more-add', `+ ${item.title}`);
-    add.type = 'button';
-    add.title = item.benefit;
-    add.setAttribute('aria-label', `Add ${item.title}: ${item.benefit}`);
-    add.addEventListener('click', (event) => { event.preventDefault?.(); onAdd(item); });
-    root.append(add);
-  }
+  const hint = el('span', 'h3cx-more-hint', missing[0].benefit);
+  root.append(el('span', 'h3cx-more-title', 'Add to this Timeline'));
+  for (const item of missing.filter((entry) => !entry.advanced)) root.append(addButton(item, onAdd, hint));
+  const advanced = missing.filter((entry) => entry.advanced);
+  if (advanced.length) root.append(el('span', 'h3cx-more-title h3cx-more-advanced', 'Advanced:'));
+  for (const item of advanced) root.append(addButton(item, onAdd, hint));
+  root.append(hint);
   return root;
 }

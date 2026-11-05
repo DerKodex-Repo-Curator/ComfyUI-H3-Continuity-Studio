@@ -66,8 +66,8 @@ export class TimelineFace {
     this.moreEl.hidden = !items.length;
     if (!items.length) return;
     this.moreEl.append(el('span', null, 'Add:'));
-    for (const item of items) {
-      const add = button(`+ ${item.title.replace(/^H3 \+ /, '').replace(/^H3 /, '')}`, `${item.title}: ${item.benefit}`, () => onAdd(item));
+    for (const item of items.filter(entry => !entry.advanced)) {
+      const add = button(`+ ${item.short}`, `${item.title}: ${item.benefit}`, () => onAdd(item));
       add.className = '';
       this.moreEl.append(add);
     }

@@ -52,7 +52,7 @@ export function featureNotices(features, onAdd) {
   for (const feature of features) {
     const item = ADD_ONS.find((entry) => entry.feature === feature);
     const line = el('p', 'h3cx-gate-notice',
-      `This project has ${WHAT[feature]}, kept and rendered as before. Add ${item.title} to see and edit it. `);
+      `This project has ${WHAT[feature]}. They are kept, and still rendered. Add ${item.title} to see and edit them. `);
     const add = el('button', 'h3ct-button', 'Add the node');
     add.type = 'button';
     add.title = `Add ${item.title} to this Timeline`;

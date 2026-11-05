@@ -316,14 +316,20 @@ export class TimelineHost {
     recordStep();
   }
 
+  // Adds the H3 node for `feature` next to this Timeline and wires it; returns a sentence saying what happened.
   addFeature(feature) {
     const item = ADD_ONS.find(entry => entry.feature === feature);
     const graph = this.node.graph;
-    if (!item || !graph) return;
-    addAddOn(graph, this.node, item.type, type => globalThis.LiteGraph?.createNode?.(type));
+    if (!item || !graph) return '';
+    try {
+      addAddOn(graph, this.node, item.type, type => globalThis.LiteGraph?.createNode?.(type));
+    } catch (error) {
+      return error.message;
+    }
     graph.setDirtyCanvas?.(true, true);
     this.watchFeatures();
     recordStep();
+    return `Added ${item.title} next to the Timeline in the graph. ${item.next}`;
   }
 
   // Runs every second and after connection changes: the add-on chain can change anywhere in the graph. Mirrors the

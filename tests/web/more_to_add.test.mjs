@@ -31,7 +31,7 @@ function graph() {
 }
 
 test('missingAddOns lists only unconnected add-ons', () => {
-  assert.deepEqual(missingAddOns(new Set(['sound', 'story'])).map((item) => item.feature), ['references', 'continuity', 'long']);
+  assert.deepEqual(missingAddOns(new Set(['sound', 'story'])).map((item) => item.feature), ['continuity', 'references', 'long']);
   assert.equal(missingAddOns(new Set(ADD_ONS.map((item) => item.feature))).length, 0);
 });
 
@@ -49,14 +49,18 @@ test('addAddOn wires project and chains behind an existing add-on', () => {
   assert.equal(connectedFeatures(g, core).has('long'), true);
 });
 
-test('row lists each missing add-on with its benefit and adds it on click', () => {
+test('row lists each missing add-on, shows a benefit as text and adds it on click', () => {
   const added = [];
   const row = moreRow(new Set(['references']), (item) => added.push(item.type));
   const buttons = findAll(row, (node) => node.tagName === 'BUTTON');
   assert.deepEqual(buttons.map((node) => node.textContent),
-    ['+ H3 + Sound', '+ H3 + Continuity tools', '+ H3 Story', '+ H3 Context Windows']);
-  assert.ok(buttons.every((node) => node.title.length > 20));
-  buttons[0].click();
+    ['+ Continuity tools', '+ Story', '+ Sound', '+ Context Windows']);
+  assert.match(row.textContent, /Advanced:\+ Context Windows/);
+  const hint = findAll(row, (node) => node.className === 'h3cx-more-hint')[0];
+  assert.equal(hint.textContent, ADD_ONS[0].benefit);
+  buttons[2].fire('focus');
+  assert.match(hint.textContent, /audio lanes/);
+  buttons[2].click();
   assert.deepEqual(added, ['H3C_PlusSound']);
 });
 
