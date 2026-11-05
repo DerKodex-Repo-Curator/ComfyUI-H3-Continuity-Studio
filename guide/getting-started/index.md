@@ -1,8 +1,9 @@
 # Getting started
 
 1. **[Install](install.md)** the node pack next to a working MiniMax H3 setup in ComfyUI.
-2. **[Render your first sequence](first-sequence.md)**: wire the nodes, draw two clips, render them and inspect the join.
-3. **[Tour the Studio](studio-tour.md)** to see where everything lives.
+2. **[Render your first video](first-sequence.md)**: load Hello H3, pick your models, click ▶ Render and watch the join.
+3. **[Add what you need](../build/add-ons.md)**: plug in the H3 + nodes for pictures, sound, takes and more.
+4. **[Tour the Studio](studio-tour.md)** to see where everything lives.
 
 Then pick what you need from [Build](../build/index.md), [Continuity](../continuity/index.md) and [Story](../story/index.md).
 

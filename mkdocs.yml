@@ -78,10 +78,11 @@ nav:
   - Getting started:
       - getting-started/index.md
       - Install: getting-started/install.md
-      - Your first sequence: getting-started/first-sequence.md
+      - Your first video: getting-started/first-sequence.md
       - The Studio tour: getting-started/studio-tour.md
   - Build:
       - build/index.md
+      - Add-on nodes: build/add-ons.md
       - Timeline and clips: build/timeline.md
       - Writing prompts: build/prompts.md
       - References and pictures: build/references.md

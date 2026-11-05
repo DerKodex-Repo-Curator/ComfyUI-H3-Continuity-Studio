@@ -2,6 +2,8 @@
 
 Press **Open Studio** on the Timeline (or Story) node. The Studio fills the window; **✕** at the top left closes it and returns to the graph. **Esc** also closes it.
 
+This tour shows **Full** mode, with every feature. A new Timeline starts in **Guided** mode and shows only the parts whose [add-on nodes](../build/add-ons.md) are connected; **Show all features** in the top bar switches to Full.
+
 [![The Studio](../assets/screens/studio-overview.png)](../assets/screens/studio-overview.png)
 
 ## Top bar

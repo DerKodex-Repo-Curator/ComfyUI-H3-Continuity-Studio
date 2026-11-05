@@ -11,15 +11,16 @@ The heart of the pack. Draw clips in the Studio; each queued run renders the nex
 | `name` | string | Folder under `output/h3_sequences`. |
 | `width`, `height` | int | Output size. |
 | `context_frames` | 22, 39, 90, 141 | Frames each clip carries from the clip before (0.9 s, 1.6 s, 3.75 s, 5.9 s). |
-| `carry_audio` | boolean | Also carry and freeze the matching audio. |
-| `ref_image_size` | `match` or `max` | Reference image sizing, as in MiniMax H3 Reference to Video. |
-| `audio_context_frames` | int | Incoming audio context in 24 fps frames; 0 follows video. |
+| `carry_audio` | boolean | Advanced. Also carry and freeze the matching audio. A connected **H3 + Sound** sets it. |
+| `ref_image_size` | `match` or `max` | Advanced. Reference image sizing, as in MiniMax H3 Reference to Video. A connected **H3 + References** sets it. |
+| `audio_context_frames` | int | Advanced. Incoming audio context in 24 fps frames; 0 follows video. A connected **H3 + Sound** sets it. |
 | `timeline` | string | The clips as JSON, written by the editor. |
 | `clip`, `vae`, `audio_vae` | optional | H3 CLIP, video VAE and audio VAE. Without the audio VAE, `@audio` references only label the prompt. |
 | `images.imageN`, `videos.videoN`, `video_audios.…`, `audios.audioN` | optional | [Connected references](../build/references.md). |
 | `negative` | optional | Negative conditioning. |
 | `still_recipe` | optional | A [Still Recipe](../build/frame-guides.md); video rendering never evaluates it. |
 | `story` | optional | From **H3 Story**. Renders never wait for it. |
+| `project` | optional | From the [H3 + add-on nodes](../build/add-ons.md). Turns on their Studio features; their settings replace the advanced ones above. |
 
 | Output | Type |
 | --- | --- |
@@ -30,6 +31,10 @@ The heart of the pack. Draw clips in the Studio; each queued run renders the nex
 | `prompt` | STRING |
 | `info` | STRING |
 | `image_1`, `image_2`… | IMAGE, the clip's final `<Picture N>` pixels |
+
+## H3 + References, H3 + Sound, H3 + Continuity tools
+
+The [add-on nodes](../build/add-ons.md). Each has an optional `project` input and a `project` output (`H3C_PROJECT`) and chains into the Timeline's `project` input. **H3 + References** owns `ref_image_size`; **H3 + Sound** owns `carry_audio` and `audio_context_frames`; **H3 + Continuity tools** has no settings.
 
 ## H3 Story
 

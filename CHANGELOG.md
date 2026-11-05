@@ -4,6 +4,33 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [1.0.0] - Unreleased
+
+A simpler start. A new H3 Timeline shows only the core, and you add features by plugging in small nodes. What the Timeline renders is unchanged.
+
+### Added
+
+- **Hello H3** (`examples/v1/01-hello-h3.json`): two clips already written, the second continuing the first. Pick your models, click **▶ Render** and get a finished video with a visible continuity join. It needs no pictures, audio or language model.
+- **Add-on nodes:** **H3 + References**, **H3 + Sound** and **H3 + Continuity tools**. Chain them into the Timeline's new optional `project` input to turn their Studio features on. H3 Story and H3 Context Windows work the same way through their existing links.
+- **Guided and Full modes** for the Studio and the node. Guided shows the core plus what is connected; Full shows everything. Switch with **Show all features** / **Simplify** in the Studio. In Guided mode, the Timeline node hides unconnected sockets that belong to features you have not added.
+- An **Add to this Timeline** row in the Studio and an **Add:** line on the node add a missing node and wire it. A hidden feature that already holds data shows a notice with an **Add the node** button.
+- One small example per add-on in `examples/v1/`, plus a self-made reference picture in `examples/assets/`. The workflows list a download URL only for files on Comfy-Org/MiniMax-H3 (text encoder and VAEs); select the diffusion model and LoRA yourself.
+- Guide: **Your first video** (rewritten to follow Hello H3) and **Add-on nodes**.
+
+### Changed
+
+- `carry_audio`, `ref_image_size` and `audio_context_frames` on H3 Timeline are now advanced inputs in the same positions, so saved values load unchanged. A connected **H3 + References** or **H3 + Sound** sets them.
+
+### Migration
+
+- Workflows saved with 0.12 or earlier open in **Full** mode, with every socket, page and tab as before. To simplify one, press **Simplify** in the Studio. No Timeline data changes either way.
+- The Timeline JSON, the Timeline API and the render engine are unchanged. With nothing connected to `project`, H3 Timeline passes exactly the same values to the engine as 0.12.
+
+### Validation
+
+- Checked on CPU: the full test suite, and every new example loaded and turned into a prompt in ComfyUI 0.44 (frontend 1.58). The Studio was checked headless at desktop and mobile sizes.
+- Not yet checked on a GPU: a render of Hello H3. Until it has run, treat the example as validated on CPU only.
+
 ## [0.12.3] - 2026-11-05
 
 ### Fixed

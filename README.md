@@ -12,16 +12,17 @@ Visual memory can bring selected moments from earlier clips into a later shot, i
 
 Install a current ComfyUI with working MiniMax H3 support and its model files. Clone this repository into `ComfyUI/custom_nodes/ComfyUI-H3-Continuity-Studio`, or extract the source archive there. Run `python -m pip install -r requirements.txt` from this folder using the same Python environment as ComfyUI. On Windows portable installations, use the portable installation's `python_embeded/python.exe` instead of a system Python.
 
-Restart ComfyUI, load `examples/h3_story_studio.json`, and select the H3 diffusion model, text encoder, video VAE, audio VAE and optional LoRA installed on your system. This example records model names from its original environment; they are not downloaded automatically. It also includes an optional still-image subgraph and may require additional models. The source package was checked in an isolated CPU-only ComfyUI startup; a GPU and suitable model files are required for generation.
+Restart ComfyUI and load `examples/v1/01-hello-h3.json` (see First video below). A GPU and suitable model files are required for generation.
 
 The Story writer requires a separately configured compatible language model endpoint. Models, provider services and their terms are separate from this node pack. Context Windows requires a ComfyUI version containing the core MiniMax H3 Context Windows node.
 
-## First sequence
+## First video
 
-1. Start ComfyUI and open `examples/h3_story_studio.json` through its workflow loader.
-2. In the model loader nodes, select compatible H3 diffusion, text encoder, video VAE and audio VAE files available on your installation. Configure the example LoRA only if it matches your model. The workflow also contains a still-image recipe; its additional model is optional for video-only work.
-3. Open the Timeline Studio, add or edit a box and supply a prompt. Render the first box through the connected H3 workflow. Add another box configured to continue, then render it and inspect the join. Start with short clips and enough GPU memory for your chosen model.
-4. Story is optional. To use it, configure a compatible language-model endpoint and model in the Story node. An external endpoint receives the story text and, when enabled, reference pictures. Check the provider's privacy and pricing terms.
+1. Start ComfyUI and open `examples/v1/01-hello-h3.json` (**Hello H3**) through its workflow loader. It needs no pictures, audio or language model.
+2. In the five model loaders, select the H3 diffusion model, LoRA, text encoder, video VAE and audio VAE installed on your system. ComfyUI offers to download a missing text encoder or VAE from Comfy-Org/MiniMax-H3; select your own diffusion model and LoRA.
+3. Click **▶ Render** on the H3 Timeline node. It renders both clips, the second continuing the first, and writes the full video under `output/h3_sequences/hello_h3`. Open the Studio and watch the join. The [guide](https://kadobot.github.io/ComfyUI-H3-Continuity-Studio/getting-started/first-sequence/) walks through each step.
+4. Add features when you need them: the **H3 + References**, **H3 + Sound** and **H3 + Continuity tools** nodes, H3 Story and H3 Context Windows, each with a small example in `examples/v1/`. A new Timeline shows only what is connected; workflows saved before 1.0.0 open with every feature, as before.
+5. Story is optional. To use it, configure a compatible language-model endpoint and model in the Story node. An external endpoint receives the story text and, when enabled, reference pictures. Check the provider's privacy and pricing terms.
 
 Model names and paths in examples are illustrative; select files available in your own installation. ComfyUI and the chosen model determine the required hardware and software versions. H3 Continuity does not download model weights or provider credentials.
 
