@@ -11,6 +11,7 @@ from comfy_execution.graph_utils import ExecutionBlocker
 from . import conditioning, latents, store, timing, shot_preview, refmods, audio_tracks, visual_memory
 from . import box_checks, bridges, dialogue, studio_pictures, voice_clips, reference_replacements, replacement_candidates
 from . import partial_video, replacement
+from . import project_nodes
 from . import nodes as continuity
 from . import timeline as rules
 from .story_node import StoryType
@@ -379,8 +380,8 @@ class H3C_Timeline(io.ComfyNode):
                 io.Combo.Input("context_frames", options=list(timing.CONTEXT_OPTIONS), default="39",
                                tooltip="Frames each box carries from the box before it: 22 = 0.9 s, 39 = 1.6 s, 90 = 3.75 s, "
                                        "141 = 5.9 s."),
-                io.Boolean.Input("carry_audio", default=True, tooltip="Also carry and freeze the matching audio."),
-                io.Combo.Input("ref_image_size", options=["match", "max"], default="match",
+                io.Boolean.Input("carry_audio", default=True, advanced=True, tooltip="Also carry and freeze the matching audio."),
+                io.Combo.Input("ref_image_size", options=["match", "max"], default="match", advanced=True,
                                tooltip="Reference image sizing, as in MiniMax H3 Reference to Video."),
                 io.String.Input("timeline", default=EMPTY_TIMELINE, multiline=True,
                                 tooltip="The boxes as JSON, written by the timeline editor."),
@@ -401,8 +402,12 @@ class H3C_Timeline(io.ComfyNode):
                     io.Audio.Input("video_audio", lazy=True, tooltip="Optional soundtrack of the same-numbered video. "
                                    "Mention @video_audio1 to select video1's soundtrack; ordinary @audio inputs are standalone."),
                     names=rules.VIDEO_AUDIO_SLOTS, min=0)),
-                io.Int.Input('audio_context_frames', optional=True, default=0, min=0,
+                io.Int.Input('audio_context_frames', optional=True, default=0, min=0, advanced=True,
                              tooltip='Incoming audio context in 24 fps frames; 0 follows video. Bounded to video context. Following-neighbour ending pins stay full length.'),
+                project_nodes.ProjectType.Input("project", optional=True,
+                                                tooltip="From H3 + References, H3 + Sound or H3 + Continuity tools. "
+                                                        "Turns on their Studio features; their settings replace the "
+                                                        "advanced ones here."),
             ],
             outputs=[
                 io.Conditioning.Output(display_name="positive"),
@@ -466,7 +471,14 @@ class H3C_Timeline(io.ComfyNode):
                                       and not rules.reference_disabled(slot, disabled)))]
 
     @classmethod
-    def execute(cls, clip=None, vae=None, name="h3_story", width=1024, height=576, context_frames=39, carry_audio=True, ref_image_size="match", timeline="{}",
+    def execute(cls, carry_audio=True, ref_image_size="match", audio_context_frames=0, project=None,
+                **inputs) -> io.NodeOutput:
+        settings = project_nodes.apply_project(project, carry_audio=carry_audio, ref_image_size=ref_image_size,
+                                               audio_context_frames=audio_context_frames)
+        return cls._render(**inputs, **settings)
+
+    @classmethod
+    def _render(cls, clip=None, vae=None, name="h3_story", width=1024, height=576, context_frames=39, carry_audio=True, ref_image_size="match", timeline="{}",
                 audio_vae=None, images=None, audios=None, negative=None, story=None, videos=None, video_audios=None, still_recipe=None, audio_context_frames=0) -> io.NodeOutput:
         from .timeline_api.service import authorize_sequence, sequence_owner
         owner_job = authorize_sequence(name, sequence_owner(cls), "conditioning")
