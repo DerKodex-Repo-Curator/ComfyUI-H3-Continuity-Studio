@@ -773,6 +773,7 @@ export class TimelineEditor {
     this.replacements.close();
     this.state = model.parseState(this.host.read());
     syncTargets(this.state,this.host.context());
+    if (this.adoptEndpoints()) this.host.write(model.serialize(this.state));
     this.selected = Math.min(this.selected, Math.max(0, this.state.boxes.length - 1));
     this.stale = true;
     this.render();
@@ -809,7 +810,17 @@ export class TimelineEditor {
 
   // Edits
 
+  // Converted clips keep one image per endpoint: free guides on their first/last frame become First/Last stills.
+  adoptEndpoints() {
+    let changed = false;
+    this.state.boxes.forEach((box, index) => {
+      if (box.flf_refmods && adoptEndpointGuides(this.state, index, this.host.context())) changed = true;
+    });
+    return changed;
+  }
+
   commit(renderPanel = true) {
+    this.adoptEndpoints();
     model.normalize(this.state, this.host.context());
     syncTargets(this.state,this.host.context());
     this.stale = true;
