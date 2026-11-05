@@ -4,6 +4,15 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.12.8] - 2026-11-05
+
+### Fixed
+
+- Phone playback uses a cached 8-bit H.264 SDR preview so existing 10-bit H.264 HDR renders can play on Android. Desktop playback retries that preview after a decoding error. HDR originals and download links stay unchanged.
+- Saved older takes keep their Timeline thumbnails, including after boxes move, without being marked current. Clip playback uses the saved thumbnail as a poster and plays inline.
+
+[Changes since v0.12.7](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.7...v0.12.8).
+
 ## [0.12.7] - 2026-11-05
 
 ### Fixed

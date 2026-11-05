@@ -1,5 +1,9 @@
 # Full video and projects
 
+On phones, the Studio plays a smaller, 8-bit H.264 SDR preview for browser compatibility. Desktop playback also retries this preview if the original cannot decode. HDR footage is tone-mapped for the preview; opening or downloading the video keeps the original quality and HDR. The first playback creates a cached copy using FFmpeg from PATH or the existing `imageio-ffmpeg` installation. No clips are generated again.
+
+An older saved take still shows its thumbnail and can be played, even while the clip needs rendering to match its current prompt or settings.
+
 ## The full video
 
 The Viewer's **Full video** plays current rendered clips together in Timeline order, even before the remaining clips finish. **Open in new tab** opens the assembled MP4 and **Download** (or the top bar's **Download video**) saves it. It is stored under `output/h3_sequences/<name>/`.
