@@ -2,7 +2,7 @@
 // Play, Use and Delete, Delete other takes and Delete unusable takes in this sequence. Plain DOM without ComfyUI
 // imports; the editor's host sends the requests, and Play asks the Studio to show the take.
 import * as model from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
-import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261031-held-jobs-1';
+import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 
 export const MAX_TAKES = 10;
 const TAKES_URLS = {list: '/h3c/timeline/takes', use: '/h3c/timeline/takes/use', delete: '/h3c/timeline/takes/delete',

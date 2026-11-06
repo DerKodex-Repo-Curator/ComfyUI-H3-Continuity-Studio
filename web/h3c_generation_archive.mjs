@@ -1,5 +1,5 @@
 import {settledPreparation} from './h3c_reference_preparation.mjs?v=20261014-reference-thumbnails-1';
-import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
+import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 function validate(archive){
  if(archive?.format!=='h3-generation'||archive.version!==1||typeof archive.timeline!=='string'||!archive.story||!Array.isArray(archive.assets))throw Error('Choose a generation export version 1.');
  const line=parseJSON(archive.timeline);if(!Array.isArray(line.boxes))throw Error('Generation Timeline is invalid.');

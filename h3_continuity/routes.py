@@ -9,6 +9,7 @@ from .timeline_api.contracts import APIError
 from . import reference_assets, saved_state, story_library, story_names, story_bible, story_job, story_keys, story_templates, refmods, audio_tracks, takes, stills, timeline_prepare as preparation
 
 STATUS_ROUTE = "/h3c/timeline/status"
+REGENERATION_ROUTE = "/h3c/timeline/regeneration"
 TAKES_ROUTE = "/h3c/timeline/takes"
 USE_TAKE_ROUTE = "/h3c/timeline/takes/use"
 DELETE_TAKES_ROUTE = "/h3c/timeline/takes/delete"
@@ -131,6 +132,14 @@ async def timeline_status(request):
     except ValueError:
         return web.json_response({"ok": False, "error": "H3 Timeline: the status request is not JSON"})
     return web.json_response(await asyncio.to_thread(takes.status, body))
+
+
+async def timeline_regeneration(request):
+    from . import regeneration
+    body = await _object(request)
+    if body is None:
+        return web.json_response({"ok": False, "error": "H3 Timeline: regeneration requires a JSON object"}, status=400)
+    return web.json_response(await asyncio.to_thread(regeneration.request, body))
 
 
 async def _takes_request(request, action):
@@ -363,6 +372,16 @@ async def generation_import(request):
     from . import generations
     return await _generation_call(request,lambda body: generations.import_generation(body['archive'],body['request_id'],body.get('renderer')))
 
+async def generation_start(request):
+    from . import generations
+    return await _generation_call(request, generations.start)
+
+
+async def generation_history(request):
+    from . import generations
+    return await _generation_call(request, generations.history)
+
+
 async def _generation_call(request,call):
     try:
         body=await _object(request)
@@ -384,6 +403,9 @@ def register():
     routes = instance.routes
     story_job.JOBS.updated = lambda job: instance.send_sync("h3c-story", {"job": job.id}, job.client or None)
     routes.post(STATUS_ROUTE)(timeline_status)
+    routes.post('/h3c/generations/start')(generation_start)
+    routes.post('/h3c/generations/history')(generation_history)
+    routes.post(REGENERATION_ROUTE)(timeline_regeneration)
     routes.post(TAKES_ROUTE)(timeline_takes)
     routes.post(USE_TAKE_ROUTE)(timeline_use_take)
     routes.post(DELETE_TAKES_ROUTE)(timeline_delete_takes)

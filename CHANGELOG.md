@@ -4,6 +4,16 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-06
+
+### Added
+
+- **Start a new generation** in **Project settings** keeps the Timeline, prompts, seeds, render settings and references while every clip and bridge starts unrendered in a separate render folder. The previous generation's clips, full video and Takes remain untouched. **Previous generations** links to earlier joined videos and individual clips, including unfinished generations. Nothing renders until you ask.
+
+### Fixed
+
+- **Regenerating a clip with incompatible saved continuity now offers recovery before queueing.** The confirmation names the affected clips and explains that their videos will be kept in Takes. Once the replacement saves successfully, only dependent clips and bridges are archived; independent clips stay rendered. **Render remaining** rebuilds the missing clips. Cancelling, stale confirmation or a failed save leaves existing renders in place. Recovery starts with one take; compatible regeneration still supports batches.
+
 ## [0.16.1] - 2026-11-06
 
 ### Fixed

@@ -911,13 +911,15 @@ export class TimelineEditor {
     const index = this.selected, id = this.box().id;
     this.queueBatch = true;
     try {
+      const approval = await this.host.preflight?.(index + 1, count);
+      if (approval?.cancelled) return outcome;
       for (let run = 0; run < count; run += 1) {
         const box = this.state.boxes[index];
         if (box?.id !== id || this.box()?.id !== id) {
           this.setStatus({ok:false,error:`Queued ${outcome.queued} of ${count} takes. The selected clip changed; ${outcome.remaining} takes were not queued.`});
           return outcome;
         }
-        if (!await this.submit(1, index + 1)) {
+        if (!await this.submit(1, index + 1, null, approval?.receipt)) {
           outcome.retryable = this.state.boxes[index]?.id === id && this.box()?.id === id;
           const detail = this.status?.error ?? 'Could not queue this take.';
           if (outcome.queued > 0) this.setStatus({ok:false,error:`Queued ${outcome.queued} of ${count} takes. ${outcome.retryable
@@ -928,6 +930,9 @@ export class TimelineEditor {
         outcome.queued += 1;
         outcome.remaining -= 1;
       }
+      return outcome;
+    } catch (error) {
+      this.setStatus({ok:false,error:error?.message??String(error)});
       return outcome;
     } finally { this.queueBatch = false; this.renderHead(); }
   }
@@ -945,7 +950,7 @@ export class TimelineEditor {
   }
 
   // Whether the run was queued: false while another is being queued, or when queueing failed.
-  async submit(count, box, bridge) {
+  async submit(count, box, bridge, receipt) {
     if (this.queuing || (bridge == null && this.seedInput?.validity?.valid === false)) return false;
     this.queuing = true;
     this.renderHead();
@@ -961,7 +966,7 @@ export class TimelineEditor {
         changed = true;
       }
       if (changed) this.commit();
-      await this.host.queue(count, box, bridge);
+      await this.host.queue(count, box, bridge, receipt);
       return true;
     } catch (error) {
       this.setStatus({ ok: false, error: `Could not queue: ${error?.message ?? error}` });

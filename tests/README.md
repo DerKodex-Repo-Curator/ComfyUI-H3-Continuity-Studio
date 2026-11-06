@@ -20,3 +20,11 @@ python -m unittest discover -s tests -t . -p test_shot_split_server.py -v
 `test_shot_split_server.py` runs `tests/js/emit_shot_split.mjs` in Node. It checks that the renderer reads a Shot split as a Cut with the guides on the correct shots, and still accepts saved paired endpoint guides and interior guides without Shot markers. It is skipped when Node is not on `PATH`.
 
 These tests run on the CPU and load no models. They do not replace watching a render.
+
+The optional settings/browser smoke also checks native and attached new-generation host actions, the upload guard, stale history, and desktop/mobile Project settings without connecting to ComfyUI:
+
+```sh
+uv run --with playwright python tests/browser/new_generation.py
+```
+
+It uses an installed Chrome when available (override with `PLAYWRIGHT_CHROMIUM_EXECUTABLE`), otherwise Playwright's Chromium. Screenshots go to `.tmp/`.

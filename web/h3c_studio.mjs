@@ -461,7 +461,14 @@ export class Studio {
     this.projectChain = el('div');
     this.projectFiles = el('div', 'h3cx-project-files');
     this.projectFileNote = el('p', 'h3cx-note');
+    this.generationButton=button('Start a new generation','Keep this Timeline and all previous videos, with every clip unrendered',()=>this.startGeneration());
+    this.generationNote=el('p','h3cx-note');
+    this.generationNote.setAttribute('aria-live','polite');
+    this.generationHistory=el('div');
     this.pages.project.append(this.projectPrompt, this.projectChain, this.projectFiles, this.projectFileNote,
+      el('h3','h3cx-title','Generations'),
+      el('p','h3cx-note','Generate another version from the same Timeline and prompts. Previous videos and Takes are kept.'),
+      this.generationButton,this.generationNote,this.generationHistory,
       el('p', 'h3cx-note', 'Each Clip is one generation box. Project JSON and backend messages keep the existing box names.'),
       el('p', 'h3cx-note', 'API keys and provider settings are on the linked H3 Story node in the graph. Open its API keys group to Save or Forget keys; advanced inputs hold model, thinking, Vision and memory settings.'),
       el('p', 'h3cx-note', 'Timeline name, width, height, context frames, carry audio and reference image size remain on the H3 Timeline node in the graph.'),
@@ -666,6 +673,45 @@ export class Studio {
     this.root.append(dialog);
     dialog.showModal();
     cancel.focus();
+  }
+
+  async startGeneration() {
+    if(!this.host||this.startingGeneration)return;
+    const host=this.host;
+    this.startingGeneration=true;this.generationButton.disabled=true;this.generationNote.textContent='';
+    try {
+      const started=await host.startGeneration();
+      if(started&&host===this.host){this.generationNote.textContent='New generation ready. Every clip is unrendered; use Render to begin.';await this.loadGenerations();}
+    } catch(error){if(host===this.host)this.generationNote.textContent=error.message;}
+    finally{this.startingGeneration=false;this.generationButton.disabled=false;}
+  }
+
+  async loadGenerations() {
+    const host=this.host, name=host?.sequenceName?.();
+    if(!host)return;
+    if(this.generationHistoryContext?.host!==host||this.generationHistoryContext?.name!==name){
+      this.generationHistory.replaceChildren();
+      this.generationHistoryContext={host,name};
+    }
+    try {
+      const result=await host.generationHistory();
+      if(host!==this.host||name!==host.sequenceName())return;
+      if(!result.ok)throw new Error(result.error??'Previous generations are unavailable.');
+      this.generationHistory.replaceChildren();
+      if(!result.generations.length)return;
+      this.generationHistory.append(el('h4','h3cx-title','Previous generations'));
+      for(const generation of result.generations){
+        const group=el('details');
+        group.append(el('summary',null,`${new Date(generation.created).toLocaleString()} · ${generation.clips.length} clips`));
+        const links=el('div','h3cx-links');
+        for(const [label,file] of [...(generation.video?[['Joined video',generation.video]]:[]),
+          ...generation.clips.map(clip=>[`Clip ${clip.number}`,clip.file])]){
+          const link=el('a',null,label);link.href=host.viewUrl(file);link.target='_blank';link.rel='noopener';links.append(link);
+        }
+        if(!generation.video&&!generation.clips.length)links.append(el('p','h3cx-note','No saved videos in this generation.'));
+        group.append(links);this.generationHistory.append(group);
+      }
+    }catch(error){if(host===this.host&&name===host.sequenceName())this.generationNote.textContent=error.message;}
   }
 
   showProjectError(error) {
@@ -929,6 +975,7 @@ export class Studio {
 
   openFocus(page, {link = true} = {}) {
     if (!FOCUS.includes(page)) return;
+    if(page==='project')this.loadGenerations();
     this.focusPage = page;
     this.libraryPage = page === 'project' ? 'references' : page;
     this.page = page;

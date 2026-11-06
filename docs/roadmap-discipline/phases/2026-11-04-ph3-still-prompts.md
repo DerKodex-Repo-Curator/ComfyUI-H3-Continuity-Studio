@@ -11,9 +11,11 @@
   - *Limits:* CPU instruction/routing checks only; no live LLM response or image-quality/GPU validation. Existing prepared prompts must be regenerated to receive the new instructions. Changes are uncommitted in the isolated branch.
   - *Next:* SP2 owns the user-authorized PR, merge, tagged release and local main fast-forward.
 
-- [ ] **SP2** (State: `active` | Verification: `full tests; strict docs build; merged PR; annotated release tag on merge commit; GitHub release Latest; local main fast-forward`)
+- [ ] **SP2** (State: `deferred` | Verification: `full tests; strict docs build; merged PR; annotated release tag on merge commit; GitHub release Latest; local main fast-forward`)
   - *Behavior:* Commit the verified change, open and merge its PR, publish the next patch release, and fast-forward the original main checkout with all prior edits preserved in a named Git stash if necessary.
   - *Scope:* User explicitly authorized PR, merge, tagged release and main fast-forward. Latest fetched main is efb6460 / v0.12.1, so target release is v0.12.2. No live installation or inference.
   - *Evidence:* Rebased onto origin/main efb6460; changelog retains v0.12.1 and adds v0.12.2. Fresh full suite passes 105 JS + 230 Python, no skips; strict MkDocs and diff checks pass. PR/merge/tag pending.
   - *Main reconciliation:* Original main has one local-only commit, 10ce055 (continuity planning). A literal fast-forward is impossible. Preserve it on a backup branch and preserve dirty tracked/untracked files in a named stash before aligning main with the released remote. Leave the nested .claude worktree untouched.
   - *Next:* Push and create PR; verify GitHub checks, merge, tag v0.12.2 and publish notes, then reconcile local main with backups retained.
+
+Historical checkpoint deferred in this worktree: user explicitly requested a new main-based investigation of incompatible render overlap. Release state was inherited from an older merged branch; do not replay release actions here. Return only on an explicit release request and fresh GitHub reconciliation.

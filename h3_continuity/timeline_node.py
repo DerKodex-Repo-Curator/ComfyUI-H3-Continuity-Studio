@@ -10,7 +10,7 @@ from comfy_execution.graph_utils import ExecutionBlocker
 
 from . import conditioning, latents, store, timing, shot_preview, refmods, audio_tracks, visual_memory
 from . import box_checks, bridges, dialogue, studio_pictures, voice_clips, reference_replacements, replacement_candidates
-from . import partial_video, replacement
+from . import partial_video, replacement, regeneration
 from . import nodes as continuity
 from . import timeline as rules
 from .story_node import StoryType
@@ -614,6 +614,25 @@ class H3C_Timeline(io.ComfyNode):
         folder = store.sequence_dir(continuity.sequences_root(), name)
         name = os.path.basename(folder)
         manifest = saved_manifest(folder, parsed)
+        recovery = None
+        receipt = json.loads(timeline).get("rebuild_continuity")
+        scheduled_next = (owner_job and parsed.render_box is not None and parsed.render_box < len(parsed.boxes)
+                          and any(attempt["unit_id"] == "box:" + parsed.boxes[parsed.render_box].id
+                                  and attempt["state"] == "pending" for attempt in owner_job["attempts"]))
+        if parsed.render_box is not None and (receipt is not None or not scheduled_next):
+            known = dict(width=width, height=height, context_frames=context, carry_audio=carry_audio,
+                         ref_image_size=ref_image_size, audio_context_frames=audio_context_frames)
+            box_id = parsed.boxes[parsed.render_box - 1].id
+            with continuity.SEQUENCE_LOCK:
+                check = (regeneration.validate(folder, parsed, known, box_id, receipt) if receipt is not None
+                         else regeneration.inspect(folder, parsed, known, box_id))
+            if check["needs_rebuild"]:
+                if receipt is None:
+                    raise ValueError(f"H3 Timeline: {check['reason']} Regenerate this clip in the Studio and "
+                                     "confirm rebuilding the affected clips.")
+                recovery = dict(timeline=json.loads(timeline), settings=known, box=box_id, receipt=receipt)
+        elif parsed.render_box is None and receipt is not None:
+            raise ValueError("H3 Timeline: continuity recovery requires a selected clip")
         with continuity.SEQUENCE_LOCK:
             records = manifest.get('reference_audio', {})
             if audio_tracks.snapshot_replacements(parsed, {**source_audios, **audios}, name,
@@ -765,6 +784,7 @@ class H3C_Timeline(io.ComfyNode):
             sequence, latent, context, carry_audio, positive, negative, node="H3 Timeline", audio_context_frames=audio_context_frames,
             noise_vae=vae if parsed.context_noise else None, audio_feather=parsed.audio_feather)
         segment.preserve_following = True
+        segment.regeneration = recovery
         following = by_index.get(next_index + 2)
         ending = 0
         if following and next_index + 1 < len(parsed.boxes):
@@ -785,7 +805,9 @@ class H3C_Timeline(io.ComfyNode):
             rebuilding_next = owner_job and any(
                 attempt["unit_id"] == "box:" + parsed.boxes[next_index + 1].id
                 and attempt["state"] == "pending" for attempt in owner_job["attempts"])
-            if rebuilding_next and not cut:
+            if recovery:
+                box.notes.append("Affected clips will move to Takes only after this render saves successfully.")
+            elif rebuilding_next and not cut:
                 # The durable API plan owns this continuation's replacement.
                 # Retain its old bytes as a take, but generate an unfrozen end.
                 box.notes.append("Following continuation is scheduled for rebuilding by the project job.")
@@ -822,7 +844,7 @@ class H3C_Timeline(io.ComfyNode):
         if rules.text_chain(parsed, next_index, context):
             segment.timeline["text_chain"] = rules.text_chain(parsed, next_index, context)
         # Saving the last box without a take starts the full video; outdated boxes play in it until regenerated.
-        segment.timeline_complete = all(i == next_index or (i + 1 in by_index
+        segment.timeline_complete = recovery is None and all(i == next_index or (i + 1 in by_index
                                                             and store.has_segment_latents(folder, by_index[i + 1]))
                                         for i in range(len(parsed.boxes)))
         if rules.plate_chain(parsed, next_index):

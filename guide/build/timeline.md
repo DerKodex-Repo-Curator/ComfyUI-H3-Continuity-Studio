@@ -76,13 +76,21 @@ A clip is **current** when its saved render still matches its prompt, seed, leng
 !!! tip "Re-rendering one clip"
     **Generate clip N** renders only that clip, with its saved neighbours as anchors. Re-rendering can put later clips that continue it, or remember frames from it, out of date; the Timeline marks them and says why, and nothing renders again until you ask.
 
+If the next clip's saved starting frames cannot be reused (for example, it was rendered as a Cut or at another resolution), **Generate clip N** asks before queueing. The confirmation lists the dependent clips that will need rebuilding. Their existing videos and affected bridges move to **Takes** only after the new clip saves successfully; independent clips keep their renders. Cancelling or a failed save leaves the existing renders in place. Use **Render remaining** afterward to rebuild continuity and the complete video. Start this recovery with **1** take; once continuity is rebuilt, you can generate multiple takes again.
+
 ## Where files go
+
+### Start another generation
+
+Open **Project settings → Start a new generation** to generate a new version using the same Timeline and prompts. After confirmation, every clip and bridge starts unrendered in a separate render folder. Prompts, clip lengths, seeds, guides, references and render settings stay as they are; nothing is queued automatically.
+
+The old generation's videos, latents and Takes stay in their original folder. **Previous generations**, in Project settings, links to their joined videos and individual clips, even when a generation was only partly rendered. Wait for Story writing, uploads and rendering to finish before switching. Attached API projects remain intact; the new generation uses the current workflow as a fresh native render workspace.
 
 ### Outdated clips
 
 A clip whose prompt, length, settings or references changed after it rendered, or whose remembered clip was rendered again, is **outdated**: it keeps its picture and video, is drawn with a dashed border and ⟳, and plays in the full video until you regenerate it. Its tooltip says what changed. **Render N remaining** does not re-render outdated clips; select one and press **Regenerate clip N** to update it.
 
-Saved takes stay with their clip, not its position: inserting, removing or moving a clip never hides the clips after it, and rendering a clip moves only that clip's earlier take to `takes/`. Takes of a clip you removed stay in the folder and come back with the clip (for example through Undo).
+Saved takes stay with their clip, not its position: inserting, removing or moving a clip never hides the clips after it, and rendering a clip normally moves only that clip's earlier take to `takes/`. Confirmed continuity recovery also archives the dependent clips named in the warning. Takes of a clip you removed stay in the folder and come back with the clip (for example through Undo).
 
 If a status check fails or times out, the Studio keeps showing the clips it last knew about, with a note, instead of showing them as unrendered.
 

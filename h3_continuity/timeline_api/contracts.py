@@ -181,7 +181,8 @@ def _schemas():
                     "audio_feather": {"type": "integer", "minimum": 0, "maximum": 16},
                     "video_slices": _array({"type": "string", "pattern": "^video[1-9][0-9]*$"}, uniqueItems=True)},
                    ("boxes",), extra=True)
-    line["not"] = {"anyOf": [{"required": ["render_box"]}, {"required": ["render_bridge"]}]}
+    line["not"] = {"anyOf": [{"required": ["render_box"]}, {"required": ["render_bridge"]},
+                              {"required": ["rebuild_continuity"]}]}
     binding = {"oneOf": [
         _object({"kind": {"const": "reference_replacement"}, "slot": SLOT}, ("kind", "slot")),
         _object({"kind": {"const": "picture"}, "slot": IMAGE,
@@ -201,7 +202,8 @@ def _schemas():
                 "timeline": line, "assets": assets, "consumer": {"type": "object"}, "semantic_boxes": semantic}
     selection = {"oneOf": [
         _object({"kind": {"const": "all"}}, ("kind",)),
-        _object({"kind": {"const": "boxes"}, "ids": _array(ID, minItems=1, uniqueItems=True), "rerender": BOOL}, ("kind", "ids"))]}
+        _object({"kind": {"const": "boxes"}, "ids": _array(ID, minItems=1, uniqueItems=True), "rerender": BOOL,
+                 "rebuild_continuity": _object({"box": ID, "fingerprint": SHA}, ("box", "fingerprint"))}, ("kind", "ids"))]}
     version = {"api_version": {"type": "integer", "const": 1}}
     responses = {
         "asset": _object({**version, "id": ID, "sha256": SHA, "kind": TEXT, "kinds": _array(TEXT), "size": FRAME,

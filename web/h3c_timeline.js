@@ -11,9 +11,9 @@ import { mountSavedState, autosaveEnabled } from './h3c_saved_state.mjs?v=202611
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
 import { DEFAULT_AHEAD, QueueFeed, feedNote, queueAhead } from './h3c_queue_feed.mjs?v=20261105-queue-feed-1';
-import { studio } from './h3c_studio.mjs?v=20261106-preview-status-2';
+import { studio } from './h3c_studio.mjs?v=20261106-release-0170-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261106-lane-beats-2';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261106-release-0170-1';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
@@ -22,8 +22,10 @@ import {captureRecipe,captureTimelineId,captureStillBody,recipeControls,StillCli
 import {boundarySnapshot} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
 import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
 import { TakesClient } from './h3c_takes.mjs?v=20261104-take-marks-2';
-import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261031-held-jobs-1';
+import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 import {TimelineHistory, editingSnapshot, withLiveReceipts} from './h3c_history.mjs?v=20261104-history-1';
+import {confirmRegeneration} from './h3c_regeneration.mjs?v=20261106-overlap-recovery-1';
+import {startGeneration,useGeneration} from './h3c_generations.mjs?v=20261106-new-generation-1';
 
 const NODE_TYPE = 'H3C_Timeline';
 const STATUS_URL = '/h3c/timeline/status';
@@ -190,7 +192,8 @@ export class TimelineHost {
       readBoundary: boxId => this.readBoundary(boxId),
       uploadWhisper: (file, hash) => this.project ? this.uploadProjectAsset(file, 'whisper', hash) : Promise.resolve(),
       audioInfo: (file) => this.audioInfo(file),
-      queue: (count, box, bridge) => this.queue(count, box, bridge),
+      queue: (count, box, bridge, receipt) => this.queue(count, box, bridge, receipt),
+      preflight: (box, count) => this.prepareRegeneration(box, count),
       refresh: () => this.refresh(),
       takes: (action, body) => this.takesClient.send(action, body),
       viewUrl,
@@ -326,7 +329,7 @@ export class TimelineHost {
     const graph = app.rootGraph ?? app.graph;
     const busy = this.project?.busy || this.project?.project?.active_job || this.project?.project?.active_operation
       || watch.running || watch.turn || watch.remaining > 0
-      || (graph?._nodes ?? []).some(node => (node.h3cStory?.job || node.h3cStory?.starting || node.h3cStory?.forkingLibrary) || node.h3cTimeline?.editor.queuing
+      || (graph?._nodes ?? []).some(node => (node.h3cStory?.job || node.h3cStory?.starting || node.h3cStory?.uploading || node.h3cStory?.forkingLibrary) || node.h3cTimeline?.editor.queuing
         || node.h3cTimeline?.editor.queueBatch || node.h3cTimeline?.submitting || node.h3cTimeline?.feed
         || node.h3cTimeline?.referenceClient?.busy || node.h3cTimeline?.stillClient?.active.size || node.h3cTimeline?.stillClient?.recovering || node.h3cTimeline?.editor.frameImages.generating
         || node.h3cTimeline?.editor.pictures.busy || node.h3cTimeline?.editor.cast.busy);
@@ -393,6 +396,58 @@ export class TimelineHost {
       catch (error) { throw new Error(`The Timeline was reset, but is not saved yet: ${error?.message ?? error}`); }
     } finally { this.projectLoading = false; }
   }
+
+  async startGeneration() {
+    const graph=app.rootGraph??app.graph;
+    if(this.node.graph!==graph) throw new Error('Open a root H3 workflow to start a new generation.');
+    const check=()=>{
+      const reason=this.newProjectBusy();
+      if(reason) throw new Error(reason);
+      if(this.removed||(app.rootGraph??app.graph)!==graph) throw new Error('The open workflow changed.');
+    };
+    return startGeneration({check,body:()=>this.generationBody(),
+      snapshot:()=>stringifyJSON({identity:graph.extra?.h3c_story_id,
+        nodes:(graph._nodes??[this.node]).map(node=>({id:node.id,type:node.type,
+          inputs:(node.inputs??[]).map(input=>[input.name,input.link]),
+          widgets:(node.widgets??[]).map(widget=>[widget.name,widget.value])}))}),
+      confirm:options=>app.extensionManager?.dialog?.confirm?.(options)??window.confirm(`${options.title}\n\n${options.message}`),
+      save:async()=>{
+        if(this.project)await this.project.save();
+        await saveBeforeNewProject(this.story(),this.saved);
+      },
+      request:(url,body)=>this.stillRequest(url,body),
+      apply:async result=>{
+        recordStep();
+        const story=this.story();
+        graph.extra??={};graph.extra.h3c_story_id=crypto.randomUUID();
+        if(story?.library){
+          story.libraryId=story.librarySignature=story.libraryDeleted=null;
+          story.libraryRevision=undefined;
+          if(story.node.properties)delete story.node.properties.h3c_library_revision;
+        }
+        useGeneration(this.node,result.name);
+        this.configureProject();
+        this.editor.load();this.changed();
+        const shown=studio();
+        if(shown.host===this){shown.chosen=shown.candidate=null;shown.remembered=null;shown.setView('full');shown.openFocus('project',{link:false});}
+        this.node.setDirtyCanvas?.(true,true);recordStep();
+        try {await this.saved.flush();}
+        catch(error){throw new Error(`The new generation is open but not saved yet: ${error.message}`);}
+        await this.refresh();
+      }});
+  }
+
+  async generationBody() {
+    const body=this.requestBody();
+    if(body.name==null){
+      const snapshot=await app.graphToPrompt();
+      body.workflow=snapshot.output;
+      body.timeline_node=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+    }
+    return body;
+  }
+
+  async generationHistory() {return this.stillRequest('/h3c/generations/history',await this.generationBody());}
 
   // Clearing the queue first means the next pending run can't start between the two calls.
   async stop() {
@@ -906,7 +961,26 @@ export class TimelineHost {
     this.node.setDirtyCanvas?.(true, true);
   }
 
-  async queue(count, box, bridge) {
+  async prepareRegeneration(box, count) {
+    if(this.project) await this.project.save();
+    else await this.saved.flush();
+    const id=this.editor.state.boxes[box-1]?.id;
+    const body=this.project?{name:this.project.project.sequence,
+      timeline:stringifyJSON(this.project.project.inspection.timeline),settings:this.project.project.inspection.settings}:this.requestBody();
+    if(!this.project) {
+      body.editor={graph:String(this.node.graph?.extra?.h3c_story_id??this.node.graph?.id??''),node:String(this.node.id)};
+      if(Object.values(body.settings).some(value=>value==null)) {
+        const snapshot=await app.graphToPrompt();
+        body.workflow=snapshot.output;
+        body.timeline_node=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
+      }
+    }
+    return confirmRegeneration({body,box:id,count,snapshot:()=>JSON.stringify([this.requestBody(),this.project?.project?.revision]),
+      request:(url,body)=>this.stillRequest(url,body),
+      confirm:options=>app.extensionManager?.dialog?.confirm?.(options)??window.confirm(`${options.title}\n\n${options.message}`)});
+  }
+
+  async queue(count, box, bridge, receipt) {
     if (this.feed) throw new Error('A Render is still queueing runs. Press Stop first, or wait for it to finish.');
     this.submitting = true;
     this.requested = box ?? null;
@@ -915,9 +989,9 @@ export class TimelineHost {
     const one = bridge != null ? 'one bridge' : 'one box';
     try {
       if (this.project) return await this.project.render({count: box == null && bridge == null ? 1 : count,
-        boxId: box != null ? this.editor.state.boxes[box - 1]?.id : undefined, bridgeId: bridge});
+        boxId: box != null ? this.editor.state.boxes[box - 1]?.id : undefined, bridgeId: bridge, receipt});
       const definitions=await (await api.fetchApi('/object_info')).json();
-      const post = () => this.postRun(definitions, box, bridge, one);
+      const post = () => this.postRun(definitions, box, bridge, one, receipt);
       const ahead = queueAhead(app.ui?.settings?.getSettingValue?.(QUEUE_AHEAD_SETTING));
       if (!ahead || count <= ahead) {
         for (let run = 0; run < count; run++) await post();
@@ -950,7 +1024,8 @@ export class TimelineHost {
   }
 
   // Posts one run of the Timeline's video outputs to ComfyUI and returns its prompt id.
-  async postRun(definitions, box, bridge, one) {
+  async postRun(definitions, box, bridge, one, receipt) {
+    if(receipt?.editor) await this.saved.flush();
     const snapshot=await app.graphToPrompt();
     const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
     const outputs=videoOutputs(snapshot,id,definitions),prompt=isolateVideoPrompt(snapshot,id,outputs);
@@ -958,6 +1033,7 @@ export class TimelineHost {
     if(box!=null || bridge!=null) {
       if(typeof target.inputs.timeline!=='string') throw new Error(`The Timeline boxes must be editable here to render ${one}.`);
       const request=bridge!=null?{render_bridge:bridge}:{render_box:box};
+      if(receipt) request.rebuild_continuity=receipt;
       target.inputs.timeline=stringifyJSON({...parseJSON(target.inputs.timeline),...request});
     }
     const promptId=crypto.randomUUID();

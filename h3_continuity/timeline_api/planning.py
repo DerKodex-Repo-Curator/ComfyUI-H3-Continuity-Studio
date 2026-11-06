@@ -194,6 +194,16 @@ class Planner:
         # A record verified before this layer holds the stricter whole-project identity; it still proves its unit.
         legacy = {unit["id"]: unit["input_sha256"] for unit in self._units(project, scoped=False)}
         selected = selection.get("ids", [])
+        receipt = selection.get("rebuild_continuity")
+        if receipt is not None:
+            if not selection.get("rerender") or selected != [receipt["box"]]:
+                raise APIError("invalid_selection", "Continuity recovery regenerates one selected clip.")
+            from .. import regeneration
+            check = regeneration.request({"name": project["sequence"],
+                                          "timeline": canonical(prepared["timeline"]).decode("utf-8"),
+                                          "settings": prepared["settings"], "box": receipt["box"]})
+            if not check.get("ok") or check.get("receipt") != receipt:
+                raise APIError("regeneration_changed", regeneration.CHANGED, status=409)
         known_boxes = {unit["box_id"] for unit in units if unit["kind"] == "box"}
         if set(selected) - known_boxes:
             raise APIError("invalid_selection", "Selection contains an unknown box.", path="/selection/ids")
@@ -242,6 +252,10 @@ class Planner:
                 unit["input_sha256"] = record["input_sha256"]  # finalize checks the identity it was verified under
             unit.update(action=action, reasons=reasons, native_sha256=evidence)
             by_id[unit["id"]] = unit
+        if receipt is not None:
+            # Recovery deliberately leaves missing dependents for the user's later Render remaining action.
+            units = [unit for unit in units if unit["id"] == "box:" + receipt["box"]]
+            units[0]["rebuild_continuity"] = receipt
         ranges, offset = splice_ranges(units)
         result = {"api_version": 1, "project_id": project["id"], "revision": project["revision"],
                   "profile_sha256": project["profile_sha256"], "fingerprint": prepared["fingerprint"],
@@ -276,6 +290,9 @@ class Planner:
         target = project["prepared"]["workflow"]["timeline_node"]
         line = copy.deepcopy(project["prepared"]["timeline"])
         line.pop("render_box", None); line.pop("render_bridge", None)
+        line.pop("rebuild_continuity", None)
+        if unit.get("rebuild_continuity"):
+            line["rebuild_continuity"] = copy.deepcopy(unit["rebuild_continuity"])
         if unit["kind"] == "box":
             try:
                 line["render_box"] = next(index + 1 for index, box in enumerate(line["boxes"]) if box["id"] == unit["box_id"])
