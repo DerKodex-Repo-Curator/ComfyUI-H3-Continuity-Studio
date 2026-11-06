@@ -16,46 +16,46 @@ Prior merged work: [P-H3 node ledger](phases/2026-11-04-ph3-image-still.md). Its
 ```json
 {
   "version": 1,
-  "revision": 43,
+  "revision": 47,
   "phase": "Box audio range design",
   "active_features": [],
   "focus_feature": "None",
-  "goal": "Implement and verify box-bound audio source windows under the approved Native plan.",
-  "done_when": "All five implementation tasks and accepted independent-review findings verified; feature branch ready for user integration choice.",
-  "last_completed": "Implementation through7805d11; all five Important review findings fixed RED-GREEN. Final191JS+355Python, actual-host/native/attached1440/390px browser, strict guide and diff/roadmap checks pass.",
-  "in_progress": "None. All BA features passing. Final roadmap documentation commit follows this repository observation; expected HEAD/dirty drift is that docs-only commit. No push, merge, deployment or GPU render.",
+  "goal": "Box-bound audio implementation and real-browser/GPU smoke verified; await user integration choice.",
+  "done_when": "Implementation and authorized real browser/GPU checks verified; owned backend and GPU cleaned; branch ready for integration choice.",
+  "last_completed": "BA8 passed: real ComfyUI browser controls/save/reload/confirmation/mobile/media playback;83frame GPU render verified330Hz, zero-RMS silence,880Hz. Owned backend stopped and GPU released.",
+  "in_progress": "None. All BA features passing; no product changes needed for live testing. Documentation-only receipt/checkpoint commit follows, so HEAD/dirty snapshot drift from that commit is expected. No merge/push/deployment.",
   "next": {
-    "action": "Offer the user local merge to main, push/create PR, or keeping design/box-audio-range-lock as-is; await their integration choice.",
-    "reason": "Authorized implementation is complete; integration and external side effects were not authorized."
+    "action": "Await user integration choice for design/box-audio-range-lock: merge locally, push/create PR, or keep branch.",
+    "reason": "User-requested real browser and bounded GPU validation is complete; integration remains separately owned by the user."
   },
   "files": [
     {
-      "path": "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md",
-      "state": "Approved design"
-    },
-    {
-      "path": "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md",
-      "state": "All five Native implementation tasks complete"
+      "path": "docs/verification/2026-11-06-box-audio-live.md",
+      "state": "Real browser/GPU verification receipt and cleanup evidence"
     },
     {
       "path": "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
-      "state": "Verification, resolved review findings, exhaustive rulings and integration handoff"
+      "state": "All BA features passing; integration handoff"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md",
+      "state": "Completed Native implementation plan"
     }
   ],
   "repository": {
     "branch": "design/box-audio-range-lock",
-    "head": "7805d1125815",
+    "head": "4f84972daf27",
     "dirty": [
       "docs/roadmap-discipline/readiness-checklist.md",
-      "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md"
+      "docs/verification/"
     ],
-    "dirty_hash": "acc3c4eb45de3dad3b9d9adffe34bcc1bcd44d0f31149727818e9aa5838374d7"
+    "dirty_hash": "b2ff19745f8694ff31e144f1f083c7fbdf2c6c5dcd04c750f5f510e06d6a9aa9"
   },
   "verification": {
-    "required": "Full tests; desktop/mobile isolated browser; strict guide; diff/roadmap; independent branch review",
-    "last_run": "node tests/run.mjs; uv run --with playwright python tests/browser/box_audio_windows.py; uv run --with-requirements requirements-docs.txt mkdocs build --strict --site-dir .tmp/box-audio-guide; git diff --check; roadmap check",
+    "required": "Real ComfyUI browser edit/save/playback checks and a bounded GPU render; inspect media and release GPU resources",
+    "last_run": "Real browser preview actions on isolated ComfyUI8189; D:/Projects/ComfyUI_windows_portable/python_embeded/python.exe .tmp/box-audio-live/verify_media.py; GPU finish/process-exit/VRAM/release checks; git diff --check; roadmap check",
     "status": "passed",
-    "detail": "191JS+355Python zero skips/failures; actual TimelineHost confirmation invokes one dialog and unlocks; native/attached1440/390px browser workflows and screenshots pass without errors/overflow; strict guide and diff/roadmap pass. Five Important findings fixed RED-GREEN; none deferred. No GPU creative validation."
+    "detail": "Actual browser upload/lock/resize/duplicate-Undo/add/move/server save/reload/unlock/cancel/Undo/audition,1440x1000 and390x844 no overflow, fullvideo playback ended. All3renders done.83frames24fps320x192,48kHz, measured330Hz then silenceRMS0 then880Hz. Owned PID34644 exited; no8189listener; VRAM1031MiB below1102MiB baseline; ticket released. Receipt has parameters/checksum and limits."
   },
   "blockers": [],
   "reload": [

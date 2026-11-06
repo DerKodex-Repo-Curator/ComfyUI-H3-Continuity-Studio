@@ -2,6 +2,8 @@
 
 ## Can Start
 
+- Follow-up browser/GPU verification complete: BA8 ran actual isolated ComfyUI on8189 with this branch; real edit/save/playback,1440/390px layout and bounded83frame GPU render passed. Encoded audio verifies330Hz→silence→880Hz at assigned ranges. Owned backend stopped, browser closed and GPU released. See `docs/verification/2026-11-06-box-audio-live.md`; user integration choice remains pending. No product-code change.
+
 - Current scope: box-bound audio implemented and verified through `7805d11` on isolated `design/box-audio-range-lock`, based on main `b7eaedc`. All five tasks complete; independent review's five Important findings fixed with RED→GREEN regressions. Final191JS+355Python, actual TimelineHost/native/attached1440/390px browser and strict guide pass. No model render, service restart, deployment, push or merge. Recover the box-audio-range ledger, design, plan and current Recovery State; integration choice remains with the user.
 
 - Current worktree: fix/incompatible-render-overlap at main 3b2d569. IO1-IO3 are implemented and verified (164JS +307Python, browser desktop/mobile, strict docs); recover features.md and incompatible-overlap ledger. Prior release entries below are historical. No live service or render changes.
