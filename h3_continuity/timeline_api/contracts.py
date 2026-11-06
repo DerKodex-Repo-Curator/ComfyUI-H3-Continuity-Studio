@@ -158,9 +158,17 @@ def _schemas():
                         ("before", "mode", "left", "right"), extra=True)
     replacing["not"] = {"required": ["frames"]}
     bridge = {"oneOf": [insertion, replacing]}
+    audio_window = _object({'offset': NONNEGATIVE, 'source_start': NONNEGATIVE, 'duration': POSITIVE},
+                           ('offset', 'source_start', 'duration'))
+    box_windows = _object({'version': {'const': 1, 'type': 'integer'}, 'source': {'type': 'object'},
+                           'placement': _object({'start': NONNEGATIVE, 'source_start': NONNEGATIVE, 'duration': POSITIVE},
+                                                ('start', 'source_start', 'duration')),
+                           'by_box': {'type': 'object', 'additionalProperties': audio_window}},
+                          ('version', 'source', 'placement', 'by_box'))
     audio = _object({"slot": {"enum": ["audio1", "audio2", "audio3"]}, "file": FILE, "start": NONNEGATIVE,
                      "source_start": NONNEGATIVE, "duration": POSITIVE, "description": TEXT,
-                     "layer": {"enum": ["music", "soundscape", "shot"]}, "in_full_video": BOOL, "locked": BOOL},
+                     "layer": {"enum": ["music", "soundscape", "shot"]}, "in_full_video": BOOL, "locked": BOOL,
+                     'box_windows': box_windows},
                     ("slot", "start", "source_start", "duration"), extra=True)
     line = _object({"version": {"type": "integer", "const": 1}, "prompt": TEXT, "boxes": _array(box, minItems=1),
                     "requires": _array({"type": "string", "minLength": 1}, uniqueItems=True),

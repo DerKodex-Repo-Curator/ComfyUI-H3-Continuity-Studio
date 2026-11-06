@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from .timing import FPS, seconds, effective_audio_context
 from . import timed_text
+from . import audio_windows
 
 MAX_FRAMES = 362
 # A Timeline may raise its box limit to this with "max_frames"; boxes past MAX_FRAMES are sampled in context windows.
@@ -33,7 +34,7 @@ RAW_TAG = re.compile(r"<(?:Picture|Audio|Video) \d+>")
 IMAGE_SLOT = re.compile(r"@?image(\d+)", re.IGNORECASE)
 MEMORY_MODES = ("off", "scene", "selected", "cast")
 # Reader features a Timeline can name in "requires"; an editor writes them when the file depends on them.
-REQUIRES = ("dialogue-cues-1", "replacement-bridges-1")
+REQUIRES = ("dialogue-cues-1", "replacement-bridges-1", audio_windows.FEATURE)
 
 
 @dataclass
@@ -263,6 +264,14 @@ def parse(text):
     from . import reference_replacements
     parsed.reference_replacements = reference_replacements.validate(data.get('reference_replacements', {}))
     reference_replacements.pairing(parsed)
+    for clip in parsed.audio_clips:
+        if 'box_windows' in clip:
+            if audio_windows.FEATURE not in requires:
+                raise _error('box-bound audio requires ' + audio_windows.FEATURE)
+            origin = ({'file': reference_replacements.file_for(parsed, clip['slot'])}
+                      if reference_replacements.file_for(parsed, clip['slot']) else
+                      reference_replacements.origin(clip['slot'], reference_replacements.effective(parsed)))
+            audio_windows.validate(clip, audio_box_spans(parsed), origin)
     parsed.reference_descriptions = data.get("reference_descriptions", {})
     if not isinstance(parsed.reference_descriptions, dict) or any(
             not is_picture_slot(key) or not isinstance(value, dict)
@@ -400,6 +409,15 @@ def picture_file(value):
 
 def box_start(timeline, index):
     return sum(played_frames(timeline, i) for i in range(index)) / FPS
+
+
+def audio_box_spans(timeline):
+    start, spans = 0, []
+    for index, box in enumerate(timeline.boxes):
+        duration = played_frames(timeline, index) / FPS
+        spans.append(dict(id=box.id, start=start, duration=duration))
+        start += duration
+    return spans
 
 
 def video_window(timeline, index, context):

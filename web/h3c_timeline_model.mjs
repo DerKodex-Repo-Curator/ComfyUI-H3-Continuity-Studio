@@ -4,6 +4,7 @@ import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-
 import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 import {imageDescriptionPrompt, imageDescriptionSource} from './h3c_image_descriptions.mjs?v=20261010-image-descriptions-1';
 import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
+import {AUDIO_WINDOWS_FEATURE} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 export const FPS = 24;
 export const MAX_FRAMES = 362;
 export const GRID = 17;
@@ -240,11 +241,12 @@ export function serialize(state) {
 }
 
 // Reader features this editor writes into "requires" when the file depends on them, as timeline.REQUIRES lists them.
-export const OWN_FEATURES = ['dialogue-cues-1', 'replacement-bridges-1'];
+export const OWN_FEATURES = ['dialogue-cues-1', 'replacement-bridges-1', AUDIO_WINDOWS_FEATURE];
 
 // What the Timeline needs a reader to understand: this editor's features in use, and any newer one it was given.
 export function requiredFeatures(state) {
   const own = [];
+  if ((state.audio_clips ?? []).some(clip => Object.hasOwn(clip, 'box_windows'))) own.push(AUDIO_WINDOWS_FEATURE);
   if (state.dialogue?.cues?.length || state.dialogue?.observed?.length
     || (state.audio_clips ?? []).some((clip) => clip.locked === true)) own.push('dialogue-cues-1');
   if (keptBridges(state).some(isReplacement)) own.push('replacement-bridges-1');
@@ -374,6 +376,15 @@ export function activeAudioClips(state, index) {
   const end = start + state.boxes[index].frames / FPS;
   return (state.audio_clips ?? []).filter(clip => referenceEnabled(state, clip.slot)
     && clip.start < end && clip.start + clip.duration > start);
+}
+
+export function audioBoxSpans(state) {
+  let start = 0;
+  return state.boxes.map(box => {
+    const duration = box.frames / FPS, span = {id:box.id, start, duration};
+    start += duration;
+    return span;
+  });
 }
 
 export function editAudioClip(clip, mode, delta) {
