@@ -128,7 +128,11 @@ export class StoryLibrary {
       await this.host.save();
       this.check();
       const revision=this.host.revision?.();
-      const value=await this.host.request('/h3c/stories?id='+encodeURIComponent(id));this.check();
+      let value=await this.host.request('/h3c/stories?id='+encodeURIComponent(id));this.check();
+      if(value.checkpoint_name) {
+        value=await this.host.request('/h3c/stories/restore',{id});this.check();
+        value.restored_checkpoint=true;
+      }
       if(revision!==undefined&&JSON.stringify(revision)!==JSON.stringify(this.host.revision()))throw Error('The open story changed while loading. Your edits were kept; load again.');
       await this.host.load(value);
     } finally {this.pending=false;}

@@ -44,6 +44,12 @@ Fast writing makes one planning request and then one structured request per clip
 
 Progress shows in the Story panel and the Studio's top bar; a Write that fails or is cancelled **keeps the clips it finished**.
 
+### Checkpoints and autosave
+
+In **Saved stories**, **Save checkpoint…** saves a named snapshot of the open workflow and Timeline, including the current rendered videos and takes. Use names such as “All boxes rendered” and “New timing — regenerate from box 9”. Checkpoints are labelled separately from automatic versions and keep their own media copies, using additional disk space. Later edits and renders cannot overwrite them. Loading a checkpoint opens an independent editable copy with its videos; the checkpoint remains available to restore again.
+
+The **Autosave** checkbox turns background Story and Timeline saving on or off for all workflows. The setting persists in ComfyUI settings under **H3 Continuity → Story → Autosave**. With it off, use checkpoints to preserve your work. Explicit actions such as writing a Story or switching saved stories still save the state they need. Existing saved versions are kept.
+
 ### Idea images
 
 **+ Idea images** accepts any number of pictures beside the text idea. The writer (or a Vision model) describes each whole image. Descriptions accompany the idea in planning and writing; explicit text and the Guide take priority. A planner may use an image as optional guidance for palette, texture, lighting or composition. The writer states those contributions separately from the cast and never asks H3 to reproduce the image. Only images a prompt actually uses are saved as Timeline pictures and count towards H3's nine-image limit; the rest remain creative context.

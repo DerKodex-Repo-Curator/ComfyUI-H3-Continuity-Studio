@@ -1,7 +1,7 @@
 // The H3 Story face: Write, Check all, Cancel and Undo, Open Studio, and the API keys in a closed section. The Studio
 // places the story of the last Write and the export and import row on its Story page.
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
-import {groupLabel,groupStories,initialSelection,versionLabel} from './h3c_story_groups.mjs?v=20261106-durable-1';
+import {groupLabel,groupStories,initialSelection,versionLabel} from './h3c_story_groups.mjs?v=20261106-checkpoints-1';
 import {ideaImagesRow} from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 
 const STYLE_ID = 'h3cs-style';
@@ -199,13 +199,31 @@ export class StoryPanel {
       this.libraryGroups=[];this.libraryRows=[];
       this.libraryNote=el('span','h3cs-hosts','Saved on this ComfyUI server.');
       const row=el('div','h3cs-row'),storyRow=el('div','h3cs-row');
-      this.libraryOpen=button('Load version','Load the selected version into this Timeline, keeping the current workflow. Saved renders load only when the wiring and settings match.',()=>host.openSavedStory(this.librarySelect.value));
+      this.libraryOpen=button('Load version','Load an autosaved version into this Timeline, or open a named checkpoint as an independent editable workflow with its videos.',()=>host.openSavedStory(this.librarySelect.value));
       this.libraryDelete=button('Delete version','Delete the selected version and its generated media. Other versions of the story are kept.',()=>host.deleteSavedStory(this.libraryRows.find(row=>row.id===this.librarySelect.value)));
       this.libraryRename=button('Rename story','Give the selected story a name instead of its title.',()=>host.renameSavedStory(this.selectedGroup()));
       this.libraryDeleteStory=button('Delete story','Delete every version of the selected story and its generated media.',()=>host.deleteSavedStoryGroup(this.selectedGroup()));
       row.append(button('Refresh','Refresh stories saved on this server.',()=>this.refreshStories()),this.libraryOpen,this.libraryDelete);
       storyRow.append(this.libraryRename,this.libraryDeleteStory);
-      this.libraryEl.append(this.libraryGroup,this.librarySelect,row,storyRow,this.libraryNote);
+      const saveRow=el('div','h3cs-row');
+      this.checkpointButton=button('Save checkpoint…','Save a named snapshot of this workflow, Timeline and rendered videos. Later edits keep this checkpoint intact.',()=>host.saveCheckpoint?.());
+      saveRow.append(this.checkpointButton);
+      if(host.autosaveEnabled) {
+        const label=el('label','h3cs-row');
+        this.autosaveInput=el('input');this.autosaveInput.type='checkbox';
+        this.autosaveInput.checked=host.autosaveEnabled();
+        label.append(this.autosaveInput,el('span',null,'Autosave'));
+        label.title='Automatically save Story and Timeline edits for all workflows. Named checkpoints are always kept separately.';
+        this.autosaveInput.addEventListener('change',async()=>{
+          this.autosaveInput.disabled=true;
+          try {await host.setAutosave(this.autosaveInput.checked);
+            this.say(this.autosaveInput.checked?'Autosave on.':'Autosave off. Save a checkpoint to keep your edits and videos.');}
+          catch(error) {this.say(error.message,true);}
+          finally {this.autosaveInput.checked=host.autosaveEnabled();this.autosaveInput.disabled=false;}
+        });
+        saveRow.append(label);
+      }
+      this.libraryEl.append(saveRow,this.libraryGroup,this.librarySelect,row,storyRow,this.libraryNote);
       this.libraryEl.addEventListener('toggle',()=>{if(this.libraryEl.open)this.refreshStories();});
       this.root.insertBefore(this.libraryEl,this.keysEl);
       this.libraryGroup.addEventListener('change',()=>this.showVersions(this.libraryGroup.value));
@@ -234,6 +252,7 @@ export class StoryPanel {
   }
 
   async refreshStories() {
+    if(this.autosaveInput)this.autosaveInput.checked=this.host.autosaveEnabled();
     this.libraryNote.textContent='Loading saved stories…';
     try {
       const wanted={key:this.libraryGroup.value,id:this.librarySelect.value};

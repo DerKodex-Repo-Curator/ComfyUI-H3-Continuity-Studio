@@ -3,20 +3,25 @@ const sessions = new Map();
 const restorers = new WeakMap();
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+export const AUTOSAVE_SETTING = 'H3Continuity.Autosave';
+export const autosaveEnabled = app => app.ui?.settings?.getSettingValue?.(AUTOSAVE_SETTING) !== false;
+
 export class SavedState {
-  constructor({ read, apply, request, status, identity, session = {} }) {
-    Object.assign(this, { read, apply, request, status, identity, session });
+  constructor({ read, apply, request, status, identity, enabled = () => true, session = {} }) {
+    Object.assign(this, { read, apply, request, status, identity, enabled, session });
   }
 
   get conflict() { return this.session.conflict; }
   set conflict(value) { this.session.conflict = value; }
 
-  async sync() {
+  async sync(force = false) {
+    if (!force && !this.enabled()) {this.status('Autosave off — save a checkpoint to keep your edits.'); return;}
     const session=this.session;
     if (this.gone||session.suspended) return;
     while (session.pending) await session.pending;
     if (this.gone||this.session!==session||session.suspended) return;
-    const pending = this.exchange();
+    if (!force && !this.enabled()) return;
+    const pending = this.exchange(force);
     session.pending = pending;
     try { await pending; } finally {
       if (session.pending === pending) session.pending = null;
@@ -31,11 +36,11 @@ export class SavedState {
     return resume;
   }
 
-  async exchange() {
+  async exchange(force = false) {
     const local = this.read();
     const session = this.session;
     const identity=this.identity?.();
-    const active=()=>!this.gone&&this.session===session&&!session.suspended&&this.identity?.()===identity;
+    const active=()=>!this.gone&&this.session===session&&!session.suspended&&this.identity?.()===identity&&(force||this.enabled());
     try {
       if (this.conflict) return this.disagree(this.conflict);
       if (session.revision === undefined) {
@@ -51,8 +56,8 @@ export class SavedState {
           if (saved.value && !equal(saved.value, local) && !equal(saved.value, now)) return this.disagree(saved);
         } else {
           session.revision = saved.revision;
-          if (saved.value) this.apply(saved.value);
-          session.base = saved.value ? this.read() : null;
+          if (saved.value && this.enabled()) this.apply(saved.value);
+          session.base = saved.value && this.enabled() ? this.read() : saved.value;
         }
       }
       const value = this.read();
@@ -99,13 +104,13 @@ export class SavedState {
     this.session.base = saved.value;
     if (useSaved) { this.apply(saved.value); this.session.base = this.read(); }
     this.conflict = null;
-    await this.sync();
+    await this.sync(true);
   }
 
   async flush() {
-    await this.sync();
+    await this.sync(true);
     if (this.conflict) throw new Error('Resolve the saved-state conflict before writing a Story.');
-    if (!equal(this.read(), this.session.base)) await this.sync();
+    if (!equal(this.read(), this.session.base)) await this.sync(true);
     if (this.conflict || !equal(this.read(), this.session.base)) throw new Error('H3 edits are not saved yet. Try again.');
   }
 }
@@ -136,6 +141,7 @@ export function mountSavedState(node, root, { app, api, loaded }) {
     .map(w => [keyOf(n, w), w.value])));
   sync = new SavedState({
     read,
+    enabled: () => autosaveEnabled(app),
     identity: () => String(node.graph?.extra?.h3c_story_id ?? node.graph?.id ?? ''),
     apply(value) {
       for (const n of nodes()) {

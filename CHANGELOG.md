@@ -9,6 +9,13 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 - **Keep the first pass, re-render the second.** The new **H3 Disk Cache** node goes after the first-pass sampler and saves its result on disk, keyed by the Timeline's `positive`, `latent` and `seed` and by the settings above the sampler. Render the whole Timeline without a second pass, turn the second pass on, and render again: every clip loads its first pass from disk and goes straight to the second pass. Its `info` output says why a result was sampled again or could not be cached. See [Keep the first pass](guide/output/first-pass-cache.md).
 - **H3 Save Segment `guide_frames`.** Connect the first-pass decode, and a continuing clip is guided from the last frame of the clip before as it was sampled, not as finished, so a second-pass change no longer changes every later clip's first pass.
 
+## [0.15.0] - 2026-11-06
+
+### Added
+
+- **Named checkpoints with videos.** In **Saved stories**, **Save checkpoint…** preserves the current workflow, Timeline, rendered videos and takes as a named snapshot, separate from automatic versions. Later edits and renders cannot overwrite it. Loading a checkpoint opens an independent editable copy with its own media. Checkpoints and restored copies use additional disk space; existing versions are kept.
+- **Optional autosave.** The **Autosave** checkbox in **Saved stories**, also available in **H3 Continuity → Story → Autosave** settings, persistently disables background Story and Timeline saving across workflows, including attached projects. Explicit actions that require saving still save their state. Checkpoint saving captures local edits directly, without first restoring another workflow's autosave.
+
 ## [0.14.0] - 2026-11-06
 
 ### Added

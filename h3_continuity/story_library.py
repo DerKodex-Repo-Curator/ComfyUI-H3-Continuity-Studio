@@ -29,6 +29,16 @@ def _read_file(path):
         return json.load(stream)
 
 
+def save_checkpoint(graph, story, workflow, sequence, name):
+    from .story_checkpoints import save
+    return save(graph, story, workflow, sequence, name)
+
+
+def restore_checkpoint(identity):
+    from .story_checkpoints import restore
+    return restore(identity)
+
+
 def _entry_path(identity):
     if not isinstance(identity, str) or not re.fullmatch('[a-f0-9]{64}', identity):
         raise ValueError('Choose a saved story.')
@@ -104,6 +114,8 @@ def save(graph, story, workflow, sequence, revision=None, library_revision=None)
         if revision is not None and saved_state.read('workflow', graph, 'workflow')['revision'] != revision:
             raise ValueError('This story changed in another browser. Refresh saved edits before switching.')
         current = saved_state.read('library', graph, 'library')['value'] or {}
+        if current.get('checkpoint_name'):
+            raise ValueError('A saved checkpoint cannot be overwritten. Open an editable copy first.')
         previous = current.get('workflow_revision', 0)
         if current and library_revision != previous and _wiring(current['workflow']) != _wiring(workflow):
             raise WorkflowWiringConflict(previous)
@@ -122,7 +134,7 @@ def checkpoint(graph, story, timeline, job, view):
         if saved_state.deleted(graph):
             return
         value = saved_state.read('library', graph, 'library')['value']
-        if value is None or value['story'] != str(story):
+        if value is None or value.get('checkpoint_name') or value['story'] != str(story):
             return
         value.update(job={'job': job, 'timeline': timeline, 'view': copy.deepcopy(view)}, updated=time.time())
         saved_state.write('library', graph, 'library', value)
@@ -133,8 +145,9 @@ def load(identity, deleting=False):
         value = _read_file(_entry_path(identity)).get('value')
         if not isinstance(value, dict) or value.get('format') != 'h3-library' or saved_state.deleted(value['graph']) and not deleting:
             raise ValueError('This saved story is no longer available.')
-        saved = saved_state.read('workflow', value['graph'], 'workflow')
-        value['workflow'] = _overlay(value['workflow'], saved.get('value') or {})
+        if not value.get('checkpoint_name'):
+            saved = saved_state.read('workflow', value['graph'], 'workflow')
+            value['workflow'] = _overlay(value['workflow'], saved.get('value') or {})
         for node in value['workflow']['nodes']:
             if node.get('type') == 'H3C_Story' and str(node['id']) == value['story']:
                 node.setdefault('properties', {})['h3c_library_revision'] = value.get('workflow_revision', 0)
@@ -205,7 +218,8 @@ def listing():
                 rows.append({'id': path.stem, 'graph': value['graph'], 'title': state.get('title') or result.get('title') or 'Untitled story',
                              'updated': value['updated'], 'boxes': len(line.get('boxes') or result.get('boxes') or result.get('outline') or []),
                              'status': 'Deletion incomplete — retry' if saved_state.deleted(value['graph']) else view.get('state', 'saved'), 'sequence': value['sequence'], 'revision': value.get('workflow_revision', 0),
-                             'rendered': _rendered(value['sequence'], counts)})
+                             'rendered': _rendered(value['sequence'], counts),
+                             **({'checkpoint_name': value['checkpoint_name']} if value.get('checkpoint_name') else {})})
             except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 continue
         return sorted(rows, key=lambda row: row['updated'], reverse=True)
