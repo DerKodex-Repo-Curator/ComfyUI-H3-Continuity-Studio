@@ -4,7 +4,7 @@ import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-
 import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 import {imageDescriptionPrompt, imageDescriptionSource} from './h3c_image_descriptions.mjs?v=20261010-image-descriptions-1';
 import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
-import {AUDIO_WINDOWS_FEATURE, pruneWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
+import {AUDIO_WINDOWS_FEATURE, pruneWindows, resolveWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 export const FPS = 24;
 export const MAX_FRAMES = 362;
 export const GRID = 17;
@@ -371,11 +371,17 @@ export function totalFrames(state) {
   return state.boxes.reduce((sum, box) => sum + (box.frames || 0), 0);
 }
 
-export function activeAudioClips(state, index) {
+export function resolvedAudio(state) {
+  const boxes = audioBoxSpans(state);
+  return (state.audio_clips ?? []).filter(clip=>referenceEnabled(state,clip.slot))
+    .flatMap(clip=>resolveWindows(clip,boxes).map(w=>({...w,slot:clip.slot})));
+}
+
+export function activeAudioClips(state, index, context = 0) {
   const start = state.boxes.slice(0, index).reduce((sum, box) => sum + box.frames, 0) / FPS;
   const end = start + state.boxes[index].frames / FPS;
   return (state.audio_clips ?? []).filter(clip => referenceEnabled(state, clip.slot)
-    && clip.start < end && clip.start + clip.duration > start);
+    && resolveWindows(clip,audioBoxSpans(state)).some(w=>w.start < end && w.start+w.duration > start-(clip.box_windows && !isFresh(state,index) ? context/FPS : 0)));
 }
 
 export function audioBoxSpans(state) {
@@ -523,7 +529,6 @@ function cueFrames(state, cue) {
   const clip = (state.audio_clips ?? []).find((item) => item.slot === slot);
   if (!clip || (state.disabled_refs ?? []).includes(slot) || !file || !wanted
       || ['type', 'subfolder', 'filename'].some((key) => (file[key] ?? '') !== (wanted[key] ?? ''))) return [];
-  const start = Math.max(cue.start, clip.source_start), end = Math.min(cue.end, clip.source_start + clip.duration);
   const parts = [];
   let cursor = cue.start;
   for (const span of [...cue.spans ?? []].sort((one, other) => one.start - other.start)) {
@@ -532,10 +537,13 @@ function cueFrames(state, cue) {
     cursor = span.end;
   }
   if (cursor < cue.end) parts.push([cursor, cue.end, cue.portrayal]);
-  const frame = (seconds) => (clip.start + seconds - clip.source_start) * FPS;
+  return resolveWindows(clip,audioBoxSpans(state)).flatMap(window => {
+  const start = Math.max(cue.start, window.source_start), end = Math.min(cue.end, window.source_start + window.duration);
+  const frame = seconds => (window.start + seconds-window.source_start)*FPS;
   return parts.map(([first, last, portrayal]) => [Math.max(first, start), Math.min(last, end), portrayal])
     .filter(([first, last]) => last - first > CUE_EPSILON)
     .map(([first, last, portrayal]) => [Math.floor(frame(first) + CUE_EPSILON), Math.ceil(frame(last) - CUE_EPSILON), portrayal]);
+  });
 }
 
 // Whether box `index` asks H3 for speech someone may say on screen, as dialogue.speaks: typed <d>, or a bound cue
@@ -976,7 +984,7 @@ export function describeBox(state, index, connected, context) {
   const found = mentions(text);
   const images = found.filter((item) => item.kind === 'image').map((item) => item.name);
   const audios = [...new Set([...found.filter((item) => item.kind === 'audio').map((item) => item.name),
-    ...activeAudioClips(state, index).map(clip => clip.slot)])];
+    ...activeAudioClips(state, index, context).map(clip => clip.slot)])];
   const videoAudios = found.filter(item => item.kind === 'video_audio').map(item => item.name);
   const videos = [...new Set([...found.filter(item => item.kind === 'video').map(item => item.name),
     ...videoAudios.map(name => name.replace('video_audio', 'video'))])];

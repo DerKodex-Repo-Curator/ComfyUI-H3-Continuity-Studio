@@ -262,7 +262,7 @@ export class AudioLanes {
       const index = this.editor.selected, box = state.boxes[index];
       const start = state.boxes.slice(0, index).reduce((sum, box) => sum + box.frames, 0) / model.FPS;
       const window = projectTimedText(value, this.clips, start, box?.frames ?? model.totalFrames(state),
-        box && !model.isFresh(state, index) ? this.editor.host.context() : 0);
+        box && !model.isFresh(state, index) ? this.editor.host.context() : 0, model.resolvedAudio(state));
       this.textSummary.textContent = `Movie ${clock.start} s · source ${clock.source_start}–${clock.source_start + clock.duration} s`
         + `\nClip ${index + 1} source ${window.source_start ?? '—'}–${window.source_end ?? '—'} s · replay ${window.replay_end_ms} ms`
         + `${window.direction ? `\nDirection: ${window.direction}` : ''}`

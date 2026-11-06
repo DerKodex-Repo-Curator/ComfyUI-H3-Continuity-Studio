@@ -413,7 +413,8 @@ export class DialoguePanel {
     const checked = cues.filter((cue) => this.serverCue(cue.id)?.aligned).length;
     this.summary.textContent = `Dialogue cues${cues.length ? ` · ${cues.length}${this.editor.stale ? '' : `, ${checked} checked`}` : ''}`;
     this.root.hidden = !clips.length && !cues.length;
-    const signature = JSON.stringify([state.dialogue, clips.map((clip) => [clip.slot, clip.file, clip.locked]),
+    const signature = JSON.stringify([state.dialogue, clips.map((clip) => [clip.slot, clip.file, clip.locked, clip.box_windows]),
+      state.boxes.map(box=>[box.id,box.frames]),
       this.editor.stale ? null : this.editor.status?.dialogue]);
     const typing = this.root.contains(document.activeElement) && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
     if (!force && (this.signature === signature || typing)) return;

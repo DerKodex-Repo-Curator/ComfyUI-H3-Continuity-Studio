@@ -176,8 +176,14 @@ def projected(timeline):
     result = []
     for cue in cues(timeline):
         state, clip = binding(cue, timeline)
-        where = placed(cue, clip) if state == "bound" else None
-        result.append({"id": cue["id"], "cue": cue, "state": state, "slot": cue["recording"]["slot"],
+        if state == 'bound' and 'box_windows' in clip:
+            from . import audio_windows, timeline as rules
+            positions = audio_windows.coalesce(audio_windows.resolve(clip,rules.audio_box_spans(timeline)))
+            places = [where for window in positions if (where := placed(cue,window)) is not None]
+        else:
+            places = [placed(cue, clip) if state == 'bound' else None]
+        for where in places or [None]:
+            result.append({"id": cue["id"], "cue": cue, "state": state, "slot": cue["recording"]["slot"],
                        "aligned": is_aligned(cue), "placed": where is not None,
                        "cut": bool(where and where["cut"]), "sequence": where and where["sequence"],
                        "frames": where and where["frames"], "segments": where["segments"] if where else []})

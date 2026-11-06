@@ -11,6 +11,7 @@ import time
 import traceback
 
 from . import llm, story_context, story_inputs, story_keys, story_lengths, story_vram
+from . import timeline as rules
 from . import story_prompts as prompts, story_stages, story_guide
 from . import h3_prompt_ir as prompt_ir, h3_prompt_schema as prompt_schema
 from . import saved_state, story_library, still_prompt_preparation, story_bible, story_bible_write, story_check, story_fast, story_vision, timed_text
@@ -48,7 +49,7 @@ class Job:
         self.state, self.progress = "running", story_progress(ctx)
         self.result = self.error = None
         self.drafts = {}
-        self.original_text = timed_text.snapshot(ctx.timeline.timed_text, ctx.timeline.audio_clips)
+        self.original_text = timed_text.snapshot(ctx.timeline.timed_text, ctx.timeline.audio_clips, rules.resolved_audio(ctx.timeline))
         self.notes = list(ctx.notes)
         self.polled = time.monotonic()
         self.updated = lambda job: None

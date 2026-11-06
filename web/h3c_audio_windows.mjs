@@ -71,3 +71,13 @@ export function unlockWindows(clip) {
   Object.assign(clip, clip.box_windows.placement);
   delete clip.box_windows;
 }
+
+export function coalesceWindows(windows) {
+  const result = [];
+  for (const window of [...windows].sort((a,b)=>a.start-b.start)) {
+    const last = result.at(-1);
+    if (last && last.slot === window.slot && ['start','source_start'].every(key=>Math.abs(last[key]+last.duration-window[key])<1e-9)) last.duration += window.duration;
+    else result.push({...window});
+  }
+  return result;
+}

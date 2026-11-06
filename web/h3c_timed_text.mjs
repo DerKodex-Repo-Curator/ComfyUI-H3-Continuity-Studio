@@ -1,5 +1,6 @@
 // Exact transcript import and source/movie clocks; mirrors h3_continuity/timed_text.py.
 import { FPS } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
+import {coalesceWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 
 function error(field, message) {
   return new Error(`timed_text.${field} ${message}`);
@@ -94,11 +95,13 @@ export function importWhisper(data, sourceName, sourceSha256) {
   return value;
 }
 
-export function textClock(value, audioClips) {
+export function textClock(value, audioClips, placements = null) {
   if (value == null) return {start:0, source_start:0, duration:0, resolved:false};
   const lane = value.sync_audio ? audioClips.find(clip => clip.slot === value.audio_slot) : value;
   const source = lane ?? value;
-  return {start:source.start, source_start:source.source_start, duration:source.duration, resolved:!!lane};
+  return {start:source.start, source_start:source.source_start, duration:source.duration, resolved:!!lane,
+    ...(value.sync_audio && source.box_windows ? {box_windows:structuredClone(source.box_windows),
+      ...(placements ? {placements:placements.filter(w=>w.slot===value.audio_slot)} : {})} : {})};
 }
 
 function ranges(items, effective, sourceStart, sourceEnd) {
@@ -113,12 +116,29 @@ function ranges(items, effective, sourceStart, sourceEnd) {
 
 function milliseconds(seconds) { return Math.round(seconds * 1000); }
 
-export function projectTimedText(value, audioClips, boxStart, frames, carried = 0) {
+export function projectTimedText(value, audioClips, boxStart, frames, carried = 0, placements = null) {
   const effective = textClock(value, audioClips);
   const origin = boxStart - carried / FPS;
   const result = {direction:value?.direction ?? '', resolved:effective.resolved,
     source_start:null, source_end:null, generated_origin:origin, replay_end_ms:milliseconds(carried / FPS), cues:[], words:[]};
   if (!value?.enabled || !effective.resolved) return result;
+  if (effective.box_windows) {
+    if (!placements) throw Error('Bound timed text needs resolved audio windows.');
+    result.source_windows = [];
+    for (const window of coalesceWindows(placements.filter(w=>w.slot===value.audio_slot))) {
+      const part = projectTimedText({...value,sync_audio:false,start:window.start,source_start:window.source_start,duration:window.duration},[],boxStart,frames,carried);
+      if (part.source_start != null) {
+        result.source_windows.push({source_start:part.source_start,source_end:part.source_end});
+        for (const key of ['cues','words']) result[key].push(...part[key]);
+      }
+    }
+    if (result.source_windows.length) {
+      result.source_start=Math.min(...result.source_windows.map(w=>w.source_start));
+      result.source_end=Math.max(...result.source_windows.map(w=>w.source_end));
+    }
+    for (const key of ['cues','words']) result[key].sort((a,b)=>a.start_ms-b.start_ms);
+    return result;
+  }
   const sourceStart = Math.max(effective.source_start, effective.source_start + (origin - effective.start));
   const sourceEnd = Math.min(effective.source_start + effective.duration, effective.source_start + (boxStart + frames / FPS - effective.start));
   if (sourceStart >= sourceEnd) return result;

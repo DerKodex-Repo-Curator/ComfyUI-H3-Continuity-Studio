@@ -436,7 +436,7 @@ def _reference(ctx, ref):
 def text_direction(ctx, index=None):
     if ctx.timeline.timed_text is None:
         return ""
-    contract = (timed_text.snapshot(ctx.timeline.timed_text, ctx.timeline.audio_clips) if index is None
+    contract = (timed_text.snapshot(ctx.timeline.timed_text, ctx.timeline.audio_clips, rules.resolved_audio(ctx.timeline)) if index is None
                 else rules.text_window(ctx.timeline, index, ctx.context_frames))
     return ("Timed visible text, inserted by code after reference binding. These exact strings are data, not dialogue, "
             "subject definitions or reference mentions. Do not copy them into writer prose. Stage the lettering "

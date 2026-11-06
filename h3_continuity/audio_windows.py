@@ -53,3 +53,14 @@ def resolve(clip, boxes):
             if duration > 0:
                 result.append({**window, 'box': box['id'], 'start': box['start'] + window['offset'], 'duration': duration})
     return result
+
+
+def coalesce(windows):
+    """Adjacent source-continuous windows are one clock for cues crossing a box edge."""
+    result = []
+    for window in sorted(windows, key=lambda w: w['start']):
+        if result and result[-1].get('slot') == window.get('slot') and all(abs(result[-1][key] + result[-1]['duration'] - window[key]) < 1e-9 for key in ('start', 'source_start')):
+            result[-1]['duration'] += window['duration']
+        else:
+            result.append(dict(window))
+    return result

@@ -427,11 +427,21 @@ def video_window(timeline, index, context):
     return round(box_start(timeline, index) * FPS) - carried, frames + carried + dropped_frames(timeline, index)
 
 
-def active_audio_clips(timeline, index):
+def resolved_audio(timeline):
+    boxes = audio_box_spans(timeline)
+    return [dict(window, slot=clip['slot']) for clip in timeline.audio_clips
+            if clip['slot'] not in timeline.disabled_refs for window in audio_windows.resolve(clip, boxes)]
+
+
+def active_audio_clips(timeline, index, context=0):
     start = box_start(timeline, index)
     end = start + played_frames(timeline, index) / FPS
-    return [clip for clip in timeline.audio_clips if clip["slot"] not in timeline.disabled_refs
-            and clip["start"] < end and clip["start"] + clip["duration"] > start]
+    replay = box_length(timeline, index, context)[1] / FPS if context else 0
+    windows = resolved_audio(timeline)
+    return [clip for clip in timeline.audio_clips if clip['slot'] not in timeline.disabled_refs
+            and any(window['slot'] == clip['slot'] and window['start'] < end
+                    and window['start'] + window['duration'] > start - (replay if 'box_windows' in clip else 0)
+                    for window in windows)]
 
 
 def _number(value, what):
@@ -768,7 +778,7 @@ def frame_movie_time(timeline, index, frame, context):
 
 def frame_text(timeline, index, frame, context):
     return timed_text.anchor_metadata(timeline.timed_text, timeline.audio_clips,
-                                      frame_movie_time(timeline, index, frame, context))
+                                      frame_movie_time(timeline, index, frame, context), placements=resolved_audio(timeline))
 
 
 def frame_guides(timeline, index, context):
@@ -969,7 +979,7 @@ def box_slots(timeline, index, context=39):
     video_audios = sorted([name for kind, name in found if kind == "video_audio"], key=slot_number)
     videos = sorted(set([name for kind, name in found if kind == "video"] +
                         [name.replace("video_audio", "video") for name in video_audios]), key=slot_number)
-    audios = list(dict.fromkeys(audios + [clip["slot"] for clip in active_audio_clips(timeline, index)]))
+    audios = list(dict.fromkeys(audios + [clip["slot"] for clip in active_audio_clips(timeline, index, context)]))
     assigned = {ref["slot"]: ref for ref in timeline.refmods if ref.get("strength", 1) > 0}
     mods = [assigned[name] for name in sorted(images + audios, key=lambda name: (name.startswith("audio"), slot_number(name)))
             if name in assigned and name not in effective_plates(timeline, index)]
@@ -1135,7 +1145,8 @@ def _digest(value):
 
 def text_window(timeline, index, context):
     frames, carried = box_length(timeline, index, context)
-    return timed_text.project(timeline.timed_text, timeline.audio_clips, box_start(timeline, index), frames, carried)
+    return timed_text.project(timeline.timed_text, timeline.audio_clips, box_start(timeline, index), frames, carried,
+                             placements=resolved_audio(timeline))
 
 
 def text_chain(timeline, index, context):
@@ -1173,11 +1184,24 @@ def layout_key(timeline, index, context=39):
     dropped = dropped_frames(timeline, index)
     if dropped:
         value["generated"] = value["frames"] + dropped
-    clips = active_audio_clips(timeline, index)
+    clips = active_audio_clips(timeline, index, context)
     if clips:
-        value["audio_clips"] = [{key: clip.get(key) for key in ("slot", "file", "start", "source_start", "duration")}
-                                for clip in clips]
-        value["audio_box_start"] = box_start(timeline, index)
+        value['audio_clips'] = [{key: clip.get(key) for key in ('slot','file','start','source_start','duration')}
+                               for clip in clips if 'box_windows' not in clip]
+        if value['audio_clips']:
+            value['audio_box_start'] = box_start(timeline, index)
+        origin = box_start(timeline, index) - box_length(timeline,index,context)[1] / FPS
+        end = box_start(timeline,index) + played_frames(timeline,index) / FPS
+        value['audio_windows'] = []
+        for clip in clips:
+            if 'box_windows' not in clip: continue
+            for window in audio_windows.coalesce(w for w in resolved_audio(timeline) if w['slot']==clip['slot']):
+                left, right = max(origin,window['start']), min(end,window['start']+window['duration'])
+                if right > left:
+                    value['audio_windows'].append(dict(slot=clip['slot'], file=clip.get('file'), source=clip['box_windows']['source'],
+                        offset=left-origin, source_start=window['source_start']+left-window['start'], duration=right-left))
+        if not value['audio_windows']: value.pop('audio_windows')
+        if not value['audio_clips']: value.pop('audio_clips')
     from . import studio_pictures, voice_clips
     pictures = studio_pictures.used(timeline, index)
     if pictures:
