@@ -136,7 +136,8 @@ def build(folder, name, parsed, manifest, done, soundtrack, crf):
             else:
                 pieces.append((count, 0, None, None))
         audio = media.assemble_audio(pieces)
-    windows = [(os.path.join(folder, entry["video"]["file"] if entry else source["file"]), first, count)
+    windows = [(os.path.join(folder, entry["video"]["file"] if entry else source["file"]),
+                *media.window_at_fps(first, count, entry["video"].get("fps") if entry else None))
                for entry, first, count in found]
     video = rendered[0]["video"]
     size = (video["width"], video["height"]) if video.get("width") and video.get("height") else None

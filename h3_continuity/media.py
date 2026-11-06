@@ -20,6 +20,15 @@ def _layout(channels):
     return "mono" if channels == 1 else "stereo"
 
 
+def window_at_fps(first, count, fps):
+    """A window of `count` frames from `first` on the 24 fps timeline, as frame numbers in a video saved at `fps`
+    (interpolated segments hold more frames per timeline frame). Both ends are rounded, so rounding never accumulates."""
+    if not fps or fps == 24:
+        return first, count
+    start = round(first * fps / 24)
+    return start, max(1, round((first + count) * fps / 24) - start)
+
+
 def fit_frame_count(images, count):
     """Drop extra frames or repeat the last one so `images` has exactly `count` frames."""
     if images.shape[0] >= count:

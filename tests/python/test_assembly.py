@@ -168,5 +168,15 @@ class FingerprintTest(unittest.TestCase):
             shutil.rmtree(folder, ignore_errors=True)
 
 
+class WindowFpsTest(unittest.TestCase):
+    def test_interpolated_segments_scale_windows(self):
+        self.assertEqual(media.window_at_fps(0, 100, 24), (0, 100))
+        self.assertEqual(media.window_at_fps(0, 100, None), (0, 100))
+        self.assertEqual(media.window_at_fps(0, 100, 48), (0, 200))
+        self.assertEqual(media.window_at_fps(10, 5, 48), (20, 10))
+        start, count = media.window_at_fps(3, 7, 60)
+        self.assertEqual((start, start + count), (8, 25))
+
+
 if __name__ == "__main__":
     unittest.main()

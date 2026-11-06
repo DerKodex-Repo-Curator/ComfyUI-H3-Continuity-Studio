@@ -579,7 +579,8 @@ def _generated_audio(folder, parts):
 
 
 def _video_windows(folder, parts):
-    return [(os.path.join(folder, e["video"]["file"]), first, count) for e, first, count, *_ in parts]
+    return [(os.path.join(folder, e["video"]["file"]), *media.window_at_fps(first, count, e["video"].get("fps")))
+            for e, first, count, *_ in parts]
 
 
 def write_previews(folder, manifest, candidate, crf, spliced=(), soundtrack=()):
