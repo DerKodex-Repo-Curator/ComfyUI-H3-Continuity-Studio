@@ -18,6 +18,10 @@ description: Use when H3 Timeline box lengths or start times matter. That covers
   box, along with the audio, text and guides placed on them. Planning or preparing
   reports each box's `delivered_range`, `generated_range` and `carry_range` as
   half-open movie frames, so read those rather than recomputing them.
+- Lengths are the author's. Don't change one to make memory, guides, plate changes,
+  bridges or prompt timing fit; move those instead (see `h3-continuity-video`).
+  Give a box that must hold its length (lip sync, a beat) `exact`, or a length
+  already on the grid, so the length you wrote is the one that plays.
 - The default limit is 362 generated frames, or 362 minus `context_frames` new
   frames for a continuing box (`limits.exact_frames`).
 
@@ -46,11 +50,13 @@ rest:
   next box, because a continuation replays the last *generated* frames. Preparation
   refuses otherwise, for example: "box 3 drops 9 generated frames, so box 4 can't
   continue it: make box 4 a cut, or give box 3 a length on the grid (22 or 39
-  frames)". An exact length that sits on the grid drops nothing and can be
-  continued.
+  frames), which moves every later box". Make the next box a cut, which keeps
+  every length. Ask the user before you change the length instead. An exact
+  length that sits on the grid drops nothing and can be continued.
 - A continuing box also needs the box before it to play at least `context_frames`
   frames. Rendering stops at the continuing box otherwise, and the plan reports
-  `carry_conflict`.
+  `carry_conflict`. Here too, make the continuing box a cut rather than change a
+  length.
 - A bridge can't start after a box that drops frames either, so a join that should
   take a bridge needs the box before it on the grid.
 - Choosing between the two: when a cut must land on an exact frame (a beat, a
@@ -73,7 +79,8 @@ for pictures and guides, and the "Long edits" section of `external-timeline`.
   MiniMax H3 Context Windows node, so it needs a ComfyUI version that includes it.
   The defaults are `context_length` 124, `context_overlap` 39, `fuse_method`
   `pyramid`, with `freenoise` and `split_conds_to_windows` as options.
-- The Studio's editor and the Story planner still stop at 362, so set `max_frames`
+- The Studio keeps a Timeline's `max_frames` and lets boxes reach it, but it has
+  no control to set it, and the Story planner still stops at 362. Set `max_frames`
   in the JSON or through the API.
 - Guides anchor only the window they fall in. Guides unrelated to the prompt make
   the middle windows follow the prompt alone, so the video cuts to the prompt's

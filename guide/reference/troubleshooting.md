@@ -46,7 +46,7 @@ The Studio says **clip**; older notes, saved JSON and some messages say **box**.
 
 - **Quality is the model's.** Continuity features give H3 more context; they don't guarantee identity or geometry. Inspect each join.
 - **Arbitrary-view geometry from still generators is experimental.** Reference delivery does not establish exact reconstructed geometry.
-- **Long clips** (past 362 frames) need ComfyUI's Context Windows node and `max_frames`; the Studio and Story planner still stop at 362. Results were measured on one GPU setup and judged from frame statistics, not by eye. See [Long clips](../build/long-clips.md).
+- **Long clips** (past 362 frames) need ComfyUI's Context Windows node and `max_frames`; the Studio keeps `max_frames` but can't set it, and the Story planner stops at 362. Results were measured on one GPU setup and judged from frame statistics, not by eye. See [Long clips](../build/long-clips.md).
 - **Bridges** send no pictures, references, guides, timed text or memory. Inserted bridges lengthen only the full video; replacements keep its length.
 - **Replacement bridges are unavailable.** Generated candidates still jumped at their joins in tests, so nothing renders or plays a replacement and the original cut plays. A cut inside a locked recording stays a cut.
 - **Dialogue cues** are typed, imported or taken from the Story; nothing transcribes, aligns or checks lips for you.

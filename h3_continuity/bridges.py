@@ -47,7 +47,8 @@ def problem(timeline, bridge):
     dropped = rules.dropped_frames(timeline, index - 1)
     if dropped:
         return (f"box {index} drops {dropped} frames, so the bridge before box {index + 1} can't start from its "
-                f"last frame: give box {index} a length on the grid")
+                f"last frame: use a replacement bridge, or give box {index} a length on the grid, which moves every "
+                "later box")
     if not prompt(timeline, bridge):
         return f"the bridge before box {index + 1} has no prompt"
     return ""

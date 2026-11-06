@@ -202,7 +202,8 @@ least 17). The box keeps its first `frames` frames and the rest are dropped.
 A box that drops frames can't be continued: the next box must be a cut, or there
 must be no next box. Otherwise preparation fails at the box with a message such
 as "box 1 drops 13 generated frames, so box 2 can't continue it: make box 2 a
-cut, or give box 1 a length on the grid (22 frames)". An exact length on the
+cut, or give box 1 a length on the grid (22 frames), which moves every later
+box". Prefer the cut, which keeps every length. An exact length on the
 grid drops nothing, so the next box may continue it. Box starts, timed text,
 audio lanes, guides and memory use the played length, and the saved segment,
 its audio and the full video keep only the played frames.
@@ -211,7 +212,8 @@ A box that continues another carries `context_frames` frames from it, so a box
 that starts fresh must play at least that many to be continued. Preparation
 accepts a Timeline that breaks this, but rendering stops at the continuing box
 with a message such as "box 2 continues box 1, which plays 22 frames, fewer
-than the 39 it carries: make box 2 a cut, or give box 1 at least 39 frames".
+than the 39 it carries: make box 2 a cut, or give box 1 at least 39 frames,
+which moves every later box".
 
 ```json
 {"boxes": [

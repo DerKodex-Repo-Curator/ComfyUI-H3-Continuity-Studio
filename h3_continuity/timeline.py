@@ -341,7 +341,8 @@ def parse(text):
             change["slot"] = slot
             fresh = is_fresh(parsed, n - 1)
             if change["frame"] > played_frames(parsed, n - 1) - (1 if fresh else 0):
-                raise _error(f"box {n} has a plate change past its end; lengthen the box or remove the change")
+                raise _error(f"box {n} has a plate change at frame {change['frame']}, past its end at "
+                             f"{played_frames(parsed, n - 1)} frames: move the change earlier or remove it")
             if not slot or (slot, change["frame"]) in seen:
                 raise _error(f"box {n} has duplicate or empty plate changes")
             seen.add((slot, change["frame"]))
@@ -538,8 +539,11 @@ def memory_sources(timeline, index):
             if len(candidates) != 1 or candidates[0] >= index:
                 raise _error(f"box {index + 1} memory must refer to a unique earlier box; choose its source again")
             source = candidates[0]
-            if item["frame"] >= played_frames(timeline, source):
-                raise _error(f"box {index + 1} memory is past the end of box {source + 1}; choose an earlier moment")
+            played = played_frames(timeline, source)
+            if item["frame"] >= played:
+                # A remembered moment depends on its source; it never sets that box's length.
+                raise _error(f"box {index + 1} remembers frame {item['frame']} of box {source + 1}, which plays "
+                             f"{played} frames: choose a moment before frame {played}")
             result.append((source, item["frame"], item.get("label") or "visual continuity"))
     if replays_previous(timeline, index):
         # The full preceding video covers its individual moments, independently of Cast's picture/budget filters.
@@ -758,7 +762,7 @@ def frame_guides(timeline, index, context):
             continue
         frame = item["frame"] + (carried - 1 if carried else 0)
         if frame >= frames + carried:
-            raise _error(f"box {index + 1} has a saved guide past its end; lengthen the box or remove that guide")
+            raise _error(f"box {index + 1} has a saved guide past its end: move that guide earlier or remove it")
         timed_text.check_anchor(item["guide"], frame_text(timeline, index, item["frame"], context),
                                 f"box {index + 1} guide")
         if frame in guides and guides[frame] != item["guide"]:
@@ -843,7 +847,8 @@ def _drop_conflict(timeline, index, context):
     lengths = " or ".join(str(length) for length in (above - GRID, above) if low <= length <= high)
     n = index + 1
     return _error(f"box {n} drops {dropped_frames(timeline, index)} generated frames, so box {n + 1} can't continue "
-                  f"it: make box {n + 1} a cut, or give box {n} a length on the grid ({lengths} frames)")
+                  f"it: make box {n + 1} a cut, or give box {n} a length on the grid ({lengths} frames), which moves "
+                  "every later box")
 
 
 def box_length(timeline, index, context):
@@ -875,7 +880,7 @@ def carry_conflict(timeline, index, context):
     if before >= context:
         return ""
     return (f"box {index + 1} continues box {index}, which plays {before} frames, fewer than the {context} it carries: "
-            f"make box {index + 1} a cut, or give box {index} at least {context} frames")
+            f"make box {index + 1} a cut, or give box {index} at least {context} frames, which moves every later box")
 
 
 def assemble_prompt(timeline, index):

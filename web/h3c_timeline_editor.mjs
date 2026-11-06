@@ -2,7 +2,7 @@
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import * as model from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
+import * as model from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
 import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261103-replacement-bridges-1';
 import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
 import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
@@ -1018,7 +1018,7 @@ export class TimelineEditor {
     this.renderTrack();
     const fit = box.exact ? model.fitExact : model.snapFrames;
     this.capture(event, (move) => {
-      const frames = fit(startFrames + (move.clientX - startX) * perPixel, fresh, context);
+      const frames = fit(startFrames + (move.clientX - startX) * perPixel, fresh, context, model.maxFrames(this.state));
       if (frames === box.frames) return;
       box.frames = frames;
       this.renderTrack();
@@ -1398,7 +1398,8 @@ export class TimelineEditor {
     this.refmodFramesInput.checked = !!box.flf_refmods;
     this.exactInput.checked = !!box.exact;
     this.framesField.hidden = !box.exact;
-    this.framesInput.max = String(model.limits(model.isFresh(this.state, this.selected), this.host.context()).max);
+    this.framesInput.max = String(model.limits(model.isFresh(this.state, this.selected), this.host.context(),
+      model.maxFrames(this.state)).max);
     this.framesInput.value = String(box.frames);
     this.seedInput.setCustomValidity('');
     this.seedInput.value = box.seed ?? '';
