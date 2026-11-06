@@ -1,10 +1,11 @@
-# Regeneration overlap investigation
+# Box audio range brainstorming
 
-**Status:** Verified locally; awaiting integration
-**Current Phase:** Phase 13: P-H3 still prompt instructions
+**Status:** Design discussion; no implementation authorized
+**Current Phase:** Box audio range design
 
 ## Phase Ledgers
 
+- [Box-bound audio source ranges](phases/2026-11-06-box-audio-range-lock.md)
 - [Incompatible saved overlap](phases/2026-11-06-incompatible-overlap.md)
 - [P-H3 still prompt instructions](phases/2026-11-04-ph3-still-prompts.md)
 
@@ -15,62 +16,50 @@ Prior merged work: [P-H3 node ledger](phases/2026-11-04-ph3-image-still.md). Its
 ```json
 {
   "version": 1,
-  "revision": 18,
-  "phase": "Phase 13: P-H3 still prompt instructions",
+  "revision": 29,
+  "phase": "Box audio range design",
   "active_features": [
-    "IO4"
+    "BA1"
   ],
-  "focus_feature": "IO4",
-  "goal": "Create and merge PR, publish v0.17.0, and fast-forward development and installed ComfyUI node checkouts without restarting.",
-  "done_when": "PR merged; annotated release tag and GitHub release point at merge commit; both checkouts equal released main; local work preserved.",
-  "last_completed": "IO3 Project settings/new generations verified; combined164JS +307Python, strict docs, browser1440/390px and native/attached host smoke, syntax/diff/roadmap checks pass.",
-  "in_progress": "Implementation committed ba832c0; latest main e154bb1 integrated with conflicts resolved, v0.17.0 changelog prepared. Fresh175JS/332Python, browser and strict docs pass. PR creation next.",
+  "focus_feature": "BA1",
+  "goal": "Brainstorm box-bound source-audio intervals and edit behavior with the user.",
+  "done_when": "Approach and behavior choices are reviewed and a written design is approved; no implementation in this task.",
+  "last_completed": "All behavior choices reviewed; fresh builder check returned one question, now resolved and documented.",
+  "in_progress": "Builder conflict resolved under explicit delegated judgment: block only playback-changing enable with existing inserted bridges. Written design ready for review; no implementation planned or started.",
   "next": {
-    "action": "Commit integration/release metadata, push branch and create PR against main.",
-    "reason": "Fresh current-main verification passes; release is authorized."
+    "action": "Verify and commit the design documents, then present the written design for user review and approval.",
+    "reason": "The brainstorming discussion is complete enough to review a concrete design; written approval is still pending and product work is outside this task."
   },
   "files": [
     {
-      "path": "docs/roadmap-discipline/phases/2026-11-06-incompatible-overlap.md",
-      "state": "IO1/IO2/IO3 verified; review findings recorded"
+      "path": "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md",
+      "state": "Written design ready for user review; builder question resolved"
     },
     {
-      "path": "docs/superpowers/plans/2026-11-06-new-generation.md",
-      "state": "Executed plan"
-    },
-    {
-      "path": "h3_continuity/regeneration.py",
-      "state": "Selective recovery preflight and commit"
-    },
-    {
-      "path": "h3_continuity/generations.py",
-      "state": "Fresh generation and history"
-    },
-    {
-      "path": "tests/browser/new_generation.py",
-      "state": "Reproducible isolated browser QA"
+      "path": "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
+      "state": "Approved behavior, delegated edge-case decision and recovery state"
     }
   ],
   "repository": {
-    "branch": "fix/incompatible-render-overlap",
-    "head": "3b2d569",
+    "branch": "design/box-audio-range-lock",
+    "head": "b7eaedcdba09",
     "dirty": [
-      "Roadmap investigation checkpoint only."
+      "docs/roadmap-discipline/readiness-checklist.md",
+      "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md"
     ],
-    "dirty_hash": "unrecorded"
+    "dirty_hash": "1841032983d9ab2bd6d1eb1d9d54f21b9e1eeab5db78680a85542ea8a974c335"
   },
   "verification": {
-    "required": "full tests; browser smoke; strict docs; PR merge/tag/release; both checkout HEADs",
-    "last_run": "node tests/run.mjs; browser smoke; strict docs; syntax/diff checks",
-    "status": "passed",
-    "detail": "175 JavaScript +332 Python, no skips/failures. Browser native/attached desktop/mobile and strict docs pass. Added guide-frame success/failure and consent stamp integration regressions. Remote integration/tag/checkout synchronization pending."
+    "required": "Inspect source timing consumers and review behavior choices with the user; no product implementation.",
+    "last_run": "Inspect source timing consumers and review behavior choices with the user; no product implementation.",
+    "status": "not_run",
+    "detail": "Read-only builder check completed and sole question resolved; final documentation checks and commit next. No runtime tests or rendering."
   },
   "blockers": [],
   "reload": [
     "docs/roadmap-discipline/features.md",
-    "docs/roadmap-discipline/phases/2026-11-06-incompatible-overlap.md",
-    "docs/superpowers/specs/2026-11-06-incompatible-overlap-design.md",
-    "docs/superpowers/specs/2026-11-06-new-generation-design.md"
+    "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
+    "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md"
   ]
 }
 ```

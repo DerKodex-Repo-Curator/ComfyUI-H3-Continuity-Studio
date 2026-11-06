@@ -2,6 +2,8 @@
 
 ## Can Start
 
+- Current scope: brainstorm box-bound audio source ranges on fresh `design/box-audio-range-lock`, based on local main `b7eaedc`. Documentation only; no implementation, dependency setup, rendering or deployment. Inherited IO4 release instructions are historical to this worktree; recover the box-audio-range ledger and current Recovery State.
+
 - Current worktree: fix/incompatible-render-overlap at main 3b2d569. IO1-IO3 are implemented and verified (164JS +307Python, browser desktop/mobile, strict docs); recover features.md and incompatible-overlap ledger. Prior release entries below are historical. No live service or render changes.
 
 - Current focus: editing history on isolated `feat/editing-history`, rebased onto main `47c1d43`. The user authorized its PR, merge and v0.10.0 tagged release. Preserve the original checkout's unrelated edits. Installation remains the standard ComfyUI custom_nodes clone and `python -m pip install -r requirements.txt` with ComfyUI's Python; no live installation or inference is needed for release.

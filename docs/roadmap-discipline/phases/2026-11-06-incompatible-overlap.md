@@ -24,10 +24,11 @@
 
 IO3 review findings: linked sequence names now resolve using the existing static scalar helper; full node widget/input and Story identity snapshot rejects changes across confirmation/save/request. In-flight Story image uploads now block reset (real host browser regression observed failing then passing). History from another host/sequence is cleared before requesting its history; this reviewer Minor was treated as Important because stale links would falsely attribute another project's output (browser regression observed failing then passing). No deferred findings. Native/attached host preservation and settings at1440/390px pass in isolated Chromium, no page errors; screenshots inspected. Browser smoke retained in tests/browser/new_generation.py.
 
-- [ ] **IO4** (State: `active` | Verification: `full tests; browser smoke; strict docs; PR merge/tag/release; both checkout HEADs`)
+- [ ] **IO4** (State: `deferred` | Verification: `full tests; browser smoke; strict docs; PR merge/tag/release; both checkout HEADs`)
   - *Behavior:* User explicitly authorized PR creation/merge, tagged release and fast-forward of development and installed custom-node checkouts. User will restart ComfyUI.
   - *Scope:* Preserve existing local tracked/untracked work and all generated media. Do not restart services or render.
   - *Evidence:* origin/main e154bb1/v0.16.1 fetched; original checkout has only roadmap/product uncommitted work. Target v0.17.0 for new generation feature.
   - *Next:* Commit implementation, integrate latest main, verify and publish.
+  - *Design-worktree recovery:* User explicitly redirected this fresh branch to box-audio brainstorming. Main `b7eaedc` already contains PR55's merge, so the inherited PR-creation instruction is stale. Remaining release/deployment claims were not checked here. Preserve the historical receipt; resume release work only on an explicit release task after checking actual remote/tag/installation state.
 
 IO4: integrated main e154bb1/v0.16.1, retaining checkpoints/autosave and disk cache. Save conflict resolved by writing first-pass guide frames inside the recovery staging/rollback block; fingerprints now include native guide PNG stamps. Fresh175JS +332Python, browser smoke, strict docs and syntax/diff checks pass. Target v0.17.0.
