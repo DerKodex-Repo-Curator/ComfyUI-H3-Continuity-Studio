@@ -1,6 +1,6 @@
 # Box audio range brainstorming
 
-**Status:** Native implementation; final verification and independent branch review pending
+**Status:** Complete and verified on isolated branch; integration decision pending
 **Current Phase:** Box audio range design
 
 ## Phase Ledgers
@@ -16,80 +16,46 @@ Prior merged work: [P-H3 node ledger](phases/2026-11-04-ph3-image-still.md). Its
 ```json
 {
   "version": 1,
-  "revision": 38,
+  "revision": 43,
   "phase": "Box audio range design",
-  "active_features": [
-    "BA7"
-  ],
-  "focus_feature": "BA7",
-  "goal": "Implement the approved box-bound audio feature with Native execution.",
-  "done_when": "All five tasks pass their verification, UI and full suites pass and independent branch review is resolved.",
-  "last_completed": "Committed b3ca039: approved design and 5-task/25-step plan. Structural/reference checks, roadmap check (0 errors/warnings) and staged whitespace check passed; documentation-only inventory verified.",
-  "in_progress": "Task5 UI and segmented waveform integrated. Native/attached real Studio workflow and1440/390px screenshots pass with zero page errors; strict guide passes. Import ID/numeric validation and sample-phase identity regressions RED→GREEN. Final suites/commit then independent review.",
+  "active_features": [],
+  "focus_feature": "None",
+  "goal": "Implement and verify box-bound audio source windows under the approved Native plan.",
+  "done_when": "All five implementation tasks and accepted independent-review findings verified; feature branch ready for user integration choice.",
+  "last_completed": "Implementation through7805d11; all five Important review findings fixed RED-GREEN. Final191JS+355Python, actual-host/native/attached1440/390px browser, strict guide and diff/roadmap checks pass.",
+  "in_progress": "None. All BA features passing. Final roadmap documentation commit follows this repository observation; expected HEAD/dirty drift is that docs-only commit. No push, merge, deployment or GPU render.",
   "next": {
-    "action": "Run full tests/browser/strict guide, commit Task5, then dispatch the fresh whole-branch reviewer.",
-    "reason": "The approved feature is integrated; final evidence and independent review remain before completion."
+    "action": "Offer the user local merge to main, push/create PR, or keeping design/box-audio-range-lock as-is; await their integration choice.",
+    "reason": "Authorized implementation is complete; integration and external side effects were not authorized."
   },
   "files": [
     {
-      "path": ".superpowers/sdd/2026-11-06-box-audio-range-lock/progress.md",
-      "state": "Native execution ledger and pre-flight rulings"
+      "path": "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md",
+      "state": "Approved design"
     },
     {
       "path": "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md",
-      "state": "Approved execution plan"
+      "state": "All five Native implementation tasks complete"
+    },
+    {
+      "path": "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
+      "state": "Verification, resolved review findings, exhaustive rulings and integration handoff"
     }
   ],
   "repository": {
     "branch": "design/box-audio-range-lock",
-    "head": "c1f8d81b04b7",
+    "head": "7805d1125815",
     "dirty": [
       "docs/roadmap-discipline/readiness-checklist.md",
-      "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md",
-      "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md",
-      "guide/continuity/joins-and-bridges.md",
-      "guide/sound/audio.md",
-      "guide/sound/dialogue.md",
-      "h3_continuity/audio_windows.py",
-      "h3_continuity/timeline.py",
-      "tests/browser/box_audio_windows.py",
-      "tests/python/test_audio_window_conditioning.py",
-      "tests/python/test_audio_windows.py",
-      "tests/web/audio_window_controls.test.mjs",
-      "tests/web/audio_windows.test.mjs",
-      "web/h3c_audio_lanes.mjs",
-      "web/h3c_audio_windows.mjs",
-      "web/h3c_bridges.mjs",
-      "web/h3c_cast.mjs",
-      "web/h3c_dialogue.mjs",
-      "web/h3c_frame_images.mjs",
-      "web/h3c_mentions.mjs",
-      "web/h3c_pictures.mjs",
-      "web/h3c_reference_replacements.mjs",
-      "web/h3c_reference_sources.mjs",
-      "web/h3c_reference_switches.mjs",
-      "web/h3c_shot_preview.mjs",
-      "web/h3c_shot_split.mjs",
-      "web/h3c_story.js",
-      "web/h3c_story_library.mjs",
-      "web/h3c_story_model.mjs",
-      "web/h3c_studio.mjs",
-      "web/h3c_takes.mjs",
-      "web/h3c_timed_text.mjs",
-      "web/h3c_timeline.js",
-      "web/h3c_timeline_editor.mjs",
-      "web/h3c_timeline_face.mjs",
-      "web/h3c_timeline_images.mjs",
-      "web/h3c_timeline_model.mjs",
-      "web/h3c_voices.mjs"
+      "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md"
     ],
-    "dirty_hash": "8691385ea5e64ef25e38392e427baecebf8408f8ed5dba43eb09251e7ff2e29c"
+    "dirty_hash": "acc3c4eb45de3dad3b9d9adffe34bcc1bcd44d0f31149727818e9aa5838374d7"
   },
   "verification": {
     "required": "Full tests; desktop/mobile isolated browser; strict guide; diff/roadmap; independent branch review",
-    "last_run": "Inspect source timing consumers and review behavior choices with the user; no product implementation.",
-    "status": "not_run",
-    "detail": "Latest188JS+349Python before final boundary regressions; focused new regressions pass. Browser and strict guide pass; final fresh checks next."
+    "last_run": "node tests/run.mjs; uv run --with playwright python tests/browser/box_audio_windows.py; uv run --with-requirements requirements-docs.txt mkdocs build --strict --site-dir .tmp/box-audio-guide; git diff --check; roadmap check",
+    "status": "passed",
+    "detail": "191JS+355Python zero skips/failures; actual TimelineHost confirmation invokes one dialog and unlocks; native/attached1440/390px browser workflows and screenshots pass without errors/overflow; strict guide and diff/roadmap pass. Five Important findings fixed RED-GREEN; none deferred. No GPU creative validation."
   },
   "blockers": [],
   "reload": [
