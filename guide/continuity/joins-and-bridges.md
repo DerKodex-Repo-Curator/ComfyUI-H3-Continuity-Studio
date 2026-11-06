@@ -154,3 +154,5 @@ A pending or failed render, a stale selection and a missing file all leave the o
 
 !!! note "Older installs"
     An older H3 Continuity install ignores insertion bridges in the Timeline and the sequence folder, and its Studio drops them when it saves. An install from before replacements stops on a Timeline that has one, with *bridge 1 frames must be 12, 29 or 46*, rather than playing it as added time.
+
+With [Lock audio to boxes](../sound/audio.md#lock-audio-to-boxes), an inserted bridge contributes silence from that lane and following boxes keep their assigned source windows. Other continuous soundtrack lanes retain their existing playback. The separate sequence-clock lock still restricts insertion bridges. If a bridge already plays through a selected continuous soundtrack, box locking stays off when enabling it would change playback and identifies the bridge to resolve; no bridge is automatically removed or converted.

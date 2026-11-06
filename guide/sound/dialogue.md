@@ -4,6 +4,8 @@ A **dialogue cue** holds a recording's exact words at the recording's own times:
 
 Cues belong to a recording on an [audio lane](audio.md), not to a clip. Splitting, moving or re-rendering clips never rewrites them, and moving or trimming the recording's clip moves where they play.
 
+With **Lock audio to boxes**, cues follow each box's assigned source window when it moves or earlier lengths change. New and duplicated boxes receive no source cues from that lane. Splitting preserves source ownership; shortening through a cue still needs review. The recording's words and original timestamps stay unchanged. This box binding is separate from **Locked to the sequence clock**, which restricts bridges.
+
 ## Add cues
 
 Upload a recording to `audio1`, `audio2` or `audio3`, then open **Dialogue cues** on the Studio's Audio page and choose the **Recording**.

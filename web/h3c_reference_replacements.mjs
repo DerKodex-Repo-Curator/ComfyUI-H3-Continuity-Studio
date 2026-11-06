@@ -1,5 +1,6 @@
-import {referencePools, referenceType, referenceMediaType, setReferenceReplacement, restoreReferenceReplacement, switchReference, applyImageDescription, effectiveRefmods} from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
+import {referencePools, referenceType, referenceMediaType, setReferenceReplacement, restoreReferenceReplacement, switchReference, applyImageDescription, effectiveRefmods} from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
 import {referenceChip} from './h3c_reference_pictures.mjs?v=20261010-reference-workspace-1';
+import {audioSourceLocked} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 
 const ACCEPT = {image:'image/*',video:'video/*,.mkv,.mov,.webm,.mp4',audio:'audio/*,.wav,.flac,.mp3,.ogg,.m4a',video_audio:'audio/*,video/*,.wav,.flac,.mp3,.mp4'};
 const element = (tag,text) => { const node=document.createElement(tag); if(text)node.textContent=text; return node; };
@@ -184,7 +185,7 @@ export class ReferenceReplacements {
   }
 
   async upload(file) {
-    if(this.busy||!this.valid())return;
+    if(this.busy||!this.valid()||audioSourceLocked(this.state,this.slot))return;
     const operation=this.operation,slot=this.slot;
     this.busy=true;this.uploadButton.disabled=true;this.message.classList.remove('problem');this.message.textContent='Uploading replacement…';
     try {

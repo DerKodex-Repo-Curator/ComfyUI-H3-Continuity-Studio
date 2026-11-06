@@ -176,8 +176,14 @@ def projected(timeline):
     result = []
     for cue in cues(timeline):
         state, clip = binding(cue, timeline)
-        where = placed(cue, clip) if state == "bound" else None
-        result.append({"id": cue["id"], "cue": cue, "state": state, "slot": cue["recording"]["slot"],
+        if state == 'bound' and 'box_windows' in clip:
+            from . import audio_windows, timeline as rules
+            positions = audio_windows.coalesce(audio_windows.resolve(clip,rules.audio_box_spans(timeline)))
+            places = [where for window in positions if (where := placed(cue,window)) is not None]
+        else:
+            places = [placed(cue, clip) if state == 'bound' else None]
+        for where in places or [None]:
+            result.append({"id": cue["id"], "cue": cue, "state": state, "slot": cue["recording"]["slot"],
                        "aligned": is_aligned(cue), "placed": where is not None,
                        "cut": bool(where and where["cut"]), "sequence": where and where["sequence"],
                        "frames": where and where["frames"], "segments": where["segments"] if where else []})
@@ -332,7 +338,13 @@ def lock_conflicts(timeline):
         if clip.get("in_full_video") is not True:
             messages.append(f"@{slot} is locked to the sequence clock but isn't in the full video: turn on "
                             "In the full video, or unlock it.")
-        start, end = clip["start"], clip["start"] + clip["duration"]
+        if 'box_windows' in clip:
+            from . import audio_windows
+            windows=audio_windows.resolve(clip,rules.audio_box_spans(timeline))
+            if not windows: continue
+            start,end=min(w['start'] for w in windows),max(w['start']+w['duration'] for w in windows)
+        else:
+            start, end = clip['start'], clip['start'] + clip['duration']
         for bridge in timeline.bridges:
             index = positions[bridge["before"]]
             join = rules.box_start(timeline, index)

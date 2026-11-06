@@ -13,6 +13,7 @@ from comfy_api.latest import io, ui
 
 from . import timeline as rules
 from . import reference_replacements
+from . import audio_windows
 from .timing import FPS, sample_at_frame
 
 SOUNDTRACK_KEYS = ("slot", "file", "start", "source_start", "duration")
@@ -70,21 +71,41 @@ def for_box(timeline, index, context, sources):
     frames, carried = rules.box_length(timeline, index, context)
     start = rules.box_start(timeline, index) - carried / FPS
     end = start + (frames + carried) / FPS
-    for clip in rules.active_audio_clips(timeline, index):
+    for clip in rules.active_audio_clips(timeline, index, context):
         if any(ref['slot'] == clip['slot'] and ref.get('strength', 1) > 0 for ref in timeline.refmods):
             continue
         source = sources[clip["slot"]]
         rate, wave = source["sample_rate"], source["waveform"]
         # Absolute endpoints keep adjacent boxes on the same sample clock, including non-24-divisible rates.
         first, last = round(start * rate), round(end * rate)
-        chunk = wave.new_zeros((*wave.shape[:-1], last - first))
-        offset = round(clip["source_start"] * rate) - round(clip["start"] * rate)
-        left = max(first, round(clip["start"] * rate), -offset)
-        right = min(last, round((clip["start"] + clip["duration"]) * rate), wave.shape[-1] - offset)
-        if right > left:
-            chunk[..., left - first:right - first] = wave[..., left + offset:right + offset]
+        windows = audio_windows.resolve(clip, rules.audio_box_spans(timeline))
+        chunk = samples(source, windows, first, last, clip.get('box_windows', {}).get('placement'))
         result[clip["slot"]] = {"waveform": chunk, "sample_rate": rate}
     return result
+
+
+def samples(source, windows, first, last, placement=None):
+    """Sample mapped windows on one absolute clock, retaining the captured source rounding phase."""
+    rate, wave = source['sample_rate'], source['waveform']
+    chunk = wave.new_zeros((*wave.shape[:-1], last-first))
+    for window in windows:
+        if placement:
+            original = placement['start'] + window['source_start'] - placement['source_start']
+            base = round(placement['source_start']*rate) - round(placement['start']*rate)
+            source_first = round(original*rate) + base
+            source_last = round((original+window['duration'])*rate) + base
+            # Round the clock displacement once, so adjacent owners share the same source/output clock.
+            offset = base + round(round((original-window['start'])*rate,8))
+        else:
+            source_first = round(window['source_start']*rate)
+            offset = source_first-round(window['start']*rate)
+            source_last = round((window['start']+window['duration'])*rate)+offset
+        # A quantized destination can be one sample longer: pad, never borrow the next owner's sample.
+        left = max(first, round(window['start']*rate), source_first-offset, -offset)
+        right = min(last, round((window['start']+window['duration'])*rate), source_last-offset, wave.shape[-1]-offset)
+        if right > left:
+            chunk[...,left-first:right-first] = wave[...,left+offset:right+offset]
+    return chunk
 
 
 def fingerprint(timeline):
@@ -108,7 +129,9 @@ def marked(timeline, snapshots=None):
                 file = record['file']
         if file is None:
             raise ValueError(f"H3 Timeline: {clip['slot']}'s full-video soundtrack replacement needs an uploaded audio file")
-        clips.append({**{key: clip[key] for key in SOUNDTRACK_KEYS if key != 'file'}, 'file': file})
+        clips.append({**{key: clip[key] for key in SOUNDTRACK_KEYS if key != 'file'}, 'file': file,
+                      **({'windows': audio_windows.resolve(clip,rules.audio_box_spans(timeline)),
+                          'sample_clock': clip['box_windows']['placement']} if 'box_windows' in clip else {})})
     return clips
 
 
@@ -169,25 +192,12 @@ def place(clips, sources, parts):
             wave = comfy.audio.resample(wave, source["sample_rate"], rate)
         waves[clip["slot"]] = wave
     channels = 2 if any(wave.shape[0] >= 2 for wave in waves.values()) else 1
-    out = torch.zeros(channels, sample_at_frame(sum(frames for frames, _ in parts), rate))
-    boxes, on_timeline, in_video = [], 0, 0
-    for frames, bridge in parts:
-        if not bridge:
-            boxes.append((on_timeline / FPS, (in_video - on_timeline) / FPS))
-            on_timeline += frames
-        in_video += frames
+    out = torch.zeros(channels, sample_at_frame(sum(part['frames'] for part in parts), rate))
     for clip in clips:
-        if clip["start"] >= on_timeline / FPS:
-            continue
-        shift = next(shift for begin, shift in reversed(boxes) if clip["start"] >= begin)
         wave = waves[clip["slot"]]
         wave = wave[:channels] if wave.shape[0] >= channels else wave.repeat(channels, 1)
-        start = clip["start"] + shift
-        offset = round(clip["source_start"] * rate) - round(start * rate)
-        left = max(0, round(start * rate), -offset)
-        right = min(out.shape[-1], round((start + clip["duration"]) * rate), wave.shape[-1] - offset)
-        if right > left:
-            out[:, left:right] += wave[:, left + offset:right + offset]
+        windows = audio_windows.on_output(clip,clip.get('windows',audio_windows.resolve(clip,[])),parts)
+        out += samples(dict(waveform=wave,sample_rate=rate),windows,0,out.shape[-1],clip.get('sample_clock'))
     return out.clamp_(-1, 1), rate
 
 

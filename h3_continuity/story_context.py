@@ -541,7 +541,7 @@ def identity(ctx):
         if ctx.image_model:
             key.append(['still-model-instructions-v1', ctx.image_model])
     if ctx.timeline.timed_text is not None:
-        key.append(timed_text.snapshot(ctx.timeline.timed_text, ctx.timeline.audio_clips))
+        key.append(timed_text.snapshot(ctx.timeline.timed_text, ctx.timeline.audio_clips, rules.resolved_audio(ctx.timeline)))
     if ctx.timeline.reference_replacements:
         key.append(ctx.timeline.reference_replacements)
     if ctx.template is not None:

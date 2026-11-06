@@ -22,6 +22,9 @@ def merge_continuing(text, first_id, last_id):
     if first_id not in ids or last_id not in ids or ids.index(first_id) >= ids.index(last_id):
         raise _error("merge needs two box ids, the first earlier than the last")
     start, end = ids.index(first_id), ids.index(last_id)
+    owners = set(ids[start:end + 1])
+    if any(owners.intersection(clip.get('box_windows', {}).get('by_box', {})) for clip in parsed.audio_clips):
+        raise _error('unlock box-bound audio before merging its boxes')
     for index in range(start, end + 1):
         if rules.is_exact(parsed, index):
             raise _error(f"box {index + 1} has an exact length; turn Exact length off before merging")

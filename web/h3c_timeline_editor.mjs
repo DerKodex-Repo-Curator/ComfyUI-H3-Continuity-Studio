@@ -2,19 +2,20 @@
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import * as model from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
-import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261106-lane-beats-2';
+import * as model from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import {audioSourceLocked} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
+import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261106-box-audio-1';
 import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
 import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
-import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261104-shot-split-only-1';
-import { fillReferenceSwitches } from './h3c_reference_switches.mjs?v=20261010-image-descriptions-1';
-import { ReferenceReplacements } from './h3c_reference_replacements.mjs?v=20261011-reference-preparation-1';
+import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261106-box-audio-1';
+import { fillReferenceSwitches } from './h3c_reference_switches.mjs?v=20261106-box-audio-1';
+import { ReferenceReplacements } from './h3c_reference_replacements.mjs?v=20261106-box-audio-1';
 import { fillPicturePicker, mentionedReferences, referenceChip } from './h3c_reference_pictures.mjs?v=20261010-reference-workspace-1';
 import { CastPage } from './h3c_cast.mjs?v=20261103-replacement-bridges-1';
 import { PicturesPanel, highestSlot } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
 import { CheckPanel } from './h3c_check.mjs?v=20261104-check-holds-1';
 import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261103-replacement-bridges-1';
-import { DialoguePanel } from './h3c_dialogue.mjs?v=20261104-dialogue-key-1';
+import { DialoguePanel } from './h3c_dialogue.mjs?v=20261106-box-audio-1';
 import { ChainSettings } from './h3c_chain_settings.mjs?v=20261104-chain-settings-1';
 import { exportedVideo } from './h3c_partial_video.mjs?v=20261106-video-so-far-1';
 import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261104-take-marks-2';
@@ -77,6 +78,9 @@ const CSS = `
 .h3ct-audio-clip { position: absolute; height: 36px; top: 2px; min-width: 4px; border: 1px solid #72b8ad;
   background: #205d54; border-radius: 3px; cursor: grab; touch-action: none; user-select: none; overflow: hidden; }
 .h3ct-audio-clip.disabled { opacity: .4; }
+.h3ct-audio-clip.box-bound { cursor:pointer; touch-action:pan-x pan-y; }
+.h3ct-audio-gap { position:absolute; top:3px; height:34px; min-width:0; padding:2px 6px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#c2d4d1; background:transparent; border:1px dashed #526563; border-radius:4px; cursor:pointer; }
+.h3ct-audio-gap:focus-visible { outline:2px solid #b7d2ff; outline-offset:-2px; }
 .h3ct-audio-clip svg, .h3ct-audio-clip canvas { position: absolute; inset: 0; width: 100%; height: 100%; fill: #80d3c2; opacity: .65; pointer-events: none; }
 .h3ct-audio-label { position: absolute; inset: 2px 9px auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-size: 11px; text-shadow: 0 1px 3px #000; pointer-events: none; }
@@ -726,7 +730,7 @@ export class TimelineEditor {
   }
 
   defaultSpan() {
-    const audioEnd = Math.max(0, ...(this.state.audio_clips ?? []).map(clip => (clip.start + clip.duration) * model.FPS));
+    const audioEnd = Math.max(0, ...model.resolvedAudio(this.state).map(window => (window.start + window.duration) * model.FPS));
     return Math.max(20 * model.FPS, Math.ceil(Math.max(model.totalFrames(this.state), audioEnd) * 1.25));
   }
 
@@ -1163,6 +1167,7 @@ export class TimelineEditor {
     fillReferenceSwitches(this.referencesEl, this.referenceOptions(), this.state.disabled_refs ?? [],
       (names, enabled) => this.setReferencesEnabled(names, enabled), {
         replace:ref=>this.replacements.open(ref.name),restore:ref=>this.replacements.restore(ref.name),preview:ref=>this.replacements.preview(ref),
+        replacementProblem:ref=>audioSourceLocked(this.state,ref.name)?'Unlock audio from boxes before replacing its source.':'',
         clearDescriptions:this.host.describeImage?()=>this.replacements.clearAll():undefined,
       });
     const occupied = new Set([...connected.images, ...connected.audios].filter(ref => !ref.refmod).map(ref => ref.name));

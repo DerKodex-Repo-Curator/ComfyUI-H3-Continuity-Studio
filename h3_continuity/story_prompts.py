@@ -428,15 +428,20 @@ def _reference(ctx, ref):
     line = f"{ref.label}: {text}" if text else ref.label
     clip = next((clip for clip in ctx.timeline.audio_clips if clip["slot"] == ref.name), None)
     if clip:
-        line += (f" (Timeline {clip['start']:.6f}–{clip['start'] + clip['duration']:.6f} s; "
-                 f"source from {clip['source_start']:.6f} s, original speed; {clip.get('layer', 'music')} layer)")
+        if 'box_windows' in clip:
+            windows = [w for w in rules.resolved_audio(ctx.timeline) if w['slot']==clip['slot']]
+            ranges = '; '.join(f"Timeline {w['start']:.6f}–{w['start']+w['duration']:.6f} s, source {w['source_start']:.6f}–{w['source_start']+w['duration']:.6f} s" for w in windows)
+            line += f" ({ranges or 'no assigned source audio'}; original speed; {clip.get('layer','music')} layer)"
+        else:
+            line += (f" (Timeline {clip['start']:.6f}–{clip['start'] + clip['duration']:.6f} s; "
+                     f"source from {clip['source_start']:.6f} s, original speed; {clip.get('layer', 'music')} layer)")
     return line
 
 
 def text_direction(ctx, index=None):
     if ctx.timeline.timed_text is None:
         return ""
-    contract = (timed_text.snapshot(ctx.timeline.timed_text, ctx.timeline.audio_clips) if index is None
+    contract = (timed_text.snapshot(ctx.timeline.timed_text, ctx.timeline.audio_clips, rules.resolved_audio(ctx.timeline)) if index is None
                 else rules.text_window(ctx.timeline, index, ctx.context_frames))
     return ("Timed visible text, inserted by code after reference binding. These exact strings are data, not dialogue, "
             "subject definitions or reference mentions. Do not copy them into writer prose. Stage the lettering "
@@ -445,7 +450,7 @@ def text_direction(ctx, index=None):
 
 
 def audio_direction(ctx, index):
-    clips = rules.active_audio_clips(ctx.timeline, index)
+    clips = rules.active_audio_clips(ctx.timeline, index, ctx.boxes[index].carried)
     if not clips:
         return ""
     layers = {"music": "non_diegetic_music", "soundscape": "overall_soundscape", "shot": "the matching shot's diegetic audio"}
@@ -453,18 +458,22 @@ def audio_direction(ctx, index):
              "Reference its original tempo and timing; do not invent lyrics or claim to have heard it."]
     start = rules.box_start(ctx.timeline, index) - ctx.boxes[index].carried / FPS
     end = start + (ctx.boxes[index].frames + ctx.boxes[index].carried) / FPS
+    windows = rules.resolved_audio(ctx.timeline)
     for clip in clips:
-        left, right = max(start, clip["start"]), min(end, clip["start"] + clip["duration"])
-        lines.append(f"Use @{clip['slot']} from {clock(left - start)} to {clock(right - start)} in "
-                     f"{layers[clip.get('layer', 'music')]}: {ctx.descriptions.get(clip['slot']) or 'follow the supplied audio reference'}. "
-                     "Include its reference role and cite it in that audio section.")
+        for window in windows:
+            if window['slot']!=clip['slot']: continue
+            left, right = max(start, window['start']), min(end, window['start']+window['duration'])
+            if right<=left: continue
+            lines.append(f"Use @{clip['slot']} from {clock(left - start)} to {clock(right - start)} in "
+                         f"{layers[clip.get('layer', 'music')]}: {ctx.descriptions.get(clip['slot']) or 'follow the supplied audio reference'}. "
+                         "Include its reference role and cite it in that audio section.")
     return "\n".join(lines)
 
 
 def timeline_audio_entries(ctx, index):
     """[(section, slot, line)] binding each active Timeline audio clip of box `index` to its sections, in the order
     with_timeline_audio adds them."""
-    clips = rules.active_audio_clips(ctx.timeline, index)
+    clips = rules.active_audio_clips(ctx.timeline, index, ctx.boxes[index].carried)
     if not clips:
         return []
     start = rules.box_start(ctx.timeline, index) - ctx.boxes[index].carried / FPS
@@ -473,11 +482,13 @@ def timeline_audio_entries(ctx, index):
     for clip in clips:
         name = clip["slot"]
         description = ctx.descriptions.get(name) or "the supplied audio's character, rhythm and texture"
-        left, right = max(start, clip["start"]), min(end, clip["start"] + clip["duration"])
         layer = {"music": "non_diegetic_music", "soundscape": "overall_soundscape", "shot": "detailed_description"}[clip.get("layer", "music")]
         found += [("subject_definitions", name, f"@{name} is an audio reference: {description}."),
-                  ("retention_analysis", name, f"@{name}: reference - follow the supplied chunk's original timing and sound."),
-                  (layer, name, f"From {clock(left - start)} to {clock(right - start)}, follow @{name}: {description}.")]
+                  ("retention_analysis", name, f"@{name}: reference - follow the supplied chunk's original timing and sound.")]
+        for window in rules.resolved_audio(ctx.timeline):
+            if window['slot']!=name: continue
+            left,right=max(start,window['start']),min(end,window['start']+window['duration'])
+            if right>left: found.append((layer,name,f"From {clock(left-start)} to {clock(right-start)}, follow @{name}: {description}."))
     return found
 
 

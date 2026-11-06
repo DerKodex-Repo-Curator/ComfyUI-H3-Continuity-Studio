@@ -4,6 +4,7 @@ import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-
 import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 import {imageDescriptionPrompt, imageDescriptionSource} from './h3c_image_descriptions.mjs?v=20261010-image-descriptions-1';
 import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
+import {AUDIO_WINDOWS_FEATURE, pruneWindows, resolveWindows, audioSourceLocked} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 export const FPS = 24;
 export const MAX_FRAMES = 362;
 export const GRID = 17;
@@ -240,11 +241,12 @@ export function serialize(state) {
 }
 
 // Reader features this editor writes into "requires" when the file depends on them, as timeline.REQUIRES lists them.
-export const OWN_FEATURES = ['dialogue-cues-1', 'replacement-bridges-1'];
+export const OWN_FEATURES = ['dialogue-cues-1', 'replacement-bridges-1', AUDIO_WINDOWS_FEATURE];
 
 // What the Timeline needs a reader to understand: this editor's features in use, and any newer one it was given.
 export function requiredFeatures(state) {
   const own = [];
+  if ((state.audio_clips ?? []).some(clip => Object.hasOwn(clip, 'box_windows'))) own.push(AUDIO_WINDOWS_FEATURE);
   if (state.dialogue?.cues?.length || state.dialogue?.observed?.length
     || (state.audio_clips ?? []).some((clip) => clip.locked === true)) own.push('dialogue-cues-1');
   if (keptBridges(state).some(isReplacement)) own.push('replacement-bridges-1');
@@ -369,14 +371,30 @@ export function totalFrames(state) {
   return state.boxes.reduce((sum, box) => sum + (box.frames || 0), 0);
 }
 
-export function activeAudioClips(state, index) {
+export function resolvedAudio(state) {
+  const boxes = audioBoxSpans(state);
+  return (state.audio_clips ?? []).filter(clip=>referenceEnabled(state,clip.slot))
+    .flatMap(clip=>resolveWindows(clip,boxes).map(w=>({...w,slot:clip.slot})));
+}
+
+export function activeAudioClips(state, index, context = 0) {
   const start = state.boxes.slice(0, index).reduce((sum, box) => sum + box.frames, 0) / FPS;
   const end = start + state.boxes[index].frames / FPS;
   return (state.audio_clips ?? []).filter(clip => referenceEnabled(state, clip.slot)
-    && clip.start < end && clip.start + clip.duration > start);
+    && resolveWindows(clip,audioBoxSpans(state)).some(w=>w.start < end && w.start+w.duration > start-(clip.box_windows && !isFresh(state,index) ? context/FPS : 0)));
+}
+
+export function audioBoxSpans(state) {
+  let start = 0;
+  return state.boxes.map(box => {
+    const duration = box.frames / FPS, span = {id:box.id, start, duration};
+    start += duration;
+    return span;
+  });
 }
 
 export function editAudioClip(clip, mode, delta) {
+  if(clip.box_windows)throw Error('Unlock audio from boxes before changing its placement.');
   const result = {...clip};
   const minimum = Math.min(1 / FPS, clip.source_duration);
   if (mode === 'move') result.start = Math.max(0, clip.start + delta);
@@ -432,6 +450,7 @@ export function addBox(state, context, frames) {
 
 export function removeBox(state, index, context) {
   const [removed] = state.boxes.splice(index, 1);
+  pruneWindows(state);
   const next = state.boxes[index];
   for (const entity of Array.isArray(state.bible?.entities) ? state.bible.entities : []) {
     if (Array.isArray(entity?.pins)) entity.pins = entity.pins.filter((pin) => pin?.box !== removed.id);
@@ -511,7 +530,6 @@ function cueFrames(state, cue) {
   const clip = (state.audio_clips ?? []).find((item) => item.slot === slot);
   if (!clip || (state.disabled_refs ?? []).includes(slot) || !file || !wanted
       || ['type', 'subfolder', 'filename'].some((key) => (file[key] ?? '') !== (wanted[key] ?? ''))) return [];
-  const start = Math.max(cue.start, clip.source_start), end = Math.min(cue.end, clip.source_start + clip.duration);
   const parts = [];
   let cursor = cue.start;
   for (const span of [...cue.spans ?? []].sort((one, other) => one.start - other.start)) {
@@ -520,10 +538,13 @@ function cueFrames(state, cue) {
     cursor = span.end;
   }
   if (cursor < cue.end) parts.push([cursor, cue.end, cue.portrayal]);
-  const frame = (seconds) => (clip.start + seconds - clip.source_start) * FPS;
+  return resolveWindows(clip,audioBoxSpans(state)).flatMap(window => {
+  const start = Math.max(cue.start, window.source_start), end = Math.min(cue.end, window.source_start + window.duration);
+  const frame = seconds => (window.start + seconds-window.source_start)*FPS;
   return parts.map(([first, last, portrayal]) => [Math.max(first, start), Math.min(last, end), portrayal])
     .filter(([first, last]) => last - first > CUE_EPSILON)
     .map(([first, last, portrayal]) => [Math.floor(frame(first) + CUE_EPSILON), Math.ceil(frame(last) - CUE_EPSILON), portrayal]);
+  });
 }
 
 // Whether box `index` asks H3 for speech someone may say on screen, as dialogue.speaks: typed <d>, or a bound cue
@@ -854,6 +875,7 @@ function invalidateReferenceDescriptions(state, slot) {
 }
 
 export function setReferenceReplacement(state, slot, replacement, pools) {
+  if(audioSourceLocked(state,slot))throw Error('Unlock audio from boxes before replacing its source.');
   if (!referenceType(slot)) throw new Error('Choose a valid reference.');
   if (!!replacement.source === !!replacement.file) throw new Error('Choose a reference or a file.');
   if (replacement.source && referenceType(slot) !== referenceType(replacement.source)) throw new Error('Replacement must have the same reference type.');
@@ -870,6 +892,7 @@ export function setReferenceReplacement(state, slot, replacement, pools) {
 }
 
 export function restoreReferenceReplacement(state, slot) {
+  if(audioSourceLocked(state,slot))throw Error('Unlock audio from boxes before replacing its source.');
   const replacements={...state.reference_replacements};
   delete replacements[slot];
   if(referenceType(slot)==='video'&&replacements[slot.replace('video','video_audio')]?.source)
@@ -882,6 +905,7 @@ export function restoreReferenceReplacement(state, slot) {
 }
 
 export function switchReference(state, from, to, pools) {
+  if(audioSourceLocked(state,from)||audioSourceLocked(state,to))throw Error('Unlock audio from boxes before switching its source.');
   if(from===to || !referenceType(from) || referenceType(from)!==referenceType(to))
     throw new Error('Replacement must have the same reference type.');
   const available=referencePools(state,pools);
@@ -964,7 +988,7 @@ export function describeBox(state, index, connected, context) {
   const found = mentions(text);
   const images = found.filter((item) => item.kind === 'image').map((item) => item.name);
   const audios = [...new Set([...found.filter((item) => item.kind === 'audio').map((item) => item.name),
-    ...activeAudioClips(state, index).map(clip => clip.slot)])];
+    ...activeAudioClips(state, index, context).map(clip => clip.slot)])];
   const videoAudios = found.filter(item => item.kind === 'video_audio').map(item => item.name);
   const videos = [...new Set([...found.filter(item => item.kind === 'video').map(item => item.name),
     ...videoAudios.map(name => name.replace('video_audio', 'video'))])];

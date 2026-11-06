@@ -132,7 +132,7 @@ def import_whisper(data, source_name, source_sha256):
     return value
 
 
-def clock(value, audio_clips):
+def clock(value, audio_clips, placements=None):
     """Resolve by slot presence; absent synced lanes retain their stored independent clock."""
     if value is None:
         return dict(start=0, source_start=0, duration=0, resolved=False)
@@ -143,8 +143,11 @@ def clock(value, audio_clips):
         resolved = source is not None
         if source is None:
             source = value
-    return dict(start=source["start"], source_start=source["source_start"],
-                duration=source["duration"], resolved=resolved)
+    result = dict(start=source['start'], source_start=source['source_start'], duration=source['duration'], resolved=resolved)
+    if value['sync_audio'] and 'box_windows' in source:
+        result['box_windows'] = copy.deepcopy(source['box_windows'])
+        if placements is not None: result['placements'] = [w for w in placements if w['slot']==value['audio_slot']]
+    return result
 
 
 def _ranges(items, effective, source_start, source_end):
@@ -162,7 +165,7 @@ def _milliseconds(seconds):
     return math.floor(seconds * 1000 + .5)
 
 
-def project(value, audio_clips, box_start, frames, carried=0):
+def project(value, audio_clips, box_start, frames, carried=0, *, placements=None):
     """Clip exact source ranges to audio selection and generated replay/delivered coverage."""
     effective = clock(value, audio_clips)
     origin = box_start - carried / FPS
@@ -170,6 +173,22 @@ def project(value, audio_clips, box_start, frames, carried=0):
                   source_start=None, source_end=None, generated_origin=origin,
                   replay_end_ms=_milliseconds(carried / FPS), cues=[], words=[])
     if value is None or not value["enabled"] or not effective["resolved"]:
+        return result
+    if 'box_windows' in effective:
+        if placements is None: raise ValueError('H3 Timeline: bound timed text needs resolved audio windows')
+        from . import audio_windows
+        windows = audio_windows.coalesce(w for w in placements if w['slot']==value['audio_slot'])
+        result['source_windows'] = []
+        for window in windows:
+            part = project(dict(value, sync_audio=False, **{key:window[key] for key in ('start','source_start','duration')}),
+                           [], box_start, frames, carried)
+            if part['source_start'] is not None:
+                result['source_windows'].append(dict(source_start=part['source_start'],source_end=part['source_end']))
+                for key in ('cues','words'): result[key].extend(part[key])
+        if result['source_windows']:
+            result['source_start']=min(w['source_start'] for w in result['source_windows'])
+            result['source_end']=max(w['source_end'] for w in result['source_windows'])
+        for key in ('cues','words'): result[key].sort(key=lambda cue:cue['start_ms'])
         return result
     source_start = max(effective["source_start"], effective["source_start"] + (origin - effective["start"]))
     source_end = min(effective["source_start"] + effective["duration"],
@@ -194,11 +213,16 @@ def project(value, audio_clips, box_start, frames, carried=0):
     return result
 
 
-def active(value, audio_clips, movie_time):
+def active(value, audio_clips, movie_time, *, placements=None):
     """Visible phrase cues at a half-open movie time, with full effective bounds."""
     effective = clock(value, audio_clips)
     if value is None or not value["enabled"] or not effective["resolved"]:
         return []
+    if 'box_windows' in effective:
+        if placements is None: raise ValueError('H3 Timeline: bound timed text needs resolved audio windows')
+        from . import audio_windows
+        return [cue for window in audio_windows.coalesce(w for w in placements if w['slot']==value['audio_slot'])
+                for cue in active(dict(value,sync_audio=False,**{key:window[key] for key in ('start','source_start','duration')}),[],movie_time)]
     items = _ranges(value["cues"], effective, effective["source_start"], effective["source_start"] + effective["duration"])
     return [item for item in items if item["movie_start"] <= movie_time < item["movie_end"]]
 
@@ -249,8 +273,8 @@ def insert_block(prompt, mode, block):
     return section + ": " + prompt + block
 
 
-def anchor_metadata(value, audio_clips, movie_time):
-    visible = [cue["text"] for cue in active(value, audio_clips, movie_time)]
+def anchor_metadata(value, audio_clips, movie_time, *, placements=None):
+    visible = [cue["text"] for cue in active(value, audio_clips, movie_time, placements=placements)]
     contract = dict(direction=value["direction"] if visible else "", visible_text=visible)
     encoded = json.dumps(contract, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return dict(visible_text=visible, text_contract=hashlib.sha256(encoded).hexdigest())
@@ -263,7 +287,7 @@ def check_anchor(image, expected, identity):
         raise ValueError(f"H3 Timeline: {identity} timed text changed; restore the text or remove this lettering image")
 
 
-def snapshot(value, audio_clips):
+def snapshot(value, audio_clips, placements=None):
     """Stable source contract for Story concurrency checks; omit unrelated UI metadata."""
     if value is None:
         return dict(timed_text=None, clock=clock(None, audio_clips))
@@ -272,4 +296,4 @@ def snapshot(value, audio_clips):
     for key in ("cues", "words"):
         normalized[key] = [{field: item[field] for field in ("id", "start", "end", "text")}
                            for item in value.get(key, [])]
-    return dict(timed_text=normalized, clock=clock(value, audio_clips))
+    return dict(timed_text=normalized, clock=clock(value, audio_clips, placements))

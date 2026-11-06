@@ -207,6 +207,10 @@ def static_key(timeline, bridge, context):
     marks = [{key: mark.get(key) for key in ("id", "box", "take", "start", "end")} for mark in dialogue.observed(timeline)]
     clips = [{key: clip.get(key) for key in ("slot", "file", "start", "source_start", "duration", "locked", "in_full_video")}
              for clip in timeline.audio_clips if clip.get("locked") or clip.get("in_full_video")]
+    bound = {clip['slot'] for clip in timeline.audio_clips if 'box_windows' in clip}
+    for clip in clips:
+        if clip['slot'] in bound:
+            clip['windows'] = [w for w in rules.resolved_audio(timeline) if w['slot']==clip['slot']]
     return rules._digest({"boxes": [timeline.boxes[shape.index - 1].id, timeline.boxes[shape.index].id],
                           "join": shape.join, "left": shape.left, "right": shape.right,
                           "windows": [shape.left_window, shape.right_window], "problem": shape.problem,

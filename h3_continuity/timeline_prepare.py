@@ -648,7 +648,7 @@ def _prepare(body):
         for plate in plates.values():
             checked(path, timed_text.check_anchor, plate["image"], rules.frame_text(parsed, index, 0, settings["context_frames"]), "plate")
         box_audios = (audios - {clip["slot"] for clip in parsed.audio_clips}) | {
-            clip["slot"] for clip in rules.active_audio_clips(parsed, index)}
+            clip["slot"] for clip in rules.active_audio_clips(parsed, index, settings['context_frames'])}
         plan = checked(path, rules.plan_box, parsed, index, settings["context_frames"], settings["carry_audio"],
                        settings["width"], settings["height"], settings["ref_image_size"], images | set(plates), box_audios,
                        audio_context_frames=settings['audio_context_frames'])

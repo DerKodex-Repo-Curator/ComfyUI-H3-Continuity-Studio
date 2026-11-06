@@ -13,8 +13,8 @@ import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_
 import { DEFAULT_AHEAD, QueueFeed, feedNote, queueAhead } from './h3c_queue_feed.mjs?v=20261105-queue-feed-1';
 import { studio } from './h3c_studio.mjs?v=20261106-release-0170-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261106-release-0170-1';
-import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261106-box-audio-1';
+import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
 import { voiceRefs } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
@@ -192,6 +192,7 @@ export class TimelineHost {
       readBoundary: boxId => this.readBoundary(boxId),
       uploadWhisper: (file, hash) => this.project ? this.uploadProjectAsset(file, 'whisper', hash) : Promise.resolve(),
       audioInfo: (file) => this.audioInfo(file),
+      confirmAudioUnlock: () => this.confirmAudioUnlock(),
       queue: (count, box, bridge, receipt) => this.queue(count, box, bridge, receipt),
       preflight: (box, count) => this.prepareRegeneration(box, count),
       refresh: () => this.refresh(),
@@ -959,6 +960,11 @@ export class TimelineHost {
     this.saved.changed();
     this.schedule(0);
     this.node.setDirtyCanvas?.(true, true);
+  }
+
+  confirmAudioUnlock() {
+    const options={title:'Return to continuous audio?',message:'Box-specific gaps and audio ordering will be removed.'};
+    return app.extensionManager?.dialog?.confirm?.(options) ?? window.confirm(`${options.title}\n\n${options.message}`);
   }
 
   async prepareRegeneration(box, count) {

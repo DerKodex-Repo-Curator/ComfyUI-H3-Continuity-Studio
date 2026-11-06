@@ -1,7 +1,8 @@
 // Dialogue cues: a recording's exact words at its own source times, mirroring h3_continuity/dialogue.py. Boxes speak
 // them as <d> lines, and replacement bridges keep the footage where someone speaks on screen. The pure helpers seed
 // cues from a transcript or a Story and compute the check key; DialoguePanel edits them on the Audio page.
-import * as model from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
+import * as model from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import {resolveWindows,coalesceWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 
 export const PORTRAYALS = [['on_screen', 'On screen'], ['voiceover', 'Voiceover'], ['unknown', 'Unknown']];
 const SLOTS = ['audio1', 'audio2', 'audio3'];
@@ -134,6 +135,7 @@ export function cuesFromTranscript(data, clip, existing) {
 // lie wholly inside the placed window are skipped.
 export function cuesFromStory(state, clip, existing, context) {
   const next = freeIds(existing), cues = [];
+  const windows=coalesceWindows(resolveWindows(clip,model.audioBoxSpans(state)));
   const names = new Map((state.bible?.entities ?? []).map((entity) => [entity.id, entity.name]));
   let skipped = 0, start = 0;
   state.boxes.forEach((box, index) => {
@@ -144,9 +146,10 @@ export function cuesFromStory(state, clip, existing, context) {
       for (const line of shot.dialogue ?? []) {
         const first = origin + line.start_ms / 1000, last = origin + line.end_ms / 1000;
         const text = String(line.text ?? '').trim();
-        if (!text || !(last > first) || first < clip.start - EPSILON || last > clip.start + clip.duration + EPSILON
+        const window=windows.find(w=>first>=w.start-EPSILON && last<=w.start+w.duration+EPSILON);
+        if (!text || !(last > first) || !window
           || CONTROL.test(text)) { skipped += 1; continue; }
-        const offset = clip.source_start - clip.start;
+        const offset = window.source_start-window.start;
         cues.push({id: next(), recording: recording(clip), start: Math.max(0, first + offset), end: last + offset, text,
           speaker: String(line.speaker ?? '').trim() || names.get(line.subject) || line.subject || '',
           ...(typeof line.language === 'string' && line.language ? {language: line.language} : {}),
@@ -413,7 +416,8 @@ export class DialoguePanel {
     const checked = cues.filter((cue) => this.serverCue(cue.id)?.aligned).length;
     this.summary.textContent = `Dialogue cues${cues.length ? ` · ${cues.length}${this.editor.stale ? '' : `, ${checked} checked`}` : ''}`;
     this.root.hidden = !clips.length && !cues.length;
-    const signature = JSON.stringify([state.dialogue, clips.map((clip) => [clip.slot, clip.file, clip.locked]),
+    const signature = JSON.stringify([state.dialogue, clips.map((clip) => [clip.slot, clip.file, clip.locked, clip.box_windows]),
+      state.boxes.map(box=>[box.id,box.frames]),
       this.editor.stale ? null : this.editor.status?.dialogue]);
     const typing = this.root.contains(document.activeElement) && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
     if (!force && (this.signature === signature || typing)) return;

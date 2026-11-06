@@ -125,7 +125,8 @@ class PartialVideoTest(unittest.TestCase):
         with mock.patch.object(audio_tracks, "soundtrack_sources", return_value=[["clip"]]), \
                 mock.patch.object(audio_tracks, "soundtrack_audio", return_value=ramp) as placed:
             record, _ = self.build(soundtrack=[{"slot": "audio1"}])
-        self.assertEqual(placed.call_args.args[1], [(22, False), (17, False), (17, False)])
+        self.assertEqual(placed.call_args.args[1], [dict(frames=count,coverage=[dict(box=box_id,first=0,frames=count)])
+                                                  for box_id,count in [('a',22),('b',17),('c',17)]])
         self.assertIsNotNone(record)
 
     def test_reused_until_a_source_changes(self):

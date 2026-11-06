@@ -625,6 +625,30 @@ def ordered_parts(manifest, spliced=(), replaced=()):
     return parts
 
 
+def audio_parts(manifest, ordered):
+    """Delivered box ownership of every assembled frame, including replacement regions."""
+    segments = manifest['segments']
+    result = []
+    for entry, first, count, inserted in ordered:
+        coverage = []
+        record = entry.get('timeline') or {}
+        if not inserted:
+            if entry.get('candidate') and 'left' in record and 'right' in record:
+                after = next(e for e in segments if (e.get('timeline') or {}).get('box') == entry['box'])
+                before = next(e for e in segments if e['index'] == after['index']-1)
+                original = [dict(box=before['timeline']['box'],first=store.played_frames(before)-record['left'],frames=record['left']),
+                            dict(box=after['timeline']['box'],first=0,frames=record['right'])]
+            else:
+                original = [dict(box=record.get('box'),first=0,frames=store.played_frames(entry))]
+            cursor = 0
+            for span in original:
+                left,right=max(first,cursor),min(first+count,cursor+span['frames'])
+                if right>left: coverage.append(dict(box=span['box'],first=span['first']+left-cursor,frames=right-left))
+                cursor += span['frames']
+        result.append(dict(frames=count,coverage=coverage))
+    return result
+
+
 def _generated_audio(folder, parts):
     """The parts' own audio, each window from its saved waveform."""
     return media.assemble_audio([(e["context_frames"] + first + count, e["context_frames"] + first,
@@ -658,8 +682,7 @@ def write_previews(folder, manifest, candidate, crf, spliced=(), soundtrack=()):
     heard = None
     if soundtrack:
         try:
-            waveform, rate = audio_tracks.soundtrack_audio(soundtrack, [(count, inserted)
-                                                                        for _, _, count, inserted in ordered])
+            waveform, rate = audio_tracks.soundtrack_audio(soundtrack, audio_parts(manifest,ordered))
         except ValueError as error:
             return f"No preview: {str(error).removeprefix('H3 Timeline: ').rstrip('.')}."
         offset = sum(count for _, _, count, _ in ordered[:at - 1]) + before_count - lead
@@ -791,7 +814,7 @@ def _plan_full_video(folder, name, manifest, crf, spliced, soundtrack, replaced)
         return None, _not_rebuilt(error)
     if soundtrack:
         try:
-            audio = audio_tracks.soundtrack_audio(soundtrack, [(count, inserted) for _, _, count, inserted in ordered])
+            audio = audio_tracks.soundtrack_audio(soundtrack, audio_parts(manifest,ordered))
         except ValueError as error:
             return None, _not_rebuilt(error)
     else:

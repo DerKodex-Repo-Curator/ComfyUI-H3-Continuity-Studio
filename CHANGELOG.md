@@ -4,6 +4,13 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-06
+
+### Added
+
+- **Lock audio to boxes.** The opt-in switch in Audio settings keeps each box's assigned part of a recording through length, order and insertion edits. Extending a box adds silence after its assignment; shortening hides the tail so extending again restores it. New and duplicated boxes start without assigned audio. Moving a box carries its audio, and splitting partitions its assignment without copying a neighbor's sound. Audio lanes show the assigned segments and silence gaps while retaining one source recording.
+- **Source timing stays aligned.** Linked dialogue cues, synced text, detected beats, audio references and the selected original soundtrack follow the same box-bound ranges. Unlocking restores the original continuous placement with confirmation when playback changes; Undo restores the bindings. Locking is off by default, and existing projects keep their behavior.
+
 ## [0.17.0] - 2026-11-06
 
 ### Added

@@ -24,6 +24,17 @@ def workflow():
 
 
 class StoryCheckpointTest(unittest.TestCase):
+    def test_checkpoint_preserves_box_audio_bindings_and_hidden_tails(self):
+        from h3_continuity import audio_windows
+        raw=json.loads(self.workflow['nodes'][1]['widgets_values'][1])
+        clip=dict(slot='audio1',start=0,source_start=30,duration=4)
+        clip['box_windows']=audio_windows.capture(clip,[dict(id='a',start=0,duration=4)],{'source':'audio1'})
+        raw.update(audio_clips=[clip],requires=[audio_windows.FEATURE])
+        self.workflow['nodes'][1]['widgets_values'][1]=json.dumps(raw)
+        value=story_library.load(self.save()['id'])
+        restored=story_library._fields(value['workflow'])[('2','timeline')]
+        self.assertEqual(restored['audio_clips'][0]['box_windows'],clip['box_windows'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

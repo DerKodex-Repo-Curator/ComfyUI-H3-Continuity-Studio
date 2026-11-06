@@ -108,7 +108,9 @@ class AssemblyTest(unittest.TestCase):
                 mock.patch.object(media, "build_full_video",
                                   side_effect=lambda path, videos, audio, crf: (heard.append(audio), (path, ""))[1]):
             self.assertEqual(nodes.write_previews(self.folder, self.manifest, candidate, 16, soundtrack=["clip"]), "")
-        self.assertEqual(placed.call_args.args[1], [(16, False), (12, False), (16, False)])
+        self.assertEqual(placed.call_args.args[1], [dict(frames=16,coverage=[dict(box='a',first=0,frames=16)]),
+            dict(frames=12,coverage=[dict(box='a',first=16,frames=6),dict(box='b',first=0,frames=6)]),
+            dict(frames=16,coverage=[dict(box='b',first=6,frames=16)])])
         expected = ramp[:, 12 * RATE // 24:round(32 * RATE / 24)]
         for waveform, rate in heard:
             self.assertEqual(rate, RATE)
@@ -145,10 +147,11 @@ class SoundtrackTest(unittest.TestCase):
     def test_replacement_parts_keep_the_recording_clock(self):
         clip = {"slot": "audio1", "start": 0.25, "source_start": 0.5, "duration": 1.5}
         sources = {"audio1": {"waveform": torch.randn(1, 2, 3 * RATE), "sample_rate": RATE}}
-        replaced, _ = audio_tracks.place([clip], sources, [(16, False), (12, False), (16, False)])
-        whole, _ = audio_tracks.place([clip], sources, [(44, False)])
+        def parts(items): return [dict(frames=count,coverage=[] if inserted else [dict(box='a',first=0,frames=count)]) for count,inserted in items]
+        replaced, _ = audio_tracks.place([clip], sources, parts([(16, False), (12, False), (16, False)]))
+        whole, _ = audio_tracks.place([clip], sources, parts([(44, False)]))
         self.assertTrue(torch.equal(replaced, whole))
-        inserted, _ = audio_tracks.place([clip], sources, [(22, False), (12, True), (22, False)])
+        inserted, _ = audio_tracks.place([clip], sources, parts([(22, False), (12, True), (22, False)]))
         self.assertEqual(inserted.shape[-1], whole.shape[-1] + 12 * RATE // 24)
 
 

@@ -2,6 +2,10 @@
 
 ## Can Start
 
+- Follow-up browser/GPU verification complete: BA8 ran actual isolated ComfyUI on8189 with this branch; real edit/save/playback,1440/390px layout and bounded83frame GPU render passed. Encoded audio verifies330Hz→silence→880Hz at assigned ranges. Owned backend stopped, browser closed and GPU released. See `docs/verification/2026-11-06-box-audio-live.md`; user integration choice remains pending. No product-code change.
+
+- Current scope: box-bound audio implemented and verified through `7805d11` on isolated `design/box-audio-range-lock`, based on main `b7eaedc`. All five tasks complete; independent review's five Important findings fixed with RED→GREEN regressions. Final191JS+355Python, actual TimelineHost/native/attached1440/390px browser and strict guide pass. No model render, service restart, deployment, push or merge. Recover the box-audio-range ledger, design, plan and current Recovery State; integration choice remains with the user.
+
 - Current worktree: fix/incompatible-render-overlap at main 3b2d569. IO1-IO3 are implemented and verified (164JS +307Python, browser desktop/mobile, strict docs); recover features.md and incompatible-overlap ledger. Prior release entries below are historical. No live service or render changes.
 
 - Current focus: editing history on isolated `feat/editing-history`, rebased onto main `47c1d43`. The user authorized its PR, merge and v0.10.0 tagged release. Preserve the original checkout's unrelated edits. Installation remains the standard ComfyUI custom_nodes clone and `python -m pip install -r requirements.txt` with ComfyUI's Python; no live installation or inference is needed for release.
@@ -19,5 +23,7 @@
 - `features.md` and the linked design ledger record investigation, open decisions and recommendations separately from approved decisions.
 
 ## Can Pick Up Next Steps
+
+- Current next step: offer local merge to main, push/PR, or leave the named branch in place. Do not resume completed tasks or inherited IO4 release work. Older entries below are historical.
 
 - Recover the index and editing-history release ledger. GSP2 is historically complete (PR #19 and v0.7.0 verified). EH2 owns the current PR/merge/release; do not merge unrelated open PRs or change the live ComfyUI installation.

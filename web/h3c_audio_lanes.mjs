@@ -1,6 +1,7 @@
-import * as model from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
-import { importWhisper, validateTimedText, setTextSync, textClock, projectTimedText } from './h3c_timed_text.mjs?v=20261011-reference-preparation-1';
+import * as model from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import { importWhisper, validateTimedText, setTextSync, textClock, projectTimedText } from './h3c_timed_text.mjs?v=20261106-box-audio-1';
 import { loadAudio, loaded, beatTimes, drawWave } from './h3c_waveform.mjs?v=20261106-video-so-far-1';
+import {captureWindows,resolveWindows,unlockWindows,lockEligibility,sourceOrigin,outputWindows,equivalentWindows,timelineAudioParts} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 
 const node = (tag, cls, text) => {
   const item = document.createElement(tag);
@@ -40,6 +41,7 @@ export class AudioLanes {
       if (ref) this.addConnected(ref);
     });
     this.message = node('span', 'h3ct-hint');
+    this.message.setAttribute('role','status');
     // Beats are found on request, kept for the session by audio file, and drawn as ticks under each waveform.
     this.beats = new Map();
     this.beatMessages = new Map();
@@ -117,9 +119,8 @@ export class AudioLanes {
       const beats = this.beats.get(this.sourceUrl(clip));
       if (!beats || !model.referenceEnabled(this.editor.state, clip.slot)) continue;
       for (const beat of beats) {
-        if (beat >= clip.source_start && beat <= clip.source_start + clip.duration) {
-          frames.push((clip.start + beat - clip.source_start) * model.FPS);
-        }
+        for(const window of resolveWindows(clip,model.audioBoxSpans(this.editor.state)))
+          if(beat>=window.source_start && beat<window.source_start+window.duration)frames.push((window.start+beat-window.source_start)*model.FPS);
       }
     }
     return frames;
@@ -168,9 +169,41 @@ export class AudioLanes {
     }
   }
 
-  selectAudio(slot) {
+  async setBoxLock(enabled) {
+    if(this.boxLockBusy)return false;
+    const state=this.editor.state,clip=this.clips.find(c=>c.slot===(this.selected??this.clips[0]?.slot));
+    if(!clip || !!clip.box_windows===enabled)return false;
+    this.boxLockBusy=true;
+    const before=structuredClone(clip), signature=()=>model.serialize(this.editor.state), original=signature();
+    let applied=null;
+    try {
+      if(enabled) {
+        const eligibility=lockEligibility(state,clip);
+        if(!eligibility.ok){this.message.textContent=eligibility.conflicts.join(' ');return false;}
+      } else {
+        const boxes=model.audioBoxSpans(state),parts=timelineAudioParts(state),continuous={...clip};delete continuous.box_windows;
+        const changed=!equivalentWindows(outputWindows(clip,resolveWindows(clip,boxes),parts),outputWindows(continuous,resolveWindows(continuous,boxes),parts));
+        if(changed && !await this.editor.host.confirmAudioUnlock?.())return false;
+        if(this.editor.state!==state || signature()!==original){this.message.textContent='The Timeline changed. Review its current audio before unlocking.';return false;}
+      }
+      if(enabled)clip.box_windows=captureWindows(clip,model.audioBoxSpans(state),sourceOrigin(state,clip));
+      else unlockWindows(clip);
+      applied=signature();
+      await this.editor.commit();
+      this.message.textContent=enabled?'Audio ranges now follow their boxes.':'Continuous audio placement restored.';
+      return true;
+    } catch(error) {
+      if(applied && this.editor.state===state && signature()===applied) {
+        for(const key of Object.keys(clip))delete clip[key];Object.assign(clip,before);
+        this.editor.host.write?.(model.serialize(state));
+      }
+      this.message.textContent=error.message;return false;
+    } finally {this.boxLockBusy=false;this.settingsKey=null;}
+  }
+
+  selectAudio(slot, boxId = null) {
     if (!this.clips.some(clip => clip.slot === slot)) return;
-    this.selected = slot; this.settings.open = true;
+    this.selected = slot; this.auditionBox=boxId; this.settings.open = true;
     this.renderSettings();
     this.editor.inspect({kind: 'audio', slot});
   }
@@ -218,8 +251,10 @@ export class AudioLanes {
             const field = node('label', 'h3ct-field', label), input = node('input'); input.type = 'checkbox'; input.checked = value[key];
             input.setAttribute('aria-label', label);
             input.addEventListener('change', () => {
-              if (key === 'sync_audio') setTextSync(state, input.checked); else value.enabled = input.checked;
-              this.editor.commit();
+              try {
+                if (key === 'sync_audio') setTextSync(state, input.checked); else value.enabled = input.checked;
+                this.editor.commit();
+              }catch(error){input.checked=value[key];this.textMessage.textContent=error.message;this.textSummary.textContent=error.message;}
             });
             field.append(input); row.append(field);
           }
@@ -262,9 +297,9 @@ export class AudioLanes {
       const index = this.editor.selected, box = state.boxes[index];
       const start = state.boxes.slice(0, index).reduce((sum, box) => sum + box.frames, 0) / model.FPS;
       const window = projectTimedText(value, this.clips, start, box?.frames ?? model.totalFrames(state),
-        box && !model.isFresh(state, index) ? this.editor.host.context() : 0);
-      this.textSummary.textContent = `Movie ${clock.start} s · source ${clock.source_start}–${clock.source_start + clock.duration} s`
-        + `\nClip ${index + 1} source ${window.source_start ?? '—'}–${window.source_end ?? '—'} s · replay ${window.replay_end_ms} ms`
+        box && !model.isFresh(state, index) ? this.editor.host.context() : 0, model.resolvedAudio(state));
+      this.textSummary.textContent = (clock.box_windows?'Audio follows boxes':`Movie ${clock.start} s · source ${clock.source_start}–${clock.source_start + clock.duration} s`)
+        + `\nClip ${index + 1} source ${window.source_windows?.map(w=>`${w.source_start}–${w.source_end}`).join(', ') || `${window.source_start ?? '—'}–${window.source_end ?? '—'}`} s · replay ${window.replay_end_ms} ms`
         + `${window.direction ? `\nDirection: ${window.direction}` : ''}`
         + (window.cues.length ? window.cues.map(cue => `\n${cue.start_ms}–${cue.end_ms} ms${cue.continuing ? ' · continuing' : ''}${cue.replay_only ? ' · replay only' : ''}\n${cue.text}`).join('') : '\nNo active phrases in this clip.');
     } catch (error) { this.textSummary.textContent = error.message; }
@@ -328,7 +363,8 @@ export class AudioLanes {
     if (!this.clips.length) {
       this.lanes.append(this.header);
     }
-    for (const clip of this.clips) {
+    for (const recording of this.clips) {
+      const clip=recording;
       const reference = this.editor.host.connected().audios.find(ref => ref.name === clip.slot);
       const title = reference?.replaced ? reference.title || 'Replacement unavailable' : clip.title || 'Audio';
       const lane = node('div', 'h3ct-audio-lane');
@@ -336,14 +372,27 @@ export class AudioLanes {
       const video = node('div', 'h3ct-audio-video');
       video.style.width = `${100 * model.totalFrames(this.editor.state) / this.span}%`;
       lane.append(video);
+      const spans=model.audioBoxSpans(this.editor.state),windows=resolveWindows(recording,spans);
+      if(recording.box_windows)for(const [index,span] of spans.entries()) {
+        const window=windows.find(w=>w.box===span.id);
+        const gaps=window?[[span.start,window.start],[window.start+window.duration,span.start+span.duration]]:[[span.start,span.start+span.duration]];
+        for(const [first,last] of gaps)if(last>first) {
+          const gap=button(`Silence · Box ${index+1}`,()=>this.selectAudio(recording.slot,span.id));gap.className='h3ct-audio-gap';
+          gap.style.left=`${100*first*model.FPS/this.span}%`;gap.style.width=`${100*(last-first)*model.FPS/this.span}%`;
+          gap.title=`Box ${index+1} · no assigned audio in this region`;gap.setAttribute('aria-label',`@${recording.slot}, box ${index+1}: no assigned audio`);lane.append(gap);
+        }
+      }
+      for(const clip of recording.box_windows?windows.map(window=>({...recording,...window})):[recording]) {
       const item = node('div', 'h3ct-audio-clip');
+      item.classList.toggle('box-bound',!!recording.box_windows);
+      if(clip.box)item.dataset.box=clip.box;
       item.style.left = `${100 * clip.start * model.FPS / this.span}%`;
       item.style.width = `${100 * clip.duration * model.FPS / this.span}%`;
       item.classList.toggle('disabled', !model.referenceEnabled(this.editor.state, clip.slot));
       item.tabIndex = 0; item.setAttribute('role', 'button');
       const inFullVideo = clip.in_full_video === true && !!clip.file;
       item.setAttribute('aria-label', `Edit @${clip.slot} audio clip${inFullVideo ? ', in the full video' : ''}`);
-      item.title = `${title} · ${clip.duration.toFixed(3)} s · original speed\nDrag to move · edges trim · Shift-drag selects a different source window`
+      item.title = `${title} · ${clip.duration.toFixed(3)} s · original speed\n`+(recording.box_windows?`Box ${this.editor.state.boxes.findIndex(b=>b.id===clip.box)+1} · source ${clip.source_start.toFixed(3)}–${(clip.source_start+clip.duration).toFixed(3)} s · follows box`:'Drag to move · edges trim · Shift-drag selects a different source window')
         + (inFullVideo ? '\nIn the full video' : '');
       const url = reference?.replaced ? null : this.sourceUrl(clip);
       let pending = null;
@@ -381,27 +430,30 @@ export class AudioLanes {
         if (pending) pending.fallback = svg;
       }
       item.append(node('span', 'h3ct-audio-label', `@${clip.slot} · ${title} · ${clip.duration.toFixed(2)} s${reference?.replaced ? ' · Replaced source' : ''}${clip.locked === true && clip.file ? ' · locked' : ''}`));
-      for (const edge of ['left', 'right']) {
+      for (const edge of recording.box_windows?[]:['left', 'right']) {
         const handle = node('div', `h3ct-audio-handle ${edge}`);
         handle.title = `Drag to trim the ${edge} edge`;
         handle.addEventListener('pointerdown', event => this.drag(event, clip, edge));
         item.append(handle);
       }
       item.addEventListener('pointerdown', event => this.drag(event, clip, event.shiftKey ? 'source' : 'move'));
-      item.addEventListener('click', () => this.selectAudio(clip.slot));
+      item.addEventListener('click', () => this.selectAudio(clip.slot,clip.box??null));
       item.addEventListener('keydown', event => {
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); item.click(); }
-        if (['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        if (!recording.box_windows && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
           event.preventDefault(); Object.assign(clip, model.editAudioClip(clip, 'move', (event.key === 'ArrowLeft' ? -1 : 1) / model.FPS));
           this.editor.commit();
         }
       });
-      lane.append(item); this.lanes.append(lane);
+      lane.append(item);
+      }
+      this.lanes.append(lane);
     }
     this.redraw();
   }
 
   drag(event, clip, mode) {
+    if(clip.box_windows)return;
     if (event.button !== 0 || (event.pointerType === 'touch' && !['left', 'right'].includes(mode)
       && getComputedStyle(this.root).touchAction.includes('pan-x'))) return;
     event.preventDefault(); event.stopPropagation();
@@ -434,27 +486,30 @@ export class AudioLanes {
     const clip = this.clips.find(clip => clip.slot === this.selected) ?? this.clips[0];
     const reference = this.editor.host.connected().audios.find(ref => ref.name === clip?.slot);
     const file = this.sourceFile(clip);
-    const signature = JSON.stringify([this.clips, clip?.slot, model.totalFrames(this.editor.state), file, reference?.replaced]);
+    const signature = JSON.stringify([this.clips, clip?.slot, this.editor.state.boxes.map(b=>[b.id,b.frames]),this.editor.state.bridges,this.auditionBox,file,reference?.replaced]);
     const typing = this.settingsClip === clip && this.settingsState === this.editor.state
       && this.settings.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA';
     if (typing) { this.renderPlayer(file, clip); return; }
     if (this.settingsKey === signature && this.settingsClip === clip) return;
     this.settingsState = this.editor.state;
     this.settingsKey = signature; this.settingsClip = clip;
-    this.settings.replaceChildren(node('summary', null, 'Audio settings · move clips and trim their edges above the clips'));
+    this.settings.replaceChildren(node('summary', null, clip?.box_windows?'Audio settings · audio ranges follow boxes':'Audio settings · move clips and trim their edges above the clips'));
     this.settings.hidden = !this.clips.length;
     if (!clip) return;
     const row = node('div', 'h3ct-row');
     const choose = node('select', 'h3ct-select'); choose.setAttribute('aria-label', 'Selected audio clip');
-    for (const c of this.clips) { const option = node('option', null, `@${c.slot} · ${c.title}`); option.value = c.slot; choose.append(option); }
+    for (const c of this.clips) { const option = node('option', null, `@${c.slot} · ${c.title||c.file?.filename||'Audio'}`); option.value = c.slot; choose.append(option); }
     choose.value = clip.slot;
     choose.addEventListener('change', () => this.selectAudio(choose.value));
-    row.append(choose, button('Fit to video', () => {
+    const fit=button('Fit to video', () => {
+      if(clip.box_windows)return;
       const duration = model.totalFrames(this.editor.state) / model.FPS;
       if (!duration) { this.message.textContent = 'Add video clips first.'; return; }
       clip.start = 0; clip.duration = Math.min(duration, clip.source_duration - clip.source_start);
       this.editor.commit();
-    }), button('Remove audio', () => {
+    });
+    fit.disabled=!!clip.box_windows;fit.title=clip.box_windows?'Unlock audio from boxes before fitting the recording.':'';
+    row.append(choose,fit, button('Remove audio', () => {
       this.editor.state.audio_clips = this.clips.filter(c => c !== clip);
       if (clip.file) this.editor.state.disabled_refs = [...new Set([...this.editor.state.disabled_refs ?? [], clip.slot])];
       this.selected = this.clips[0]?.slot;
@@ -483,6 +538,14 @@ export class AudioLanes {
       lock.append(locked); row.append(lock);
     } else row.append(node('span', 'h3ct-hint', 'Upload this audio’s file to play it in the full video.'));
     this.settings.append(row);
+    const bound=node('label','h3ct-field','Lock audio to boxes'),toggle=node('input');
+    toggle.type='checkbox';toggle.checked=!!clip.box_windows;toggle.setAttribute('aria-label','Lock audio to boxes');
+    const eligibility=clip.box_windows?{ok:true,conflicts:[]}:lockEligibility(this.editor.state,clip);
+    toggle.disabled=this.boxLockBusy || !eligibility.ok;
+    bound.title=eligibility.conflicts.join(' ') || 'Keep each box’s current source audio through length, order and insertion edits.';
+    toggle.addEventListener('change',async()=>{await this.setBoxLock(toggle.checked);this.renderSettings();});
+    bound.append(toggle);this.settings.append(bound);
+    if(!eligibility.ok)this.settings.append(node('div','h3ct-hint',eligibility.conflicts.join(' ')));
     const beats = node('div', 'h3ct-row');
     beats.append(this.beatButton, this.snapField, this.beatMessage);
     this.settings.append(beats);
@@ -491,7 +554,9 @@ export class AudioLanes {
       const field = node('label', 'h3ct-field', label);
       const input = node('input', 'h3ct-number'); input.type = 'number'; input.min = key === 'duration' ? .001 : 0; input.step = '0.001';
       input.value = Number(clip[key].toFixed(6)); input.setAttribute('aria-label', label);
+      input.disabled=!!clip.box_windows;
       input.addEventListener('change', () => {
+        if(clip.box_windows)return;
         const value = Number(input.value);
         if (!Number.isFinite(value) || value < 0 || (key === 'duration' && value === 0)) { input.value = clip[key]; return; }
         if (key === 'source_start') { clip.source_start = Math.min(value, Math.max(0, clip.source_duration - clip.duration)); }
@@ -516,7 +581,7 @@ export class AudioLanes {
     this.renderPlayer(file, clip);
     const video = model.totalFrames(this.editor.state) / model.FPS;
     this.settings.append(node('div', 'h3ct-hint', (reference?.replaced ? 'Replaced source · current clip timing preserved. ' : `${clip.source_duration.toFixed(3)} s source · original playback speed. `)
-      + 'Shift-drag the clip to change its source window. '
+      + (clip.box_windows?'Audio ranges follow their boxes. Unlock before moving, trimming or replacing this recording. ':'Shift-drag the clip to change its source window. ')
       + (clip.start > 0 || clip.start + clip.duration < video ? 'Uncovered time uses silence in this reference.' : '')));
   }
 
@@ -526,12 +591,18 @@ export class AudioLanes {
     if (!player) {
       player = node('audio'); player.controls = true; player.preload = 'none';
       player.addEventListener('play', () => {
-        if (player.currentTime < clip.source_start || player.currentTime >= clip.source_start + clip.duration) player.currentTime = clip.source_start;
+        const window=player.audioWindow;
+        if(!window){player.pause();return;}
+        if (player.currentTime < window.source_start || player.currentTime >= window.source_start + window.duration) player.currentTime = window.source_start;
       });
-      player.addEventListener('timeupdate', () => { if (player.currentTime >= clip.source_start + clip.duration) player.pause(); });
+      player.addEventListener('timeupdate', () => { const window=player.audioWindow;if(!window || player.currentTime >= window.source_start + window.duration)player.pause(); });
       this.settings.append(player);
     }
     const key = JSON.stringify(file);
+    const windows=resolveWindows(clip,model.audioBoxSpans(this.editor.state)),id=this.auditionBox??this.editor.state.boxes[this.editor.selected]?.id;
+    const window=clip.box_windows?(id?windows.find(w=>w.box===id):windows[0]):clip;
+    if(JSON.stringify(player.audioWindow)!==JSON.stringify(window))player.pause();
+    player.audioWindow=window;player.hidden=!window;
     if (player.dataset.source !== key) {
       player.pause(); player.src = this.editor.host.viewUrl(file); player.dataset.source = key;
     }

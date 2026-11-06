@@ -1,5 +1,6 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
+import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import {splitWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 
 const number = (shot) => Number(/\d+/.exec(shot.label)[0]);
 // A later shot's cut time in milliseconds of generated video (replay included), or null when it has none.
@@ -182,6 +183,7 @@ export function splitBox(state, index, shotNumber, context) {
     if (!box.previews.length) delete box.previews;
   }
   // At the replay boundary the preceding box already contains the entire left half.
+  splitWindows(state, original.id, timing.left ? left.id : null, right.id, timing.cut / FPS);
   state.boxes.splice(index, 1, ...(timing.left ? [left, right] : [right]));
   return timing;
 }
