@@ -179,10 +179,6 @@ def _replace(temporary, path):
         return alternative, f"{os.path.basename(path)} is open in another program, so this version is {os.path.basename(alternative)}."
 
 
-def _aspect(width, height):
-    return width / height
-
-
 def _source_frames(path, start, frames):
     """How many frames a window of video `path` from `start` holds: `frames`, or the rest of the video."""
     if frames is not None:
@@ -205,9 +201,10 @@ def _picks(start, count, source_rate, rate, begin):
 def build_full_video(path, videos, audio, crf, size=None, temporary=None):
     """Concatenate segment videos into `path` with `audio` = (waveform, sample_rate) or None. Each video is a path, or
     (path, first frame, frames) for a window of it.
-    Videos may differ in frame rate, size, colour space and codec, as long as they share an aspect ratio: the join takes
+    Videos may differ in frame rate, size, aspect ratio, colour space and codec: the join takes
     the best of them (the highest frame rate, repeating frames of slower videos; HDR when any video is HDR, converting
-    SDR into it; the largest size, or `size` = (width, height) when given). Every window keeps its duration.
+    SDR into it; the smallest clip's dimensions, or `size` = (width, height) when given). Larger clips are resized
+    to those dimensions, including when their aspect ratios differ. Every window keeps its duration.
     Packets are copied when every file has the same encoding and every window starts at its first frame (segments
     have no B-frames, so a prefix is its first packets); otherwise the frames are re-encoded in the first video's
     codec, so a sequence saved as HEVC stays HEVC.
@@ -218,10 +215,7 @@ def build_full_video(path, videos, audio, crf, size=None, temporary=None):
     first = signatures[0]
     rate = max(signature[4] for signature in signatures)
     space = color.target_space([signature[5] for signature in signatures])
-    width, height = size or max((signature[2:4] for signature in signatures), key=lambda pair: pair[0] * pair[1])
-    if any(abs(_aspect(*signature[2:4]) - _aspect(width, height)) > 0.01 * _aspect(width, height)
-           for signature in signatures):
-        return None, "Full video skipped: the segment videos have different aspect ratios."
+    width, height = size or min((signature[2:4] for signature in signatures), key=lambda pair: pair[0] * pair[1])
     copy = (all(signature[:2] == first[:2] and signature[2:4] == (width, height) and signature[4:] == first[4:]
                 for signature in signatures)
             and all(start == 0 for _, start, _ in windows))
