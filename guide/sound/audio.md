@@ -44,6 +44,23 @@ With at least one clip ticked, the full video plays **only** the ticked clips:
 
 The full video rebuilds on its own a moment after a ticked clip changes, with nothing re-rendered, and the Full video view names the clips it plays. Ticking never puts a rendered clip out of date. If a ticked clip's file is missing the full video isn't rebuilt and the Studio names the file. Clip and bridge takes keep H3's audio, and unticking every clip brings H3's audio back. With [inserted bridges](../continuity/joins-and-bridges.md#only-the-full-video-gets-longer), a ticked clip starts with its clip after the bridges before it, then plays straight through. [Replacement bridges](../continuity/joins-and-bridges.md#replacement-bridges) add no time, so a ticked clip plays at its own place across them.
 
+## Lock audio to boxes
+
+Turn on **Lock audio to boxes** in a lane's Audio settings to keep each existing box's current source range through later Timeline edits. It is off by default, independently for each lane. One recording supplies every segment; no audio files are cut and playback speed stays unchanged.
+
+- The waveform separates at box boundaries. Selecting a segment auditions only its visible source range; outlined gaps contribute silence from that lane.
+- Extending a box adds silence after its assigned range. Shortening hides its tail; extending again restores the hidden audio before adding silence. Other boxes retain their source ranges.
+- Inserted, appended and duplicated boxes have no assigned audio. Moving a box carries its range; deleting removes its placement. Splitting divides the range, with the hidden tail belonging to the second half.
+- Dialogue, audio-synced timed text and detected beats follow the assigned source ranges. Their words and original source timestamps do not change. Existing dialogue and lettering review checks still apply.
+- Unlock before moving, trimming, fitting, slipping or replacing the recording. Descriptions and **In the full video** remain editable. Disabling a reference preserves its bindings.
+- Unlocking restores the original continuous placement while keeping box edits. If playback would change, confirm before applying it. **Undo** restores the bindings and hidden tails; locking again captures fresh ranges.
+
+Enabling does not change the audio you hear. Add boxes first; if an existing inserted bridge would change a selected soundtrack when locked, the setting identifies that bridge and stays off until you resolve it. An inserted bridge added after locking contributes silence from that lane. Existing sequence-clock lock restrictions still apply.
+
+Silence is specific to this lane: other lanes keep playing. **In the full video** continues to choose whether the original recording plays; locking does not turn it on. An empty native reference does not guarantee that H3 generates silence. Source windows stay synchronized, but continuation, memory or changed replay can still make later takes outdated.
+
+Saved workflows and checkpoints retain the bindings. Older readers stop with a request to update rather than silently play a continuous recording.
+
 ## Locked to the sequence clock
 
 An uploaded clip's settings also have **Locked to the sequence clock**. A locked recording keeps its place in the full video: no bridge may add time across a cut inside it, so those cuts stay cuts and its dialogue stays in sync, and the Timeline names any bridge or setting that would move the picture away from it. Lock a recording when its words or beats must line up with the clips. See [Dialogue cues](dialogue.md#lock-a-recording).

@@ -79,3 +79,13 @@ class ConditioningTest(unittest.TestCase):
         key=timeline.layout_key(parsed,0,0)
         raw['audio_clips'][0]['box_windows']['by_box']['a']['duration']=3
         self.assertEqual(timeline.layout_key(self.parse(raw),0,0),key)
+
+    def test_source_sample_phase_is_part_of_effective_audio_identity(self):
+        raw=document();before=self.parse(raw)
+        source={'audio1':{'waveform':torch.arange(12*RATE,dtype=torch.float32).reshape(1,1,-1),'sample_rate':RATE}}
+        key=timeline.layout_key(before,1,0)
+        raw['audio_clips'][0]['start']=.5001
+        raw['audio_clips'][0]['box_windows']['placement']['start']=.5001
+        after=self.parse(raw)
+        self.assertFalse(torch.equal(audio_tracks.for_box(before,1,0,source)['audio1']['waveform'],audio_tracks.for_box(after,1,0,source)['audio1']['waveform']))
+        self.assertNotEqual(timeline.layout_key(after,1,0),key)

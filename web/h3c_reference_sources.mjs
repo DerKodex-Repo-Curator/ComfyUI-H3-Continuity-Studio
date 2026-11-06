@@ -1,4 +1,4 @@
-import {referenceFile} from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
+import {referenceFile} from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
 
 function widgetValue(node, name, graph, owners) {
   const input = node.inputs?.find(input => input.name === name);

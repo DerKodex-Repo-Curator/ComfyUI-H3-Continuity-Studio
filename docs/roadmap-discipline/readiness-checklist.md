@@ -2,7 +2,7 @@
 
 ## Can Start
 
-- Current scope: approved box-bound audio design and implementation planning on `design/box-audio-range-lock`, based on local main `b7eaedc`. BA1 design approved; BA2 plan ready for user review and execution-method choice. Documentation only; no product implementation, dependency setup, rendering or deployment. Inherited IO4 release instructions are historical to this worktree; recover the box-audio-range ledger, approved design, plan and current Recovery State.
+- Current scope: user-authorized Native box-bound audio implementation on `design/box-audio-range-lock`, based on local main `b7eaedc`. BA1/BA2 approved; Tasks1–4 verified and committed. BA7/Task5 controls and browser/guide verification are in progress, then independent whole-branch review. No model rendering, service restart, deployment or integration. Recover the box-audio-range ledger, approved design, plan and current Recovery State.
 
 - Current worktree: fix/incompatible-render-overlap at main 3b2d569. IO1-IO3 are implemented and verified (164JS +307Python, browser desktop/mobile, strict docs); recover features.md and incompatible-overlap ledger. Prior release entries below are historical. No live service or render changes.
 
@@ -22,6 +22,6 @@
 
 ## Can Pick Up Next Steps
 
-- Current next step: review `docs/superpowers/plans/2026-11-06-box-audio-range-lock.md` with the user and record the execution method/authorization before product implementation. Native execution is recommended because the five tasks share timing interfaces. Older entries below are historical.
+- Current next step: finish Task5 verification/commit and the required independent branch review. Native execution is already authorized; do not ask again. Older entries below are historical.
 
 - Recover the index and editing-history release ledger. GSP2 is historically complete (PR #19 and v0.7.0 verified). EH2 owns the current PR/merge/release; do not merge unrelated open PRs or change the live ComfyUI installation.

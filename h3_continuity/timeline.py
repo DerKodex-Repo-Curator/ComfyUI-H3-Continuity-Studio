@@ -1199,6 +1199,7 @@ def layout_key(timeline, index, context=39):
                 left, right = max(origin,window['start']), min(end,window['start']+window['duration'])
                 if right > left:
                     value['audio_windows'].append(dict(slot=clip['slot'], file=clip.get('file'), source=clip['box_windows']['source'],
+                        sample_origin={key:clip['box_windows']['placement'][key] for key in ('start','source_start')},
                         offset=left-origin, source_start=window['source_start']+left-window['start'], duration=right-left))
         if not value['audio_windows']: value.pop('audio_windows')
         if not value['audio_clips']: value.pop('audio_clips')

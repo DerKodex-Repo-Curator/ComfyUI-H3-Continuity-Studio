@@ -21,9 +21,25 @@
   - *Delegated judgment:* User said Use your best judgement for the existing inserted-bridge conflict. Chosen resolution: block enabling only when candidate box-bound placement would change existing selected soundtrack playback; identify the conflicting bridges, leave all state untouched, and require explicit bridge resolution. Reference-only lanes and non-conflicting bridges are not blocked merely by bridge presence. No alternative audio-changing confirmation path on enable.
   - *Next:* Design verification and approval complete; BA2 owns implementation planning and its handoff. No product work is authorized yet.
 
-- [ ] **BA2** (State: `active` | Verification: `Self-review implementation-plan coverage, signatures, paths and test steps; obtain user plan review and execution-method choice.`)
+- [x] **BA2** (State: `passing` | Verification: `Self-review implementation-plan coverage, signatures, paths and test steps; obtain user plan review and execution-method choice.`)
   - *Behavior:* Prepare a concrete implementation plan from the approved design without changing product code; preserve the user's scope and worktree.
   - *Artifact:* [Implementation plan](../../superpowers/plans/2026-11-06-box-audio-range-lock.md), five sequential tasks: timing/schema, mutations/persistence, conditioning/cues, assembly, then controls/integration verification.
   - *Evidence:* Writing-plans skill used; source callers, test harness, history/split/Story/API paths inspected. Plan self-review mapped every design section to a task and aligned storage/signatures. Structure/reference check passed: five tasks, 25 checkable steps, design approval marker and all inspected existing paths/link targets valid. No implementation tests executed.
-  - *Recommendation:* Native implementation in this worktree, followed by an independent whole-branch review, because all five tasks depend on shared timing interfaces. The user has not selected an execution method or authorized implementation.
-  - *Next:* Commit the approved-design status and plan, then ask the user to review the plan and choose Native or Subagent-driven execution. Do not implement until that review/choice arrives.
+  - *Execution authorization:* User selected Native after plan review on 2026-11-06. Implement every task sequentially in this worktree with a final independent whole-branch review. No deployment/push/release/rendering authorized.
+  - *Next:* BA3 starts implementation under the approved plan.
+
+- [x] **BA3** (State: `passing` | Verification: `node --test tests/web/audio_windows.test.mjs; focused Python test_audio_windows.py discovery; parser/API round trips`)
+  - *Behavior:* Task 1 timing/schema contract and shared cross-runtime fixtures.
+  - *Evidence:* Commit 2016966; shared JS3/Python4 focused tests RED then GREEN; API schema/normalization and feature gate verified. Full suite 178JS+336Python passes; task-done recorded completion. Baseline175JS+332Python passed.
+- [x] **BA4** (State: `passing` | Verification: `Task 2 mutation/history/persistence focused suites`)
+  - *Behavior:* Preserve ownership through every edit and persistence path.
+  - *Evidence:* be85e7a; ownership tests RED then GREEN; JS23 mutation/history/split tests, Python2 persistence and9 actual checkpoint tests pass. Full182JS+339Python passes. Generic serializers retain nested data; no redundant adapters added. Focused checkpoint test rerun with COMFY_ROOT after harness-only failure.
+- [x] **BA5** (State: `passing` | Verification: `Task 3 conditioning/dialogue/text/audio regression suites`)
+  - *Behavior:* Conditioning, linked cues, carry and effective render identity.
+  - *Evidence:* bb1b164; native waveform/carry/local identity and JS/Python cue tests observed RED then GREEN. Fractional sample-phase/short-source cases pass. Full183JS+344Python includes audio/FLF2VA/feather/context/dialogue regressions, zero failures/skips; task-done recorded.
+- [x] **BA6** (State: `passing` | Verification: `Task 4 soundtrack/assembly/partial-video/dialogue suites`)
+  - *Behavior:* Owner-aware soundtrack geometry, gaps and bridge restrictions.
+  - *Evidence:* c1f8d81; output mapping, silent inserted bridges, empty selection, replacement geometry/identity tests RED→GREEN. Full184JS+349Python passes, including partial/preview/assembly regressions and legacy continuous soundtrack behavior. Internal part-contract mocks updated; task-done recorded.
+- [ ] **BA7** (State: `active` | Verification: `Full tests; desktop/mobile isolated browser; strict guide; diff/roadmap; independent branch review`)
+  - *Behavior:* Expose controls and finish integrated verification/review.
+  - *Evidence:* UI controls, per-box segments/gaps, guards, cue/beat projection and audition implemented. Fresh189JS+351Python passes with no skips/failures; real Studio native/attached edit/save/undo/cancel/unlock/relock workflow, bridge eligibility and1440/390px captures pass without overflow/page errors. Screenshots inspected. Strict MkDocs, diff and roadmap checks pass. Prototype-ID, numeric snapshot and sample-phase identity regressions observed RED→GREEN. Task5 commit and final independent whole-branch review remain.

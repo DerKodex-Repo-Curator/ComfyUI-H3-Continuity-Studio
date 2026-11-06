@@ -51,3 +51,10 @@ test('editor serialization negotiates the reader feature and preserves the map',
   assert.ok(saved.requires.includes('box-audio-windows-1'));
   assert.deepEqual(parseState(JSON.stringify(saved)).audio_clips[0].box_windows.by_box,f.bindings);
 });
+
+test('imported box identifiers are data, including prototype property names',()=>{
+  const boxes=[{id:'__proto__',start:0,duration:4}],clip={...f.clip};
+  clip.box_windows=captureWindows(clip,boxes,f.origin);
+  assert.equal(Object.hasOwn(clip.box_windows.by_box,'__proto__'),true);
+  assert.equal(resolveWindows(clip,boxes)[0].box,'__proto__');
+});

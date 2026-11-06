@@ -28,12 +28,12 @@ export function validateWindows(clip, boxes, origin) {
 }
 
 export function captureWindows(clip, boxes, origin) {
-  const by_box = {};
+  const bindings = [];
   for (const box of boxes) {
     const first = Math.max(box.start, clip.start), last = Math.min(box.start + box.duration, clip.start + clip.duration);
-    if (last > first) by_box[box.id] = {offset:first-box.start, source_start:clip.source_start+first-clip.start, duration:last-first};
+    if (last > first) bindings.push([box.id,{offset:first-box.start, source_start:clip.source_start+first-clip.start, duration:last-first}]);
   }
-  return {version:1, source:structuredClone(origin), placement:placement(clip), by_box};
+  return {version:1, source:structuredClone(origin), placement:placement(clip), by_box:Object.fromEntries(bindings)};
 }
 
 export function resolveWindows(clip, boxes) {
@@ -113,4 +113,50 @@ export function outputWindows(clip, windows, parts) {
 export function equivalentWindows(left,right) {
   left=coalesceWindows(left);right=coalesceWindows(right);
   return left.length===right.length && left.every((a,i)=>keys.every(key=>Math.abs(a[key]-right[i][key])<1e-9));
+}
+
+export function timelineAudioParts(state) {
+  return state.boxes.flatMap((box,index)=>{
+    const bridge=index>0 && box.cut ? (state.bridges??[]).find(b=>b.before===box.id && b.mode!=='replace') : null;
+    return [...(bridge?[{frames:bridge.frames,coverage:[]}]:[]),{frames:box.frames,coverage:[{box:box.id,first:0,frames:box.frames}]}];
+  });
+}
+
+export function sourceOrigin(state, clip) {
+  let slot=clip.slot;const seen=new Set();
+  while(state.reference_replacements?.[slot]) {
+    if(seen.has(slot))throw Error('Audio replacement cycle.');seen.add(slot);
+    const replacement=state.reference_replacements[slot];
+    if(replacement.file)return {file:structuredClone(replacement.file)};
+    slot=replacement.source;
+  }
+  const file=(state.audio_clips??[]).find(c=>c.slot===slot)?.file;
+  return file?{file:structuredClone(file)}:{source:slot};
+}
+
+export function audioSourceLocked(state, slot) {
+  return (state.audio_clips??[]).some(clip=>{
+    if(!clip.box_windows)return false;
+    let name=clip.slot;const seen=new Set();
+    while(!seen.has(name)) {
+      if(name===slot)return true;seen.add(name);
+      const source=state.reference_replacements?.[name]?.source;
+      if(!source)return false;name=source;
+    }
+    return false;
+  });
+}
+
+export function lockEligibility(state, clip) {
+  if(!state.boxes.length)return {ok:false,conflicts:['Add boxes before locking their audio ranges.']};
+  const parts=timelineAudioParts(state);let start=0;
+  const boxes=state.boxes.map(box=>{const span={id:box.id,start,duration:box.frames/24};start+=span.duration;return span;});
+  const candidate={...clip,box_windows:captureWindows(clip,boxes,sourceOrigin(state,clip))};
+  const conflicts=[];
+  if(clip.in_full_video && !equivalentWindows(outputWindows(clip,resolveWindows(clip,boxes),parts),outputWindows(candidate,resolveWindows(candidate,boxes),parts))) {
+    for(let index=1;index<state.boxes.length;index++)if((state.bridges??[]).some(b=>b.before===state.boxes[index].id && b.mode!=='replace')) {
+      conflicts.push(`Resolve the inserted bridge before box ${index+1} before locking: locking would change this soundtrack's playback.`);
+    }
+  }
+  return {ok:!conflicts.length,conflicts};
 }

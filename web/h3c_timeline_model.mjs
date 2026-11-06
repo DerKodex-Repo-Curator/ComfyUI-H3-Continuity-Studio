@@ -4,7 +4,7 @@ import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-
 import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 import {imageDescriptionPrompt, imageDescriptionSource} from './h3c_image_descriptions.mjs?v=20261010-image-descriptions-1';
 import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
-import {AUDIO_WINDOWS_FEATURE, pruneWindows, resolveWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
+import {AUDIO_WINDOWS_FEATURE, pruneWindows, resolveWindows, audioSourceLocked} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 export const FPS = 24;
 export const MAX_FRAMES = 362;
 export const GRID = 17;
@@ -394,6 +394,7 @@ export function audioBoxSpans(state) {
 }
 
 export function editAudioClip(clip, mode, delta) {
+  if(clip.box_windows)throw Error('Unlock audio from boxes before changing its placement.');
   const result = {...clip};
   const minimum = Math.min(1 / FPS, clip.source_duration);
   if (mode === 'move') result.start = Math.max(0, clip.start + delta);
@@ -874,6 +875,7 @@ function invalidateReferenceDescriptions(state, slot) {
 }
 
 export function setReferenceReplacement(state, slot, replacement, pools) {
+  if(audioSourceLocked(state,slot))throw Error('Unlock audio from boxes before replacing its source.');
   if (!referenceType(slot)) throw new Error('Choose a valid reference.');
   if (!!replacement.source === !!replacement.file) throw new Error('Choose a reference or a file.');
   if (replacement.source && referenceType(slot) !== referenceType(replacement.source)) throw new Error('Replacement must have the same reference type.');
@@ -890,6 +892,7 @@ export function setReferenceReplacement(state, slot, replacement, pools) {
 }
 
 export function restoreReferenceReplacement(state, slot) {
+  if(audioSourceLocked(state,slot))throw Error('Unlock audio from boxes before replacing its source.');
   const replacements={...state.reference_replacements};
   delete replacements[slot];
   if(referenceType(slot)==='video'&&replacements[slot.replace('video','video_audio')]?.source)
@@ -902,6 +905,7 @@ export function restoreReferenceReplacement(state, slot) {
 }
 
 export function switchReference(state, from, to, pools) {
+  if(audioSourceLocked(state,from)||audioSourceLocked(state,to))throw Error('Unlock audio from boxes before switching its source.');
   if(from===to || !referenceType(from) || referenceType(from)!==referenceType(to))
     throw new Error('Replacement must have the same reference type.');
   const available=referencePools(state,pools);

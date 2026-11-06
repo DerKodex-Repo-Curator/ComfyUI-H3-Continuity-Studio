@@ -26,7 +26,7 @@ const CSS = `
 .h3cr-title { display:block; padding:6px 7px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
 `;
 
-export function fillReferenceSwitches(root, refs, disabled, changed, {replace, restore, preview: showPreview, clearDescriptions} = {}) {
+export function fillReferenceSwitches(root, refs, disabled, changed, {replace, restore, preview: showPreview, clearDescriptions, replacementProblem} = {}) {
   const element = (tag, text) => { const node = document.createElement(tag); if (text) node.textContent = text; return node; };
   if (!document.getElementById('h3cr-style')) {
     const style = element('style', CSS); style.id = 'h3cr-style'; document.head.append(style);
@@ -89,6 +89,7 @@ export function fillReferenceSwitches(root, refs, disabled, changed, {replace, r
         if (!action) continue;
         const control = element('button', label); control.type = 'button';
         control.setAttribute('aria-label', `${label} reference ${ref.name}`);
+        control.title=replacementProblem?.(ref)??'';control.disabled=!!control.title;
         control.addEventListener('click', () => action(ref)); controls.append(control);
       }
       card.append(controls);

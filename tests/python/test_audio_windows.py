@@ -65,3 +65,9 @@ class AudioWindowsTest(unittest.TestCase):
             contracts.validate('timeline',line)
             timeline_prepare.normalize(line)
             self.assertEqual(line['audio_clips'][0]['box_windows'],expected)
+
+    def test_frozen_placement_rejects_booleans_even_when_equal_to_a_number(self):
+        clip=dict(F['clip'],duration=1)
+        clip['box_windows']=audio_windows.capture(clip,F['boxes'],F['origin'])
+        clip['box_windows']['placement']['duration']=True
+        with self.assertRaises(ValueError): audio_windows.validate(clip,F['boxes'],F['origin'])

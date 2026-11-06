@@ -1,6 +1,6 @@
 # Lock audio to boxes
 
-Status: approved by the user on 2026-11-06 ("Approved"). Scope of this session remains design and implementation planning only on `design/box-audio-range-lock`, created from local `main` at `b7eaedc` before any file edits. Execution method and implementation authorization are still pending.
+Status: approved by the user on 2026-11-06 ("Approved"); Native implementation subsequently authorized. Work is isolated on `design/box-audio-range-lock`, created from local `main` at `b7eaedc` before any file edits. No push, merge, release, deployment or model render is authorized.
 
 Builder review found one product conflict: enabling on a lane whose selected continuous soundtrack already crosses an inserted bridge. Preserving its current box reference windows and introducing silence at that bridge cannot also preserve its assembled soundtrack. The user delegated this choice to the author. Resolution: block enabling only when it would change existing selected soundtrack playback, identify the conflicting bridge(s), and leave the Timeline untouched. This preserves the already-approved enabling invariant. There are no unresolved behavior questions from that review.
 
@@ -124,4 +124,4 @@ Use focused JS/Python tests for timing and persistence, then the project's exist
 
 No per-segment source editing, audio stretching/looping, automatic crossfades, whole-box mute system, separate sliced files, automatic dialogue rewriting, forced soundtrack selection or guarantee that visual dependencies remain current. Do not automatically add audio to future boxes or silently rebind after Story/JSON edits.
 
-The builder chooses the smallest suitable schema and helper structure, reuses current controls/history/validation, and determines focused test placement. Changes to the approved behavior or scope return to design review. Implementation planning follows approval of this written document; implementation itself remains outside the current brainstorming task.
+The builder chooses the smallest suitable schema and helper structure, reuses current controls/history/validation, and determines focused test placement. Changes to the approved behavior or scope return to design review. The subsequent implementation plan and Native execution choice govern implementation.

@@ -20,6 +20,7 @@ def validate(clip, boxes, origin):
         raise ValueError('H3 Timeline: unsupported audio windows version')
     if saved.get('source') != origin or saved.get('placement') != {key: clip[key] for key in KEYS}:
         raise ValueError('H3 Timeline: unlock audio windows before changing the source or placement')
+    for key in KEYS: _number(saved['placement'][key], key=='duration')
     bindings = saved.get('by_box')
     if not isinstance(bindings, dict):
         raise ValueError('H3 Timeline: audio windows need a box mapping')
