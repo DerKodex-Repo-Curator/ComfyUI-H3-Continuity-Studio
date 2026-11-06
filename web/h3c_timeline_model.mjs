@@ -4,7 +4,7 @@ import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-
 import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 import {imageDescriptionPrompt, imageDescriptionSource} from './h3c_image_descriptions.mjs?v=20261010-image-descriptions-1';
 import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
-import {AUDIO_WINDOWS_FEATURE} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
+import {AUDIO_WINDOWS_FEATURE, pruneWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 export const FPS = 24;
 export const MAX_FRAMES = 362;
 export const GRID = 17;
@@ -443,6 +443,7 @@ export function addBox(state, context, frames) {
 
 export function removeBox(state, index, context) {
   const [removed] = state.boxes.splice(index, 1);
+  pruneWindows(state);
   const next = state.boxes[index];
   for (const entity of Array.isArray(state.bible?.entities) ? state.bible.entities : []) {
     if (Array.isArray(entity?.pins)) entity.pins = entity.pins.filter((pin) => pin?.box !== removed.id);

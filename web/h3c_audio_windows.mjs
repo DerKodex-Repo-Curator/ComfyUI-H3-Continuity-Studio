@@ -39,9 +39,35 @@ export function captureWindows(clip, boxes, origin) {
 export function resolveWindows(clip, boxes) {
   if (!Object.hasOwn(clip, 'box_windows')) return [{box:null, offset:0, ...placement(clip)}];
   return boxes.flatMap(box => {
-    const window = clip.box_windows.by_box[box.id];
+    const window = Object.hasOwn(clip.box_windows.by_box, box.id) ? clip.box_windows.by_box[box.id] : null;
     if (!window) return [];
     const duration = Math.min(window.duration, box.duration-window.offset);
     return duration > 0 ? [{box:box.id, ...window, start:box.start+window.offset, duration}] : [];
   });
+}
+
+export function pruneWindows(state) {
+  const ids = new Set(state.boxes.map(box => box.id));
+  for (const clip of state.audio_clips ?? []) if (clip.box_windows) {
+    clip.box_windows.by_box = Object.fromEntries(Object.entries(clip.box_windows.by_box).filter(([id]) => ids.has(id)));
+  }
+}
+
+export function splitWindows(state, oldId, leftId, rightId, cutSeconds) {
+  for (const clip of state.audio_clips ?? []) {
+    const map = clip.box_windows?.by_box;
+    if (!map || !Object.hasOwn(map, oldId)) continue;
+    const window = map[oldId], trim = Math.max(0, cutSeconds-window.offset);
+    const left = Math.min(window.duration, trim), right = window.duration-trim;
+    delete map[oldId];
+    clip.box_windows.by_box = {...map,
+      ...(leftId && left > 0 ? {[leftId]:{...window, duration:left}} : {}),
+      ...(rightId && right > 0 ? {[rightId]:{offset:Math.max(0,window.offset-cutSeconds), source_start:window.source_start+trim, duration:right}} : {})};
+  }
+}
+
+export function unlockWindows(clip) {
+  if (!clip.box_windows) return;
+  Object.assign(clip, clip.box_windows.placement);
+  delete clip.box_windows;
 }

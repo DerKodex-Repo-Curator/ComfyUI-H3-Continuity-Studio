@@ -1,6 +1,7 @@
 // H3 Story's saved state, applying a Write result to the Timeline, and Undo. Pure: no DOM and no ComfyUI.
 import { FPS, normalize, totalFrames } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
 import { validateTimedText, textClock } from './h3c_timed_text.mjs?v=20261011-reference-preparation-1';
+import {pruneWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 
 export const VERSION = 1;
 export const DROPPED = 'The Timeline got boxes while Write worked, so the planned boxes were dropped.';
@@ -346,6 +347,7 @@ export function undo(timeline, state, context) {
   });
   if (removed.size) {
     timeline.boxes = timeline.boxes.filter((box) => !removed.has(box.id));
+    pruneWindows(timeline);
     normalize(timeline, context);
   }
   for (const [slot, picture] of Object.entries(after.pictures ?? {})) {
