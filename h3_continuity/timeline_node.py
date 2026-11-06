@@ -86,6 +86,80 @@ def selections(folder, parsed, manifest, by_index, is_done, known):
     return [{"box": entry["box"], "candidate": entry["candidate"]} for entry in replaced]
 
 
+def video_clock(parsed, ordered):
+    """Where the full video's (or the video so far's) frames sit on the Timeline, for the Studio's playhead:
+    [[first video frame, frames, first Timeline frame, 1 when the Timeline advances with it or 0 while a bridge
+    inserts time]] for each of `ordered`'s parts (nodes.ordered_parts), on the 24 fps clock."""
+    starts, position = {}, 0
+    for index, box in enumerate(parsed.boxes):
+        starts[box.id] = position
+        position += rules.played_frames(parsed, index)
+    clock, video = [], 0
+    for entry, first, count, inserted in ordered:
+        if "box" not in entry:  # a saved segment names its box in its record; bridges and candidates at the top
+            at, moves = starts.get((entry.get("timeline") or {}).get("box"), 0) + first, 1
+        elif inserted:
+            at, moves = starts.get(entry.get("box"), 0), 0
+        else:
+            at, moves = starts.get(entry.get("box"), 0) - (entry.get("timeline") or {}).get("left", 0), 1
+        clock.append([video, count, at, moves])
+        video += count
+    return clock
+
+
+def _clock(parsed, joined, bridges_played, replaced):
+    try:
+        return video_clock(parsed, continuity.ordered_parts(joined, bridges_played, replaced))
+    except (ValueError, KeyError):
+        return None
+
+
+def video_so_far(name, folder, parsed, manifest, playable, spliced, replaced, soundtrack, managed_owner=None):
+    """The video so far: the boxes from the first up to the first one without a take, with their bridges and selected
+    replacements, and the marked soundtrack (or their own audio), so timing can be checked before every box renders.
+    Returns ({"record", "boxes", "clock"} or None, building, why it could not be built or "")."""
+    count = next((i for i in range(len(parsed.boxes)) if i not in playable), len(parsed.boxes))
+    if count < 1 or count == len(parsed.boxes) or soundtrack is None:
+        return None, False, ""
+    indices = {box.id: index for index, box in enumerate(parsed.boxes)}
+    joined = {**manifest, "segments": [entry for entry in store.placed(manifest, count)]}
+    if len(joined["segments"]) != count or not all(entry.get("video") for entry in joined["segments"]):
+        return None, False, ""
+    inside = [entry for entry in spliced if indices.get(entry.get("box"), count) < count]
+    kept = [entry for entry in replaced if indices.get(entry.get("box"), count) < count]
+    try:
+        sources = audio_tracks.soundtrack_sources(soundtrack)
+    except ValueError:
+        return None, False, ""
+    record = store.current_full_video(folder, joined, [*inside, *kept], sources, key="preview_video")
+    note, building = "", False
+    if record is None:
+        try:
+            note = continuity.rebuild_full_video(folder, name, joined, FULL_VIDEO_CRF, inside, soundtrack,
+                                                 managed_owner=managed_owner, replaced=kept, background=True,
+                                                 kind="preview")
+        except (OSError, ValueError) as error:
+            note = f"Video so far could not be saved: {error}"
+        building = continuity.full_video_state(folder, "preview")["building"]
+        record = store.current_full_video(folder, joined, [*inside, *kept], sources, key="preview_video")
+        if building or note == continuity.BUILDING:
+            note = ""
+        else:
+            note = note.replace("Full video", "Video so far", 1)
+    if record is None and (building or note == ""):
+        # While the next one builds, the last one keeps playing, so the Studio can swap it in at the same moment.
+        earlier = manifest.get("preview_video") or {}
+        file, shown = earlier.get("file"), min(int(earlier.get("boxes") or 0), count)
+        if shown and file == os.path.basename(file) and os.path.isfile(os.path.join(folder, file)):
+            older = {**manifest, "segments": store.placed(manifest, shown)}
+            within = [entry for entry in inside if indices.get(entry.get("box"), shown) < shown]
+            replacing = [entry for entry in kept if indices.get(entry.get("box"), shown) < shown]
+            return {"record": earlier, "boxes": shown, "clock": _clock(parsed, older, within, replacing)}, True, ""
+    if record is None:
+        return None, building, note
+    return {"record": record, "boxes": count, "clock": _clock(parsed, joined, inside, kept)}, building, ""
+
+
 def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=False, known=None, managed_owner=None):
     """`known` holds the node settings a bridge compares, None where they are unknown."""
     with continuity.SEQUENCE_LOCK:
@@ -154,12 +228,29 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
             except (OSError, ValueError, RuntimeError) as error:
                 note = f"Partial video could not be saved: {error}"
             export_error = export_error or note
+        so_far, so_far_building, so_far_note = None, False, ""
+        if materialize and not current and not partial and not unchecked:
+            from .timeline_api.service import authorize_sequence
+            authorize_sequence(name, managed_owner, "full_video")
+            so_far, so_far_building, so_far_note = video_so_far(name, folder, parsed, manifest, done | kept, spliced,
+                                                                replaced, soundtrack, managed_owner)
         status = rules.status_payload(name, parsed, segments, next_index, thumb, full_video,
                                       store.sequence_seconds(joined, spliced), done, kept)
         if building and full_video is None:
             status["full_video_building"] = True
         if export_error and full_video is None:
             status["export_error"] = export_error
+        if full_video is not None:
+            clock = _clock(parsed, joined, spliced, replaced)
+            if clock is not None:
+                status["full_video_clock"] = clock
+        if so_far:
+            status["preview_video"] = {"file": _view(name, so_far["record"]["file"], so_far["record"]["sources"]),
+                                       "boxes": so_far["boxes"], "total": count, "clock": so_far["clock"]}
+        if so_far_building:
+            status["preview_video_building"] = True
+        if so_far_note:
+            status["preview_error"] = so_far_note
         if partial:
             status["partial_video"] = {"file": _view(name, partial["file"], partial["sources"]),
                                        "rendered": partial["rendered"], "boxes": partial["boxes"]}

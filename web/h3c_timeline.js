@@ -11,9 +11,9 @@ import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
 import { DEFAULT_AHEAD, QueueFeed, feedNote, queueAhead } from './h3c_queue_feed.mjs?v=20261105-queue-feed-1';
-import { studio } from './h3c_studio.mjs?v=20261106-durable-1';
+import { studio } from './h3c_studio.mjs?v=20261106-video-so-far-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261106-keep-lengths-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261106-video-so-far-1';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
@@ -1028,8 +1028,8 @@ export class TimelineHost {
         body: this.takesClient.statusBody(body),
       }).then((response) => response.json()));
       if (request === this.request && !this.removed) this.editor.setStatus(body === input() ? status : null);
-      // While the full video builds in the background, check again now and then in case its event is missed.
-      if (status?.full_video_building && request === this.request && !this.removed) this.schedule(15000);
+      // While the full video or the video so far builds in the background, check again now and then in case its event is missed.
+      if ((status?.full_video_building || status?.preview_video_building) && request === this.request && !this.removed) this.schedule(15000);
     } catch (error) {
       if (request === this.request && !this.removed) this.editor.setStatus(body === input()
         ? { ok: false, error: `Status unavailable: ${error?.message ?? error}` } : null);

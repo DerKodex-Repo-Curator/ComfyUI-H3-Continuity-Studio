@@ -85,8 +85,10 @@ def full_video_fingerprint(folder, manifest, bridges=(), soundtrack_sources=()):
     return hashlib.sha1(json.dumps(sources, sort_keys=True).encode("utf-8")).hexdigest() if sources else None
 
 
-def current_full_video(folder, manifest, bridges=(), soundtrack_sources=()):
-    record = manifest.get("full_video")
+def current_full_video(folder, manifest, bridges=(), soundtrack_sources=(), key="full_video"):
+    """The saved video recorded under `key` ("full_video", or "preview_video" for the video so far) while its sources
+    are the ones it was built from, else None."""
+    record = manifest.get(key)
     if (record and os.path.basename(record["file"]) == record["file"]
             and record["sources"] == full_video_fingerprint(folder, manifest, bridges, soundtrack_sources)
             and os.path.isfile(os.path.join(folder, record["file"]))):
