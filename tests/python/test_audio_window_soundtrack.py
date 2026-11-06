@@ -56,3 +56,33 @@ class SoundtrackWindowsTest(unittest.TestCase):
         lane['box_windows']['by_box']['b']['source_start']+=.5
         after=parsed()
         self.assertNotEqual(key,replacement.static_key(after,after.replacements[0],39))
+
+    def test_moved_adjacent_windows_never_repeat_or_borrow_boundary_samples(self):
+        for rate in [11025,44100,48000]:
+            wave=torch.arange(5*rate,dtype=torch.float32).reshape(1,1,-1)
+            lane=clip(start=.031,source_start=1.13,duration=3)
+            original=[dict(id='a',start=0,duration=1),dict(id='b',start=1,duration=25/24),dict(id='c',start=49/24,duration=1)]
+            lane['box_windows']=audio_windows.capture(lane,original,{'file':lane['file']})
+            for shift in [1,17,-17]:
+                spans=[dict(original[0],duration=1+shift/24),dict(original[1],start=1+shift/24),dict(original[2],start=49/24+shift/24)]
+                windows=audio_windows.resolve(lane,spans)
+                b,c=windows[1:]
+                first,last=round(b['start']*rate),round((spans[2]['start']+spans[2]['duration'])*rate)
+                source=dict(waveform=wave,sample_rate=rate)
+                heard=audio_tracks.samples(source,windows,first,last,lane['box_windows']['placement']).flatten()
+                boundary=round(c['start']*rate)-first
+                left=audio_tracks.samples(source,[b],first,first+boundary,lane['box_windows']['placement']).flatten()
+                right=audio_tracks.samples(source,[c],first+boundary,last,lane['box_windows']['placement']).flatten()
+                self.assertTrue(torch.equal(heard,torch.cat([left,right])))
+                parsed=parse([box('a',24+shift,exact=True),box('b',25,cut=True,exact=True),box('c',24,cut=True,exact=True)],
+                             audio_clips=[lane],requires=[audio_windows.FEATURE])
+                native=[audio_tracks.for_box(parsed,index,0,{'audio1':source})['audio1']['waveform'].flatten() for index in (1,2)]
+                self.assertTrue(torch.equal(heard,torch.cat(native)))
+                nonzero=heard[heard!=0]
+                self.assertTrue(torch.all(nonzero[1:]>nonzero[:-1]))
+                end_source=round((lane['start']+b['source_start']+b['duration']-lane['source_start'])*rate)+round(lane['source_start']*rate)-round(lane['start']*rate)
+                self.assertTrue(torch.all(left[left!=0]<end_source))
+                output_parts=[dict(frames=frames,coverage=[dict(box=name,first=0,frames=frames)]) for name,frames in [('a',24+shift),('b',25),('c',24)]]
+                marked=dict(lane,windows=windows,sample_clock=lane['box_windows']['placement'])
+                output,_=audio_tracks.place([marked],{'audio1':dict(waveform=wave/(5*rate),sample_rate=rate)},output_parts)
+                self.assertTrue(torch.equal(output[0,first:last],heard/(5*rate)))

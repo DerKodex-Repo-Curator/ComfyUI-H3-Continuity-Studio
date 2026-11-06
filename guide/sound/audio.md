@@ -52,6 +52,7 @@ Turn on **Lock audio to boxes** in a lane's Audio settings to keep each existing
 - Extending a box adds silence after its assigned range. Shortening hides its tail; extending again restores the hidden audio before adding silence. Other boxes retain their source ranges.
 - Inserted, appended and duplicated boxes have no assigned audio. Moving a box carries its range; deleting removes its placement. Splitting divides the range, with the hidden tail belonging to the second half.
 - Dialogue, audio-synced timed text and detected beats follow the assigned source ranges. Their words and original source timestamps do not change. Existing dialogue and lettering review checks still apply.
+- If the audio mapping has gaps or reordered ranges, unlock audio before turning off text synchronization: one independent text clock cannot preserve those placements. A single continuous range can detach normally.
 - Unlock before moving, trimming, fitting, slipping or replacing the recording. Descriptions and **In the full video** remain editable. Disabling a reference preserves its bindings.
 - Unlocking restores the original continuous placement while keeping box edits. If playback would change, confirm before applying it. **Undo** restores the bindings and hidden tails; locking again captures fresh ranges.
 

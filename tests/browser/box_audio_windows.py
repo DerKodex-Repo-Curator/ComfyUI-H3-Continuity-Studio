@@ -13,13 +13,30 @@ sound=io.BytesIO()
 with wave.open(sound,'wb') as wav:
     wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(8000);wav.writeframes(b'\0\0'*80000)
 
-FIXTURE=r'''<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#15171b;color:#ddd;font:14px Arial}*{box-sizing:border-box}</style></head><body><script type="module">
+FIXTURE=r'''<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#15171b;color:#ddd;font:14px Arial}*{box-sizing:border-box}</style></head><body><script>window.fixtureApp={registerExtension(){},ui:{settings:{getSettingValue:()=>false}},extensionManager:{dialog:{confirm:async()=>{window.realConfirmCalls++;return true;}}}};</script><script type="module">
 import {TimelineEditor} from '/web/h3c_timeline_editor.mjs';
 import {Studio} from '/web/h3c_studio.mjs';
 import {TimelineHistory} from '/web/h3c_history.mjs';
 import {ProjectSession,parseJSON,stringifyJSON} from '/web/h3c_project.mjs';
 import * as model from '/web/h3c_timeline_model.mjs';
 import {splitBox} from '/web/h3c_shot_split.mjs';
+import {TimelineHost} from '/web/h3c_timeline.js';
+window.realHostUnlock=async()=>{
+ const methods=['configureProject','relayout','showProgress','schedule','changed'];
+ const originals=Object.fromEntries(methods.map(name=>[name,TimelineHost.prototype[name]]));
+ for(const name of methods)TimelineHost.prototype[name]=()=>{};
+ let real;
+ try{
+  const graph={id:'real-host',_nodes:[]};fixtureApp.graph=fixtureApp.rootGraph=graph;
+  const value=stringifyJSON({version:1,boxes:[{id:'a',frames:96,exact:true},{id:'b',frames:96,cut:true,exact:true}],audio_clips:[{slot:'audio1',file:{type:'input',filename:'voice.wav'},start:0,source_start:0,duration:8,source_duration:8}]});
+  const node={id:9,type:'H3C_Timeline',graph,properties:{},inputs:[],widgets:[{name:'name',value:'real'},{name:'timeline',value},{name:'context_frames',value:39}],size:[500,400],setDirtyCanvas(){},
+   addDOMWidget:(name,type,element,options)=>({name,type,options}),addWidget(type,name,value,callback,options){const widget={type,name,value,callback,options};this.widgets.push(widget);return widget;}};
+  graph._nodes=[node];real=new TimelineHost(node);window.realConfirmCalls=0;
+  const lanes=real.editor.audioLanes;lanes.selected='audio1';await lanes.setBoxLock(true);real.editor.state.boxes[0].frames=144;real.editor.commit();
+  const unlocked=await lanes.setBoxLock(false);
+  return {unlocked,calls:realConfirmCalls,bound:!!real.editor.state.audio_clips[0].box_windows};
+ }finally{real?.node.onRemoved?.();for(const name of methods)TimelineHost.prototype[name]=originals[name];}
+};
 window.make=attached=>{
  window.studio?.close();document.querySelector('.fixture-editor')?.remove();
  let stored=stringifyJSON({version:1,boxes:[{id:'a',frames:96,exact:true,prompt:'[Shot 1] Walk.\n[Shot 2] At 00:01.000, turn.'},{id:'b',frames:96,exact:true,cut:true,prompt:'Wait.'}],audio_clips:[]});
@@ -58,7 +75,9 @@ with sync_playwright() as p:
     def route(request):
         path=unquote(urlparse(request.request.url).path)
         if path=='/fixture':return request.fulfill(body=FIXTURE,content_type='text/html')
-        if path=='/sample.wav':return request.fulfill(body=sound.getvalue(),content_type='audio/wav')
+        if path in ('/sample.wav','/view'):return request.fulfill(body=sound.getvalue(),content_type='audio/wav')
+        if path=='/scripts/app.js':return request.fulfill(body='export const app=window.fixtureApp;',content_type='text/javascript')
+        if path=='/scripts/api.js':return request.fulfill(body='export const api={apiURL:path=>path,addEventListener(){},fetchApi:async()=>({status:200,ok:true,json:async()=>({revision:0,value:null})})};',content_type='text/javascript')
         target=(ROOT/path.lstrip('/')).resolve()
         if ROOT in target.parents and target.is_file():return request.fulfill(body=target.read_text(encoding='utf-8'),content_type='text/javascript')
         return request.abort()
@@ -80,6 +99,12 @@ with sync_playwright() as p:
         page.screenshot(path=str(ROOT/'.tmp'/f'box-audio-segments-{attached}.png'))
         assert page.evaluate("()=>{editor.state.boxes[0].frames=48;editor.commit();lanes.selectAudio('audio1','a');const player=lanes.settings.querySelector('audio');const clipped=player.audioWindow.duration===2;editor.state.boxes[0].frames=144;editor.commit();return clipped&&lanes.settings.querySelector('audio').audioWindow.duration===4;}")
         assert page.get_by_role('spinbutton',name='Video start (s)',exact=True).is_disabled()
+        page.evaluate("()=>{editor.state.timed_text={version:1,source_name:'words',source_sha256:'0'.repeat(64),enabled:true,sync_audio:true,audio_slot:'audio1',start:0,source_start:0,duration:8,direction:'',cues:[{id:'x',start:5,end:6,text:'Hello'}]};editor.commit();lanes.selectText();}")
+        sync=page.get_by_role('checkbox',name='Sync text to audio',exact=True)
+        sync.click()
+        assert sync.is_checked()
+        assert page.evaluate("lanes.textSummary.textContent.includes('Unlock audio')")
+        page.evaluate('()=>{delete editor.state.timed_text;editor.commit();showAudio();}')
         page.evaluate('actions.insert();actions.duplicate()')
         assert page.evaluate("()=>Object.keys(editor.state.audio_clips[0].box_windows.by_box).length===2")
         page.evaluate('actions.split();actions.move();actions.undo();actions.redo()')
@@ -99,6 +124,8 @@ with sync_playwright() as p:
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'), f'overflow at {width}'
             page.screenshot(path=str(ROOT/'.tmp'/f'box-audio-{attached}-{width}.png'))
         page.set_viewport_size({'width':1440,'height':1000})
+    actual=page.evaluate('realHostUnlock()')
+    assert actual=={'unlocked':True,'calls':1,'bound':False},actual
     assert not errors,errors
-    print(json.dumps({'native_attached':True,'viewports':[1440,390],'page_errors':errors,'workflow':'add/lock/resize/insert/duplicate/split/move/undo/redo/save/cancel/unlock/relock'}))
+    print(json.dumps({'native_attached':True,'actual_host_unlock':actual,'viewports':[1440,390],'page_errors':errors,'workflow':'add/lock/resize/insert/duplicate/split/move/undo/redo/save/cancel/unlock/relock'}))
     browser.close()

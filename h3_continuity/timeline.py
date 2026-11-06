@@ -330,6 +330,7 @@ def parse(text):
     parsed.plates = data.get("plates", [])
     if not isinstance(parsed.plates, list):
         raise _error("plates must be a list")
+    reference_replacements.validate_box_audio(parsed)
     revisions = {}
     for plate in parsed.plates:
         if not isinstance(plate, dict) or not isinstance(plate.get("id"), str) or not plate["id"] or plate["id"] in revisions:

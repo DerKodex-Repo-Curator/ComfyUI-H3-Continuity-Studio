@@ -1,5 +1,5 @@
 // Exact transcript import and source/movie clocks; mirrors h3_continuity/timed_text.py.
-import { FPS } from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import { FPS, resolvedAudio } from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
 import {coalesceWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 
 function error(field, message) {
@@ -162,7 +162,12 @@ export function setTextSync(state, sync, audioSlot) {
   if (!state.timed_text) return;
   const value = state.timed_text;
   if (!sync && value.sync_audio) {
-    const effective = textClock(value, state.audio_clips ?? []);
+    let effective = textClock(value, state.audio_clips ?? []);
+    if(effective.box_windows) {
+      const windows=coalesceWindows(resolvedAudio(state).filter(w=>w.slot===value.audio_slot));
+      if(windows.length!==1)throw Error('Unlock audio from boxes before detaching text: its ranges do not form one continuous clock.');
+      effective={...windows[0],resolved:true};
+    }
     if (effective.resolved) {
       value.start = effective.start; value.source_start = effective.source_start; value.duration = effective.duration;
     }

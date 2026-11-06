@@ -192,6 +192,7 @@ export class TimelineHost {
       readBoundary: boxId => this.readBoundary(boxId),
       uploadWhisper: (file, hash) => this.project ? this.uploadProjectAsset(file, 'whisper', hash) : Promise.resolve(),
       audioInfo: (file) => this.audioInfo(file),
+      confirmAudioUnlock: () => this.confirmAudioUnlock(),
       queue: (count, box, bridge, receipt) => this.queue(count, box, bridge, receipt),
       preflight: (box, count) => this.prepareRegeneration(box, count),
       refresh: () => this.refresh(),

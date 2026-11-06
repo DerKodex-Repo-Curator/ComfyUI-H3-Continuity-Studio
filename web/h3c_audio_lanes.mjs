@@ -251,8 +251,10 @@ export class AudioLanes {
             const field = node('label', 'h3ct-field', label), input = node('input'); input.type = 'checkbox'; input.checked = value[key];
             input.setAttribute('aria-label', label);
             input.addEventListener('change', () => {
-              if (key === 'sync_audio') setTextSync(state, input.checked); else value.enabled = input.checked;
-              this.editor.commit();
+              try {
+                if (key === 'sync_audio') setTextSync(state, input.checked); else value.enabled = input.checked;
+                this.editor.commit();
+              }catch(error){input.checked=value[key];this.textMessage.textContent=error.message;this.textSummary.textContent=error.message;}
             });
             field.append(input); row.append(field);
           }

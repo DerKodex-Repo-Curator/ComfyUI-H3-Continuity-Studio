@@ -91,12 +91,18 @@ def samples(source, windows, first, last, placement=None):
     for window in windows:
         if placement:
             original = placement['start'] + window['source_start'] - placement['source_start']
-            source_first = round(original*rate) + round(placement['source_start']*rate) - round(placement['start']*rate)
+            base = round(placement['source_start']*rate) - round(placement['start']*rate)
+            source_first = round(original*rate) + base
+            source_last = round((original+window['duration'])*rate) + base
+            # Round the clock displacement once, so adjacent owners share the same source/output clock.
+            offset = base + round(round((original-window['start'])*rate,8))
         else:
             source_first = round(window['source_start']*rate)
-        offset = source_first - round(window['start']*rate)
-        left = max(first, round(window['start']*rate), -offset)
-        right = min(last, round((window['start']+window['duration'])*rate), wave.shape[-1]-offset)
+            offset = source_first-round(window['start']*rate)
+            source_last = round((window['start']+window['duration'])*rate)+offset
+        # A quantized destination can be one sample longer: pad, never borrow the next owner's sample.
+        left = max(first, round(window['start']*rate), source_first-offset, -offset)
+        right = min(last, round((window['start']+window['duration'])*rate), source_last-offset, wave.shape[-1]-offset)
         if right > left:
             chunk[...,left-first:right-first] = wave[...,left+offset:right+offset]
     return chunk

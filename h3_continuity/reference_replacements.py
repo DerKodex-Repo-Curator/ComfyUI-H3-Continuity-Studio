@@ -110,7 +110,30 @@ def refmods(timeline):
             continue
         ref = original[source]
         mapped.append(dict(ref, slot=target))
+    bound = {clip['slot'] for clip in timeline.audio_clips if 'box_windows' in clip}
+    if any(ref['slot'] in bound and ref.get('strength',1)>0 for ref in mapped):
+        raise ValueError('H3 Timeline: box-bound audio cannot use an aliased audio RefMod; unlock it first')
     timeline.refmods = mapped
+
+
+def validate_box_audio(timeline):
+    """A raw alias has no placement; it cannot silently escape a bound lane's windows."""
+    lanes = {clip['slot'] for clip in timeline.audio_clips}
+    replacements = effective(timeline)
+    def descriptor(slot):
+        file = file_for(timeline,slot)
+        return {'file':file} if file else origin(slot,replacements)
+    bound = [clip for clip in timeline.audio_clips if 'box_windows' in clip and clip['slot'] not in timeline.disabled_refs]
+    if not bound: return
+    for clip in bound:
+        source = origin(clip['slot'],replacements).get('source')
+        if any(ref['slot']==source and ref.get('strength',1)>0 for ref in timeline.refmods):
+            raise ValueError('H3 Timeline: box-bound audio cannot use an aliased audio RefMod; unlock it first')
+    used = {slot for prose in [timeline.prompt,*[box.prompt for box in timeline.boxes]]
+            for kind,slot in rules.mentions(prose) if kind=='audio' and slot not in lanes and slot not in timeline.disabled_refs}
+    for slot in used:
+        if any(descriptor(slot)==descriptor(clip['slot']) for clip in bound):
+            raise ValueError(f'H3 Timeline: @{slot} is a raw alias of box-bound audio; add an independent audio lane or use its bound slot')
 
 
 def file_path(file, target):
