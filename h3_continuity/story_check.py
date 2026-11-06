@@ -404,13 +404,14 @@ def _drift(ctx, index, frames, firsts):
 
 def _holds(ctx, index, entry):
     """checks.json holds of box `index`'s played frames, preceded by the box before's last played frame when this box
-    continues it; None when a video can't be read or isn't at 24 fps."""
+    continues it; None when a video can't be read. Frames are counted on the 24 fps Timeline clock: a video saved at
+    another rate (frame interpolation) gives the frame shown at each of those moments."""
     def frames_of(item, wanted):
         video = item["video"]
-        if video.get("fps") != rules.FPS:
-            raise ValueError("not 24 fps")
-        found = media.read_frames(os.path.join(ctx.folder, video["file"]), wanted)
-        return [found[number] for number in wanted]
+        fps = video.get("fps") or rules.FPS
+        at = {number: media.window_at_fps(number, 1, fps)[0] for number in wanted}
+        found = media.read_frames(os.path.join(ctx.folder, video["file"]), sorted(set(at.values())))
+        return [found[at[number]] for number in wanted]
 
     try:
         frames = frames_of(entry, list(range(store.played_frames(entry))))

@@ -1,5 +1,6 @@
 """ComfyUI nodes: H3 Sequence, H3 Continue, H3 Continuation Model and H3 Save Segment."""
 
+import copy
 import datetime
 import os
 import threading
@@ -53,6 +54,8 @@ class SegmentPlan:
     ending_audio: torch.Tensor | None = None
     timeline_complete: bool = False
     carried_audio_start: int = 0
+    # The Timeline's box ids in order: saving numbers every saved segment by its box (store.align).
+    box_order: list | None = None
 
 
 def _plural(count, word):
@@ -342,11 +345,18 @@ class H3C_SaveSegment(io.ComfyNode):
             os.makedirs(folder, exist_ok=True)
             manifest = store.load_manifest(folder)
             manifest.pop("full_video", None)
-            archived = store.archive_from(folder, manifest, sequence.index, now, only=segment.preserve_following)
+            if segment.box_order is not None:
+                # A Timeline box replaces only its own earlier take; every other box keeps its saved segment.
+                store.align(manifest, segment.box_order)
+                archived = store.archive_box(folder, manifest, (segment.timeline or {}).get("box"), now)
+                stem = store.free_stem(folder, manifest, sequence.index)
+            else:
+                archived = store.archive_from(folder, manifest, sequence.index, now, only=segment.preserve_following)
+                stem = store.stem(sequence.index)
             context = segment.context_frames
             width, height = latents.pixel_size(video)
             entry = {
-                "index": sequence.index, "stem": store.stem(sequence.index), "frames": frames,
+                "index": sequence.index, "stem": stem, "frames": frames,
                 "context_frames": context, "carried_audio": segment.carried_ticks > 0,
                 "latent_width": width, "latent_height": height, "video": None, "audio_sample_rate": sample_rate,
                 "description": description or segment.description or "", "created": now.isoformat(timespec="seconds"),
@@ -381,10 +391,13 @@ class H3C_SaveSegment(io.ComfyNode):
             if archived:
                 info += f" Moved {_plural(len(archived), 'segment')} {', '.join(map(str, archived))} to takes/."
             if (write_full_video and not segment.timeline) or segment.timeline_complete:
+                joined = (manifest if segment.box_order is None
+                          else {**manifest, "segments": store.placed(manifest, len(segment.box_order))})
                 info += " " + ((segment.timeline or {})['export_error'] if (segment.timeline or {}).get('export_error') else
-                               rebuild_full_video(folder, sequence.name, manifest, crf, spliced,
+                               rebuild_full_video(folder, sequence.name, joined, crf, spliced,
                                                  (segment.timeline or {}).get("soundtrack", ()), managed_owner=sequence_owner(cls),
-                                                 replaced=_replaced(folder, manifest, segment.timeline)))
+                                                 replaced=_replaced(folder, manifest, segment.timeline),
+                                                 background=segment.timeline is not None))
             if notes:
                 info += " " + " ".join(notes)
             return io.NodeOutput(info, ui=ui.PreviewText(info))
@@ -403,6 +416,7 @@ class H3C_SaveSegment(io.ComfyNode):
             os.makedirs(folder, exist_ok=True)
             manifest = store.load_manifest(folder)
             manifest.pop("full_video", None)
+            store.align(manifest, segment.box_order)
             earlier = bridges.saved(manifest, record["bridge"])
             if earlier is not None:
                 bridges.archive(folder, manifest, earlier, now)
@@ -430,9 +444,11 @@ class H3C_SaveSegment(io.ComfyNode):
                 info += " Moved its earlier take to takes/."
             if segment.timeline_complete:
                 info += " " + (record['export_error'] if record.get('export_error') else
-                               rebuild_full_video(folder, sequence.name, manifest, crf, bridges.spliced(folder, manifest, keys),
+                               rebuild_full_video(folder, sequence.name, manifest if segment.box_order is None else
+                                                  {**manifest, "segments": store.placed(manifest, len(segment.box_order))},
+                                                  crf, bridges.spliced(folder, manifest, keys),
                                                  record.get("soundtrack", ()), managed_owner=sequence_owner(cls),
-                                                 replaced=_replaced(folder, manifest, record)))
+                                                 replaced=_replaced(folder, manifest, record), background=True))
             if notes:
                 info += " " + " ".join(notes)
             return io.NodeOutput(info, ui=ui.PreviewText(info))
@@ -624,47 +640,139 @@ def write_previews(folder, manifest, candidate, crf, spliced=(), soundtrack=()):
     return ""
 
 
-def rebuild_full_video(folder, name, manifest, crf, spliced=(), soundtrack=(), *, managed_owner=None, replaced=()):
+def rebuild_full_video(folder, name, manifest, crf, spliced=(), soundtrack=(), *, managed_owner=None, replaced=(),
+                       background=False):
     """Joins the saved segments, each `spliced` bridge before the segment of its box and each `replaced` candidate in
     place of the frames it covers. With `soundtrack` clips (`audio_tracks.marked`), it plays them instead of the
-    segments' audio, on the Timeline's clock: only spliced bridges add time."""
+    segments' audio, on the Timeline's clock: only spliced bridges add time.
+    `manifest["segments"]` are the segments joined, in order (a Timeline passes the segments of its boxes only).
+    The segments are read and checked under SEQUENCE_LOCK, then encoded without it (unless the caller holds it), so
+    status requests never wait for an encode. With `background`, the encode runs on its own thread and this returns at
+    once; `full_video_state(folder)` says whether it is still building. The result is recorded only when the saved
+    segments are still the ones it joined."""
     with SEQUENCE_LOCK:
         from .timeline_api.service import authorize_sequence
         authorize_sequence(name, managed_owner, "full_video")
-        segments = manifest["segments"]
-        manifest.pop("full_video", None)
-        store.write_manifest(folder, manifest)
-        if not segments:
-            return "Full video not rebuilt: no segments are saved."
-        if [e["index"] for e in segments] != list(range(1, len(segments) + 1)):
-            return "Full video not rebuilt: generate the missing earlier boxes first."
-        missing = [str(e["index"]) for e in segments if not e.get("video")]
-        if missing:
-            return (f"Full video not rebuilt: {_plural(len(missing), 'segment')} {', '.join(missing)} "
-                    f"{'has' if len(missing) == 1 else 'have'} no saved frames (connect images).")
-        try:
-            sources = audio_tracks.soundtrack_sources(soundtrack)
-        except ValueError as error:
-            return _not_rebuilt(error)
-        fingerprint = store.full_video_fingerprint(folder, manifest, [*spliced, *replaced], sources)
-        if fingerprint is None:
-            return "Full video not rebuilt: a segment video or audio source is missing."
-        try:
-            ordered = ordered_parts(manifest, spliced, replaced)
-        except ValueError as error:
-            return _not_rebuilt(error)
-        if soundtrack:
-            try:
-                audio = audio_tracks.soundtrack_audio(soundtrack, [(count, inserted) for _, _, count, inserted in ordered])
-            except ValueError as error:
-                return _not_rebuilt(error)
-        else:
-            audio = _generated_audio(folder, ordered)
-        written, note = media.build_full_video(os.path.join(folder, f"{name}_full.mp4"),
-                                               _video_windows(folder, ordered), audio, crf)
-        if written is None:
+        plan, note = _plan_full_video(folder, name, manifest, crf, spliced, soundtrack, replaced)
+        if plan is None:
             return note
-        manifest["full_video"] = {"file": os.path.basename(written), "sources": fingerprint}
-        store.write_manifest(folder, manifest)
-        heard = f", with the soundtrack from {audio_tracks.named(soundtrack)}" if soundtrack else ""
-        return f"Full video: {written}{heard}." + (f" {note}" if note else "")
+        if background:
+            return _start_full_video(plan)
+    return _finish_full_video(plan)
+
+
+# Background full-video builds by sequence folder: {"fingerprint", "thread", "error"}. One build per folder at a time.
+_BUILDS = {}
+_BUILDS_LOCK = threading.Lock()
+BUILDING = "The full video is being built in the background."
+
+
+def full_video_state(folder):
+    """{"building": bool, "fingerprint": the sources being built or last failed, "error": why the last build failed
+    or None} for sequence `folder`."""
+    with _BUILDS_LOCK:
+        build = _BUILDS.get(os.path.normcase(folder)) or {}
+        thread = build.get("thread")
+        return {"building": bool(thread and thread.is_alive()), "fingerprint": build.get("fingerprint"),
+                "error": build.get("error")}
+
+
+def wait_full_video(folder, timeout=None):
+    """Waits for the background build of `folder`, if any (tests and shutdown)."""
+    with _BUILDS_LOCK:
+        thread = (_BUILDS.get(os.path.normcase(folder)) or {}).get("thread")
+    if thread is not None:
+        thread.join(timeout)
+
+
+def _start_full_video(plan):
+    key = os.path.normcase(plan["folder"])
+    with _BUILDS_LOCK:
+        build = _BUILDS.get(key) or {}
+        thread = build.get("thread")
+        if thread is not None and thread.is_alive():
+            return BUILDING
+        if build.get("error") and build.get("fingerprint") == plan["fingerprint"]:
+            return build["error"]  # the same segments failed already; a change to them tries again
+
+        def run():
+            try:
+                note = _finish_full_video(plan)
+                error = None if note.startswith("Full video:") else note
+            except Exception as failure:  # an encode error must not kill ComfyUI's server thread
+                error = f"Full video could not be saved: {failure}"
+            with _BUILDS_LOCK:
+                _BUILDS[key] = {"fingerprint": plan["fingerprint"], "thread": None, "error": error}
+            _notify(plan["name"])
+
+        thread = threading.Thread(target=run, name=f"h3c-full-video-{plan['name']}", daemon=True)
+        _BUILDS[key] = {"fingerprint": plan["fingerprint"], "thread": thread, "error": None}
+        thread.start()
+    return BUILDING
+
+
+def _notify(name):
+    """Tells open Studios that a sequence's full video changed, so they ask for status again."""
+    import sys
+    instance = getattr(getattr(sys.modules.get("server"), "PromptServer", None), "instance", None)
+    if instance is not None:
+        try:
+            instance.send_sync("h3c-full-video", {"name": name})
+        except Exception:
+            pass
+
+
+def _plan_full_video(folder, name, manifest, crf, spliced, soundtrack, replaced):
+    """(what to encode, None), or (None, why the full video can't be built). Holds no files open."""
+    segments = manifest["segments"]
+    if not segments:
+        return None, "Full video not rebuilt: no segments are saved."
+    if [e["index"] for e in segments] != list(range(1, len(segments) + 1)):
+        return None, "Full video not rebuilt: generate the missing earlier boxes first."
+    missing = [str(e["index"]) for e in segments if not e.get("video")]
+    if missing:
+        return None, (f"Full video not rebuilt: {_plural(len(missing), 'segment')} {', '.join(missing)} "
+                      f"{'has' if len(missing) == 1 else 'have'} no saved frames (connect images).")
+    try:
+        sources = audio_tracks.soundtrack_sources(soundtrack)
+    except ValueError as error:
+        return None, _not_rebuilt(error)
+    fingerprint = store.full_video_fingerprint(folder, manifest, [*spliced, *replaced], sources)
+    if fingerprint is None:
+        return None, "Full video not rebuilt: a segment video or audio source is missing."
+    try:
+        ordered = ordered_parts(manifest, spliced, replaced)
+    except ValueError as error:
+        return None, _not_rebuilt(error)
+    if soundtrack:
+        try:
+            audio = audio_tracks.soundtrack_audio(soundtrack, [(count, inserted) for _, _, count, inserted in ordered])
+        except ValueError as error:
+            return None, _not_rebuilt(error)
+    else:
+        audio = _generated_audio(folder, ordered)
+    return {"folder": folder, "name": name, "manifest": manifest, "segments": copy.deepcopy(segments),
+            "bridges": [copy.deepcopy(entry) for entry in [*spliced, *replaced]], "sources": sources,
+            "fingerprint": fingerprint, "windows": _video_windows(folder, ordered), "audio": audio, "crf": crf,
+            "heard": audio_tracks.named(soundtrack) if soundtrack else ""}, ""
+
+
+def _finish_full_video(plan):
+    folder, name = plan["folder"], plan["name"]
+    temporary = os.path.join(folder, f"{name}_full.{threading.get_ident()}.tmp.mp4")
+    written, note = media.build_full_video(os.path.join(folder, f"{name}_full.mp4"), plan["windows"], plan["audio"],
+                                           plan["crf"], temporary=temporary)
+    if written is None:
+        return note
+    record = {"file": os.path.basename(written), "sources": plan["fingerprint"]}
+    with SEQUENCE_LOCK:
+        latest = store.load_manifest(folder)
+        joined = [entry for entry in latest["segments"] if 1 <= entry["index"] <= len(plan["segments"])]
+        if (joined != plan["segments"] or store.full_video_fingerprint(
+                folder, {**latest, "segments": joined}, plan["bridges"], plan["sources"]) != plan["fingerprint"]):
+            return "Full video not recorded: the saved boxes changed while it was built; it is built again from them."
+        latest["full_video"] = record
+        store.write_manifest(folder, latest)
+        plan["manifest"]["full_video"] = record
+    heard = f", with the soundtrack from {plan['heard']}" if plan["heard"] else ""
+    return f"Full video: {written}{heard}." + (f" {note}" if note else "")

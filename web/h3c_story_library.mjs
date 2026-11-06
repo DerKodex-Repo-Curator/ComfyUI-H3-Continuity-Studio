@@ -70,20 +70,19 @@ export function savedStoryContent(value,current) {
     const recovered=applyResult(timeline,parseStoryState(story.state),result,String(target.id),Number(fields.context_frames)||39);
     story.state=serializeStoryState(recovered.state);
   }
-  const renders=sameStoryWiring(current,workflow);
-  if(!renders) {
+  // The saved story always keeps its own sequence folder, so its rendered clips come with it. Whether each clip still
+  // matches is the Timeline status's call, box by box (layout, settings and references are saved with every take);
+  // a wiring difference elsewhere in the workflow never hides them or starts an empty folder.
+  const wiring=sameStoryWiring(current,workflow);
+  if(!wiring) {
     delete timeline.still_requests;
     if(timeline.reference_preparation)timeline.reference_preparation=settledPreparation(timeline.reference_preparation);
-    // Accepted guides are the user's chosen frames, not renders of the saved generator; keep them.
-    // Candidates, in-flight jobs and saved-take sources belong to the old generator and sequence.
+    // In-flight still jobs belong to the other workflow's queue; their finished candidates and guides are kept.
     for(const box of timeline.boxes)for(const preview of box.previews??[])
-      for(const key of ['image','images','pending','job','still_source'])delete preview[key];
-    // Scene anchors are pinned accepted guides; keep only those whose guide is still accepted.
-    if(Array.isArray(timeline.continuity?.anchors))reconcileSceneAnchors(timeline);
-    else if(timeline.continuity)delete timeline.continuity.anchors;
+      for(const key of ['pending','job'])delete preview[key];
   }
   return {story,timeline:before===stringifyJSON(timeline)?fields.timeline:stringifyJSON(timeline),
-    sequence:renders?value.sequence:`Project-${crypto.randomUUID().slice(0,8)}`,renders};
+    sequence:value.sequence,renders:true,wiring};
 }
 
 export function isWiringConflict(error) {

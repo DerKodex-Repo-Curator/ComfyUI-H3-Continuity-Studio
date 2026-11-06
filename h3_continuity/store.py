@@ -167,6 +167,73 @@ def latent_stamp(folder, entry):
     return [stat.st_mtime_ns, stat.st_size]
 
 
+def box_of(entry):
+    """The Timeline box id saved segment `entry` was rendered for, or None (H3 Sequence segments)."""
+    return (entry.get("timeline") or {}).get("box")
+
+
+def align(manifest, box_ids):
+    """Number the saved segments by the Timeline's box order `box_ids`: the segment of the box at position i gets index
+    i + 1, wherever it was saved. Segments of boxes the Timeline no longer has (or without a box id) keep their files
+    and follow, numbered after the last box, so they can come back with their box. When a box has several segments the
+    newest is in place. Returns whether any index changed; `manifest` is changed in place."""
+    if box_ids is None:
+        return False
+    positions = {box_id: number for number, box_id in enumerate(box_ids)}
+    chosen, rest = {}, []
+    for entry in manifest["segments"]:
+        box_id = box_of(entry)
+        if box_id in positions:
+            held = chosen.get(box_id)
+            if held is None or str(entry.get("created", "")) >= str(held.get("created", "")):
+                if held is not None:
+                    rest.append(held)
+                chosen[box_id] = entry
+                continue
+        rest.append(entry)
+    before = [(entry["stem"], entry["index"]) for entry in manifest["segments"]]
+    placed = [chosen[box_id] for box_id in box_ids if box_id in chosen]
+    for entry in placed:
+        entry["index"] = positions[box_of(entry)] + 1
+    rest.sort(key=lambda entry: entry["index"])
+    for number, entry in enumerate(rest):
+        entry["index"] = len(box_ids) + number + 1
+    manifest["segments"] = sorted(placed, key=lambda entry: entry["index"]) + rest
+    return before != [(entry["stem"], entry["index"]) for entry in manifest["segments"]]
+
+
+def placed(manifest, count):
+    """The saved segments in place for the first `count` boxes, in order (an aligned manifest's leading segments)."""
+    return [entry for entry in manifest["segments"] if 1 <= entry["index"] <= count]
+
+
+def free_stem(folder, manifest, index):
+    """`seg_{index}`, or `seg_{index}-2`, `-3`... when files or another saved segment already use that name, so a
+    box that moved never writes over the files of the box that was there."""
+    used = {entry["stem"] for entry in manifest["segments"]}
+    names = os.listdir(folder) if os.path.isdir(folder) else []
+    candidate, number = stem(index), 1
+    while candidate in used or any(name.startswith((candidate + ".", candidate + "_")) for name in names):
+        number += 1
+        candidate = f"{stem(index)}-{number}"
+    return candidate
+
+
+def archive_box(folder, manifest, box_id, now):
+    """Move the saved segments of box `box_id` (only those) into takes/; returns their indices."""
+    kept, moved = [], []
+    for entry in manifest["segments"]:
+        if box_id is None or box_of(entry) != box_id:
+            kept.append(entry)
+            continue
+        relative = move_take(folder, entry["stem"], now)
+        manifest.setdefault("takes", []).append(
+            {"index": entry["index"], "archived": now.isoformat(timespec="seconds"), "folder": relative})
+        moved.append(entry["index"])
+    manifest["segments"] = kept
+    return moved
+
+
 def archive_from(folder, manifest, index, now, only=False):
     """Move segment `index` and later ones into takes/ (only `index` when requested)."""
     kept, moved = [], []

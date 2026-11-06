@@ -113,6 +113,7 @@ class _Sequence:
 
     def reload(self):
         self.manifest = store.load_manifest(self.folder)
+        store.align(self.manifest, [item.id for item in self.parsed.boxes])
         self.entries = {entry["index"]: entry for entry in self.manifest["segments"]}
         self.is_done, _ = timeline_node.status_test(self.parsed, self.folder, self.entries, self.known, self.context)
         self.saved = saved_takes(self.folder)
@@ -397,11 +398,30 @@ def _put_back(sequence, kind, box_id, take):
     """Moves `take` into place for the box or bridge, and what was in place to a new folder under takes/, then
     writes the manifest; when it can't be written, the files go back where they were."""
     entry, now = take["entry"], datetime.datetime.now()
-    archived, moves = store.put_back_take(sequence.folder, entry["stem"], take["folder"], now)
+    manifest, current = sequence.manifest, None
+    if kind == "box":
+        index = sequence.index(box_id) + 1
+        current = sequence.in_use("box", box_id)
+        if any(item["stem"] == entry["stem"] and item is not current for item in manifest["segments"]):
+            raise ValueError("H3 Timeline: another box's take uses this take's file names now; regenerate the box "
+                             "instead")
+        entry = take["entry"] = {**entry, "index": index}
+    earlier = None
+    if current is not None and current["stem"] != entry["stem"]:
+        # The box's take in place has other file names (the box moved since this take): it goes to takes/ first.
+        earlier = store.move_take(sequence.folder, current["stem"], now)
     try:
-        store.write_manifest(sequence.folder, _manifest_with(sequence.manifest, kind, box_id, take, archived, now))
+        archived, moves = store.put_back_take(sequence.folder, entry["stem"], take["folder"], now)
+    except Exception:
+        if earlier:
+            store.put_back_take(sequence.folder, current["stem"], earlier, now)
+        raise
+    try:
+        store.write_manifest(sequence.folder, _manifest_with(manifest, kind, box_id, take, archived or earlier, now))
     except Exception:
         store.undo_moves(sequence.folder, moves, archived)
+        if earlier:
+            store.put_back_take(sequence.folder, current["stem"], earlier, now)
         raise
     sequence.reload()
 
@@ -422,7 +442,8 @@ def _manifest_with(manifest, kind, box_id, take, archived, now):
         else:
             listed[spot] = entry
     else:
-        manifest["segments"] = sorted([item for item in manifest["segments"] if item["index"] != entry["index"]]
+        manifest["segments"] = sorted([item for item in manifest["segments"]
+                                       if item["index"] != entry["index"] and store.box_of(item) != box_id]
                                       + [entry], key=lambda item: item["index"])
     manifest.pop("full_video", None)
     return manifest

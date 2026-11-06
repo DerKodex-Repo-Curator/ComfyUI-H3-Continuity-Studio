@@ -1,7 +1,7 @@
 // The H3 Story face: Write, Check all, Cancel and Undo, Open Studio, and the API keys in a closed section. The Studio
 // places the story of the last Write and the export and import row on its Story page.
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
-import {groupLabel,groupStories,initialSelection,versionLabel} from './h3c_story_groups.mjs?v=20261104-story-groups-2';
+import {groupLabel,groupStories,initialSelection,versionLabel} from './h3c_story_groups.mjs?v=20261106-durable-1';
 import {ideaImagesRow} from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 
 const STYLE_ID = 'h3cs-style';
@@ -268,8 +268,9 @@ export class StoryPanel {
     for(const row of group?.versions??[]) {
       const option=el('option',null,versionLabel(row));option.value=row.id;this.librarySelect.append(option);
     }
-    // A story with a single version needs no second choice.
-    this.librarySelect.value=group?.versions.some(row=>row.id===id)?id:group?.versions.length===1?group.versions[0].id:'';
+    // A story with a single version needs no second choice; otherwise the newest version with rendered clips comes first.
+    const rendered=group?.versions.find(row=>row.rendered>0);
+    this.librarySelect.value=group?.versions.some(row=>row.id===id)?id:group?.versions.length===1?group.versions[0].id:rendered?.id??'';
     this.syncLibraryButtons();
   }
 

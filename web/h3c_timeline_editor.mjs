@@ -86,6 +86,7 @@ const CSS = `
 .h3ct-box.done { background: #25473a; border-color: #3f7a5d; }
 .h3ct-box.next { background: #574820; border-color: #c49a3a; }
 .h3ct-box.pending { background: #2c3342; border-color: #465066; }
+.h3ct-box.outdated { background: #3a3a2a; border-color: #8a7a3a; border-style: dashed; }
 .h3ct-box.cut { border-left: 3px solid #e6e6e6; }
 .h3ct-box.new-scene { border-left: 3px double #f0c674; }
 .h3ct-box.problem { border-color: #e0605a; box-shadow: inset 0 0 0 1px #e0605a; }
@@ -259,6 +260,11 @@ function group(label, ...controls) {
   const node = el('div', 'h3ct-field h3ct-wide');
   node.append(el('span', 'h3ct-label', label), ...controls);
   return node;
+}
+
+// A box Render skips: it has a saved take, current or outdated.
+function hasTake(status) {
+  return status?.status === 'done' || status?.status === 'outdated';
 }
 
 function percent(fraction) {
@@ -728,13 +734,13 @@ export class TimelineEditor {
       const status = this.bridgeStatusOf(bridge.before)?.status;
       return model.isReplacement(bridge) ? ['pending', 'next'].includes(status) : !['done', 'problem'].includes(status);
     };
-    return this.state.boxes.filter((box) => this.statusOf(box)?.status !== 'done').length + bridges.filter(queued).length;
+    return this.state.boxes.filter((box) => !hasTake(this.statusOf(box))).length + bridges.filter(queued).length;
   }
 
   nextBox() {
     if (!this.state.boxes.length) return null;
     if (this.stale || !this.status?.ok) return 1;
-    const index = this.state.boxes.findIndex((box) => this.statusOf(box)?.status !== 'done');
+    const index = this.state.boxes.findIndex((box) => !hasTake(this.statusOf(box)));
     return index < 0 ? null : index + 1;
   }
 
@@ -798,6 +804,11 @@ export class TimelineEditor {
   }
 
   setStatus(status) {
+    // A status request that fails or times out never hides saved takes: the clips the last good status showed are
+    // still on disk, so they stay, with a note that status is unavailable.
+    if (status && !status.ok && this.lastGoodStatus) {
+      status = {...this.lastGoodStatus, unavailable: status.error};
+    } else if (status?.ok) this.lastGoodStatus = status;
     this.status = status;
     this.statusById = new Map((status?.ok ? status.boxes : []).map((box) => [box.id, box]));
     this.bridgeById = new Map((status?.ok ? status.bridges ?? [] : []).map((item) => [item.box, item]));
@@ -927,7 +938,7 @@ export class TimelineEditor {
     this.renderPanelInfo();
     try {
       const targets = bridge != null ? [] : box != null ? [this.state.boxes[box - 1]]
-        : this.state.boxes.filter(item => this.statusOf(item)?.status !== 'done').slice(0, count);
+        : this.state.boxes.filter(item => !hasTake(this.statusOf(item))).slice(0, count);
       let changed = false;
       for (const target of targets) {
         if (target.seed_mode !== 'randomize' && target.seed != null) continue;
@@ -1166,11 +1177,12 @@ export class TimelineEditor {
     }
     if (replaced) summary += ` · ${replaced} ${replaced === 1 ? 'replacement' : 'replacements'}`;
     if (ok && !this.stale) summary += ` · ${this.status.message}`;
+    if (ok && !this.stale && this.status.full_video_building) summary += ' · Building the full video in the background…';
     this.summaryEl.textContent = summary;
     this.renderButton.textContent = count && !remaining ? '✓ All rendered' : `▶ Render ${remaining} remaining`;
     this.renderButton.disabled = this.host.hasVideo?.()===false || !remaining || this.queuing || this.host.feeding?.() || !this.seedInput.validity.valid;
     this.renderButton.title = remaining
-      ? `Queue ${remaining} run${remaining === 1 ? '' : 's'}, one per ${what} that is not rendered yet`
+      ? `Queue ${remaining} run${remaining === 1 ? '' : 's'}, one per ${what} that has no take yet (outdated takes are kept; regenerate those one by one)`
       : `Every ${what} is rendered`;
     this.renderNextButton.disabled = this.renderButton.disabled;
     this.renderNextButton.title = remaining ? `Queue one run, for the next ${what} that is not rendered yet` : `Every ${what} is rendered`;
@@ -1196,8 +1208,10 @@ export class TimelineEditor {
 
   renderHint() {
     const conflicts = this.status?.ok && !this.stale ? this.status.timing_conflicts ?? [] : [];
+    const unavailable = this.status?.unavailable
+      ? `Status is unavailable right now (${this.status.unavailable.replace(/^Status unavailable: /, '')}); the clips shown are the last known ones and are still saved.` : '';
     const error = this.status && !this.status.ok ? this.status.error
-      : [this.status?.export_error, ...conflicts].filter(Boolean).join(' ');
+      : [unavailable, this.status?.export_error, ...conflicts].filter(Boolean).join(' ');
     const pan = getComputedStyle(this.trackEl).touchAction.includes('pan-x');
     this.hintEl.textContent = error || this.followNote || (pan
       ? 'Swipe to pan · drag edges to trim · tap a clip to edit · use + Clip to add'
@@ -1249,10 +1263,11 @@ export class TimelineEditor {
         image.draggable = false;
         item.append(image);
       }
-      const mark = { done: ' ✓', next: ' ●' }[status?.status] ?? '';
+      const mark = { done: ' ✓', next: ' ●', outdated: ' ⟳' }[status?.status] ?? '';
       item.append(el('span', 'h3ct-boxlabel',
         `${index > 0 && box.cut ? '✂ ' : ''}#${index + 1} · ${model.seconds(box.frames)} s${mark}`));
-      item.title = [`Clip ${index + 1}: ${model.lengthLabel(this.state, index, context)}`, info.mode, status?.reason,
+      item.title = [`Clip ${index + 1}: ${model.lengthLabel(this.state, index, context)}`, info.mode,
+        status?.status === 'outdated' ? `Outdated take, still playing: ${status.reason ?? 'the box changed since it was rendered'} Regenerate it to update it.` : status?.reason,
         box.prompt.trim().slice(0, 160), ...info.problems].filter(Boolean).join('\n');
       const handle = el('div', 'h3ct-handle');
       handle.title = 'Drag to change the length';

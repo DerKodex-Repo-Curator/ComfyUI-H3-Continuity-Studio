@@ -69,8 +69,11 @@ texts are under `docs/` and the user guide is under `guide/`.
 - **Current boxes.** A box is current while its saved render still matches its
   prompt, seed, length, join, pictures, RefMods, guides, audio, timed text,
   memory and the node's settings. A continuing box also needs the box before it
-  unchanged. Each queued run renders the next box that isn't current. Nothing
-  renders again by itself: the Timeline marks what is stale and says why.
+  unchanged. A box whose saved render no longer matches is *outdated*: it keeps
+  its take, thumbnail and place in the full video, and the Timeline says why.
+  Each queued run renders the next box that has no take; an outdated box renders
+  again only when it is selected (Regenerate, or `render_box`). Takes follow box
+  ids, so inserting or moving a box never makes later boxes lose theirs.
 - **Render order.** A continuing box, a bridge and a box that remembers another
   each need their source rendered first. A re-render can make later boxes stale.
 - **Takes.** Each new render of a box or bridge keeps the one before it in
@@ -78,8 +81,11 @@ texts are under `docs/` and the user guide is under `guide/`.
   when it fits both neighbours) or deleted. The Studio can render 1 to 10 takes
   of a box at once, and the API lists and switches takes (see `h3-continuity-api`).
   Put an earlier take back rather than re-rendering when it was better.
-- **Full video.** Once every box is current, H3 Save Segment assembles
-  `<name>_full.mp4` from the box videos in Timeline order. It plays rendered
+- **Full video.** Once every box has a take, `<name>_full.mp4` is assembled in
+  the background from the box videos in Timeline order (status reports
+  `full_video_building` meanwhile). Clips may differ in frame rate, HDR or size
+  but not aspect ratio: the join uses the highest rate, HDR when any clip is HDR
+  and the largest size. It plays rendered
   bridges on their joins, and the uploaded recording instead of H3's audio when
   a clip is marked `in_full_video` (see `h3-continuity-sound`). Each box saves its
   MP4 without carried frames, its latents (`.safetensors`) and a last-frame PNG

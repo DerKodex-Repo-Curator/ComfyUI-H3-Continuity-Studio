@@ -4,6 +4,16 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-06
+
+### Changed
+
+- **Rendered clips no longer disappear from the Timeline.** A clip whose prompt, settings or remembered clip changed after it rendered is now *outdated*: it keeps its thumbnail and video, plays in the full video, and shows what changed in its tooltip. **Render N remaining** renders only clips with no take; regenerate an outdated clip from its own button.
+- **Saved takes follow their clip, not its position.** Inserting, removing or moving a clip no longer marks every later clip unrendered, rendering a clip moves only that clip's earlier take to `takes/` (never the clips after it), and takes of removed clips stay in place.
+- **The full video builds in the background.** Status checks no longer wait for the encode (about 10 minutes for 88 boxes), which made every clip look unrendered until it finished. A failed or timed-out status check keeps the last known clips on screen.
+- **Clips of different formats join.** The full video takes the best of its clips: the highest frame rate (24 fps clips repeat frames beside interpolated ones, keeping their duration), HDR when any clip is HDR (SDR clips converted), and the largest size. Only a different aspect ratio is refused. The continuity check reads interpolated clips too.
+- **One saved story, not many copies.** Loading a saved story continues that story, with its own sequence folder and renders, even when this workflow's wiring differs; clips whose render settings changed show as outdated. The story picker groups entries that share a sequence folder or a title as versions of one story, and each version shows its folder and how many clips it has rendered.
+
 ### Added
 
 - H3 Save Segment has a `codec` choice: H.264 (default, unchanged) or HEVC. HEVC saves 10-bit Main10 for HDR, tagged `hvc1` so Apple players show HLG, still without B-frames so segments join by packet copy. A re-encoded full video keeps the segments' codec.
@@ -12,6 +22,8 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 - **Full video of frame-interpolated boxes.** A box saved at a higher frame rate (for example 48 fps after interpolation) played only the first half of its clip in the full video, the partial video and replacement previews, so each scene changed before it ended and the audio drifted. Box windows are now converted to each clip's own frame rate. Rebuild the full video of an interpolated story to fix it.
 - **Render N remaining** no longer puts every run in ComfyUI's queue at once. Each queued run renders the next box that needs it, so when one run failed (a 70-box story ran the machine out of memory), every run behind it retried the same box and failed the same way. Render now keeps 3 runs in ComfyUI's queue, adds one as each succeeds, and stops at the first failed or interrupted run, taking its own waiting runs out of the queue. The setting **Runs kept in ComfyUI's queue while Render all works** changes the number; 0 restores the old behavior. Keep the page open while a long Render works.
+
+[Changes since v0.12.10](https://github.com/KadoBOT/ComfyUI-H3-Continuity-Studio/compare/v0.12.10...v0.13.0).
 
 ## [0.12.5] - 2026-11-05
 

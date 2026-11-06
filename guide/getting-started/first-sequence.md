@@ -75,7 +75,7 @@ Everything you do in the Studio is saved in the Timeline node, so it saves with 
 ## 5. Render
 
 - **Render next** renders the next clip that needs it.
-- **Render N remaining** renders everything that is not current, in order.
+- **Render N remaining** renders every clip that has no take yet, in order. A clip you changed after it rendered keeps its take and shows as outdated; regenerate it to update it.
 - **Generate clip N** (in the clip panel) renders just that clip. The number beside it sets how many [takes](../continuity/takes.md) to make.
 
 You can also queue the workflow with ComfyUI's own **Run** button; every queued run renders the next clip that needs it.

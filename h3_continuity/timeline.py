@@ -1236,8 +1236,11 @@ def next_box(count, segments_by_index, is_done):
     return None
 
 
-def status_payload(name, timeline, segments, next_index, thumb, full_video, movie_seconds, done_indices=None):
-    """What the editor shows; `thumb(entry)` returns a /view file dict or None."""
+def status_payload(name, timeline, segments, next_index, thumb, full_video, movie_seconds, done_indices=None,
+                   kept_indices=()):
+    """What the editor shows; `thumb(entry)` returns a /view file dict or None. `segments` are numbered by box
+    (store.align). A box in `kept_indices` has a saved take that is outdated: it keeps its picture and plays until it
+    is regenerated."""
     count = len(timeline.boxes)
     by_index = {entry["index"]: entry for entry in segments}
     done_indices = set(range(count if next_index is None else next_index)) if done_indices is None else done_indices
@@ -1245,8 +1248,8 @@ def status_payload(name, timeline, segments, next_index, thumb, full_video, movi
     boxes = []
     for index, box in enumerate(timeline.boxes):
         entry = by_index.get(index + 1)
-        if index in done_indices:
-            item = {"id": box.id, "status": "done"}
+        if index in done_indices or index in kept_indices:
+            item = {"id": box.id, "status": "done" if index in done_indices else "outdated"}
             picture = thumb(entry)
             if picture:
                 item["thumb"] = picture
@@ -1256,16 +1259,16 @@ def status_payload(name, timeline, segments, next_index, thumb, full_video, movi
                 item["replaces"] = True
         boxes.append(item)
     trailing = [entry["index"] for entry in segments if entry["index"] > count]
+    outdated = len([index for index in kept_indices if index not in done_indices])
     if not count:
         message = "Draw a box to start."
     elif next_index is not None:
         message = f"Box {next_index + 1} is next."
+    elif outdated:
+        message = (f"Every box has a take; {outdated} {'is' if outdated == 1 else 'are'} outdated. Select an outdated "
+                   "box and regenerate it to update it.")
     else:
         message = "The box is rendered." if count == 1 else f"All {count} boxes are rendered."
-        if trailing:
-            listed = ", ".join(map(str, trailing))
-            message += (f" The next run moves segment{'s' if len(trailing) > 1 else ''} {listed}, after the last "
-                        "box, to takes/.")
     return {"ok": True, "name": name, "next": None if next_index is None else next_index + 1, "done": done,
-            "segments": len(segments), "trailing": len(trailing), "seconds": round(movie_seconds, 2),
-            "full_video": full_video, "boxes": boxes, "message": message}
+            "outdated": outdated, "segments": len(segments), "trailing": len(trailing),
+            "seconds": round(movie_seconds, 2), "full_video": full_video, "boxes": boxes, "message": message}
