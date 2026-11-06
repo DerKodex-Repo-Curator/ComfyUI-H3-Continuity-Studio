@@ -4,6 +4,8 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-06
+
 ### Added
 
 - **Video so far.** Before every clip has rendered, the Viewer's switch reads **Video so far · 5/90** and plays the clips rendered from the first one on, joined with their bridges and the ticked audio clips (or H3's audio), so a timing problem against the soundtrack shows after a few clips instead of after the whole render. It is built in the background, grows as clips render, keeps playing from the same moment when it grows, and is saved as `<name>_sofar.mp4`.
