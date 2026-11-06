@@ -10,6 +10,7 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ### Fixed
 
+- **Full video of frame-interpolated boxes.** A box saved at a higher frame rate (for example 48 fps after interpolation) played only the first half of its clip in the full video, the partial video and replacement previews, so each scene changed before it ended and the audio drifted. Box windows are now converted to each clip's own frame rate. Rebuild the full video of an interpolated story to fix it.
 - **Render N remaining** no longer puts every run in ComfyUI's queue at once. Each queued run renders the next box that needs it, so when one run failed (a 70-box story ran the machine out of memory), every run behind it retried the same box and failed the same way. Render now keeps 3 runs in ComfyUI's queue, adds one as each succeeds, and stops at the first failed or interrupted run, taking its own waiting runs out of the queue. The setting **Runs kept in ComfyUI's queue while Render all works** changes the number; 0 restores the old behavior. Keep the page open while a long Render works.
 
 ## [0.12.5] - 2026-11-05
