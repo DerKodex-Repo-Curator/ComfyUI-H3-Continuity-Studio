@@ -9,12 +9,12 @@
 // Share the Timeline's helper revision so cached .mjs files cannot mix frontend versions.
 import { app } from '../../scripts/app.js';
 import { api } from '../../scripts/api.js';
-import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
+import { mountSavedState, AUTOSAVE_SETTING, autosaveEnabled } from './h3c_saved_state.mjs?v=20261106-checkpoints-1';
 import { migrateStoryDescriptionInputs, migrateSerializedStoryDescriptionInputs } from './h3c_story_inputs.mjs?v=20261003-story-inputs-2';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import * as story from './h3c_story_model.mjs?v=20261011-reference-preparation-1';
-import { StoryPanel } from './h3c_story_panel.mjs?v=20261106-durable-1';
-import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261106-durable-1';
+import { StoryPanel } from './h3c_story_panel.mjs?v=20261106-checkpoints-1';
+import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261106-checkpoints-1';
 import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=20261014-story-library-1';
 import { parseState, serialize } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
 
@@ -96,7 +96,7 @@ async function post(url, body) {
   }));
 }
 
-class StoryHost {
+export class StoryHost {
   constructor(node, inputDefinitions) {
     this.node = node;
     this.inputDefinitions = inputDefinitions;
@@ -135,6 +135,9 @@ class StoryHost {
         return {rows:stories.map(row=>({...row,current:row.graph===graph})),names};
       },
       openSavedStory: id => this.libraryAction(() => this.library.open(id)),
+      saveCheckpoint: () => this.libraryAction(() => this.saveCheckpoint()),
+      autosaveEnabled: () => autosaveEnabled(app),
+      setAutosave: enabled => app.ui.settings.setSettingValue(AUTOSAVE_SETTING, enabled),
       deleteSavedStory: entry => this.libraryAction(async () => { if(await this.library.remove(entry))await panel.refreshStories(); }),
       deleteSavedStoryGroup: group => this.libraryAction(async () => {
         try {if(await this.library.removeAll(group))await panel.refreshStories();}
@@ -295,6 +298,7 @@ class StoryHost {
   }
 
   async saveLibrary(force=false,attempt=0) {
+    if(!force&&!autosaveEnabled(app))return;
     if(this.gone||this.node.graph!==(app.rootGraph??app.graph)||this.libraryDeleted===this.graphId())return;
     if(this.library?.pending&&!force)return;
     if(this.forkingLibrary&&!force)return;
@@ -309,6 +313,7 @@ class StoryHost {
       const signature=JSON.stringify(workflow);if(signature===this.librarySignature)return;
       const linked=this.timelines();if(linked.length!==1)throw Error('Connect this Story to one Timeline to save it in the library.');
       const captured=await app.graphToPrompt?.();
+      if(!force&&!autosaveEnabled(app))return;
       if(signature!==JSON.stringify(graph.serialize()))return;
       const sequence=findWidget(linked[0],'name')?.value;
       const result=await this.libraryRequest('/h3c/stories',{graph:this.graphId(),story:String(this.node.id),workflow,sequence,
@@ -364,11 +369,48 @@ class StoryHost {
     try{return await this.forkingLibrary;}finally{this.forkingLibrary=null;}
   }
 
+  async saveCheckpoint() {
+    if(this.library.pending)return;
+    this.library.check();
+    const message='Name this checkpoint. It preserves this Timeline and its current videos.';
+    const name=await (app.extensionManager?.dialog?.prompt?.({title:'Save checkpoint',message,
+      defaultValue:this.state().title||'Checkpoint'})??window.prompt(message,this.state().title||'Checkpoint'));
+    if(name==null)return;
+    if(this.library.pending)return;
+    if(!name.trim()||name.trim().length>120)throw Error('Give the checkpoint a name of 1–120 characters.');
+    this.library.check();
+    const graph=this.node.graph,workflow=structuredClone(graph.serialize());
+    workflow.extra??={};workflow.extra.h3c_story_id=this.graphId();
+    const {node}=this.generationDestination(),sequence=generationControl(node,'name').value.value;
+    this.library.pending=true;
+    this.panel.checkpointButton.disabled=true;
+    this.panel.say('Saving checkpoint and copying its videos…');
+    let resume;
+    try {
+      resume=await this.saved.suspend();
+      if(this.gone||graph!==(app.rootGraph??app.graph))throw Error('Return to the workflow you want to checkpoint.');
+      await this.libraryRequest('/h3c/stories/checkpoint',{graph:workflow.extra.h3c_story_id,
+        story:String(this.node.id),workflow,sequence,name:name.trim()});
+      await this.panel.refreshStories();
+      this.panel.say(`Checkpoint “${name.trim()}” saved with its videos. You can keep editing this workflow.`);
+    } finally {
+      resume?.();this.library.pending=false;this.panel.checkpointButton.disabled=false;
+    }
+  }
+
   async libraryAction(action) {
     try {await action();}catch(error){this.panel.say(error.message,true);}
   }
 
   async loadLibrary(value) {
+    if(value.restored_checkpoint) {
+      if(await app.loadGraphData(structuredClone(value.workflow),true,true,null)===false)
+        throw Error('ComfyUI could not load the checkpoint. Its saved copy is still available.');
+      const loaded=(app.rootGraph??app.graph)?._nodes?.find(node=>node.type===NODE_TYPE&&String(node.id)===String(value.story))?.h3cStory;
+      loaded?.openStudio();
+      loaded?.panel.say('Checkpoint opened as an editable copy with its videos. The saved checkpoint is kept.');
+      return;
+    }
     const graph=this.node.graph,revision=JSON.stringify(graph.serialize());
     const content=savedStoryContent(value,graph.serialize());
     const resume=await this.saved.suspend();
@@ -986,6 +1028,9 @@ class StoryHost {
 
 app.registerExtension({
   name: 'h3c.story',
+  settings: [{id:AUTOSAVE_SETTING, name:'Autosave Story and Timeline edits', type:'boolean', defaultValue:true,
+    category:['H3 Continuity','Story','Autosave'],
+    tooltip:'Save edits and the current Story library entry automatically. Turn off to save only when you explicitly save a checkpoint or run an action that requires saving.'}],
   beforeConfigureGraph(graphData) {
     migrateSerializedStoryDescriptionInputs(graphData);
   },

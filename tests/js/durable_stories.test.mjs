@@ -56,3 +56,8 @@ test('versions show their folder and rendered clips', () => {
   assert.match(versionLabel({...row('a', 'T', 'Project-b62045ea', 1, 88), version: 3}, () => 'today'),
     /^v3 · 88 clips · 88 rendered · Project-b62045ea · saved · today$/);
 });
+
+test('named checkpoints are distinct from automatic versions', () => {
+  assert.match(versionLabel({...row('a', 'Heavy', 'snapshot', 1, 88), version: 29,
+    checkpoint_name: 'All boxes rendered'}, () => 'today'), /^Checkpoint: All boxes rendered · 88 clips · 88 rendered/);
+});

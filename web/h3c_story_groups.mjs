@@ -52,7 +52,8 @@ export function groupLabel(group) {
 export function versionLabel(row,formatDate=value=>new Date(value*1000).toLocaleString()) {
   const rendered=Number.isInteger(row.rendered)?` · ${row.rendered} rendered`:'';
   const folder=row.sequence?` · ${row.sequence}`:'';
-  return `v${row.version} · ${row.boxes} clips${rendered}${folder} · ${row.status} · ${formatDate(row.updated)}${row.current?' · open now':''}`;
+  const label=row.checkpoint_name?`Checkpoint: ${row.checkpoint_name}`:`v${row.version}`;
+  return `${label} · ${row.boxes} clips${rendered}${folder} · ${row.status} · ${formatDate(row.updated)}${row.current?' · open now':''}`;
 }
 
 // Which group and version to show first: keep the user's choice, else the story open in this workflow, else none.
