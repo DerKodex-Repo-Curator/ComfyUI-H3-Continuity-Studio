@@ -110,6 +110,24 @@ class VideoSoFarTest(unittest.TestCase):
         self.assertIn("full_video_building", status, "every box has a take, so the full video builds instead")
         self.assertNotIn("preview_video", status)
 
+    def test_re_rendering_the_smallest_clip_upgrades_the_preview_size(self):
+        second = self.manifest["segments"][1]
+        path = os.path.join(self.folder, second["video"]["file"])
+        media.write_segment_video(path, torch.zeros(17, 48, 32, 3), 24, 16)
+        second["video"].update(width=32, height=48)
+        _, small = self.built()
+        self.assertIn("preview_video", small)
+        self.assertEqual(decoded(os.path.join(self.folder, small["preview_video"]["file"]["filename"]))[0], (32, 48))
+        before = store.load_manifest(self.folder)["preview_video"]["sources"]
+
+        media.write_segment_video(path, coded(17, 1, SEGMENT_SIZE), 24, 16)
+        second["video"].update(width=SEGMENT_SIZE, height=SEGMENT_SIZE)
+        _, upgraded = self.built()
+        self.assertEqual(decoded(os.path.join(self.folder, upgraded["preview_video"]["file"]["filename"]))[0],
+                         (SEGMENT_SIZE, SEGMENT_SIZE))
+        self.assertNotEqual(before, store.load_manifest(self.folder)["preview_video"]["sources"])
+        self.assertEqual(upgraded["preview_video"]["clock"], [[0, 22, 0, 1], [22, 17, 22, 1]])
+
 
 class VideoClockTest(unittest.TestCase):
     def test_bridges_hold_the_timeline_and_replacements_keep_its_time(self):

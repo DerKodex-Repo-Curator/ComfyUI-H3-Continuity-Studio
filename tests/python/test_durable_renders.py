@@ -154,21 +154,25 @@ class MixedFormatJoinTest(unittest.TestCase):
             self.assertEqual(media.video_stream_color_space(stream), "HDR")
             self.assertEqual(sum(1 for _ in container.decode(stream)), 12)
 
-    def test_sizes_with_the_same_aspect_ratio_scale_to_the_largest(self):
+    def test_sizes_with_the_same_aspect_ratio_scale_to_the_smallest(self):
         small = self.write("a.mp4", frames(4, 0), 24)
         large = self.write("b.mp4", torch.nn.functional.interpolate(
             frames(4, 2).permute(0, 3, 1, 2), size=(32, 32)).permute(0, 2, 3, 1), 24)
         written, note = media.build_full_video(os.path.join(self.folder, "full.mp4"), [small, large], None, 16)
         self.assertIsNotNone(written, note)
         with av.open(written) as container:
-            self.assertEqual((container.streams.video[0].width, container.streams.video[0].height), (32, 32))
+            self.assertEqual((container.streams.video[0].width, container.streams.video[0].height), (16, 16))
 
-    def test_different_aspect_ratios_are_refused(self):
+    def test_different_aspect_ratios_resize_to_the_smallest_clip_keeping_time(self):
         square = self.write("a.mp4", frames(4, 0), 24)
         wide = self.write("b.mp4", torch.zeros(4, 16, 32, 3), 24)
-        written, note = media.build_full_video(os.path.join(self.folder, "full.mp4"), [square, wide], None, 16)
-        self.assertIsNone(written)
-        self.assertIn("aspect ratio", note)
+        written, note = media.build_full_video(os.path.join(self.folder, "full.mp4"), [wide, square], None, 16)
+        self.assertIsNotNone(written, note)
+        with av.open(written) as container:
+            stream = container.streams.video[0]
+            self.assertEqual((stream.width, stream.height), (16, 16))
+            self.assertEqual(sum(1 for _ in container.decode(stream)), 8)
+        self.assertIn("scaled to 16x16", note)
 
 
 class BackgroundFullVideoTest(unittest.TestCase):

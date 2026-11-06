@@ -13,7 +13,7 @@ In the Studio's Timeline, press **+ Audio** or drop an audio file on the AUDIO l
 - **Move** the clip to align it; **trim** either edge; **Fit to video** snaps it to the video. Playback speed never changes.
 - **Shift-drag** selects a different source window without moving the clip.
 - The clip shows the file's waveform. It is decoded in the browser once per file and session; until then the coarse saved outline shows.
-- **Detect beats** finds the beats of each lane's file and draws them as ticks under its waveform. With **Snap to beats** ticked, dragging a video clip's right edge lands it on the nearest beat within a few pixels; hold **Shift** to drag freely. A clip without [Exact length](../build/exact-lengths.md) still keeps a length on H3's frame grid, so it lands on the grid length nearest the beat. Beats are kept for the session only; press **Detect beats** again after reloading.
+- Select an audio lane, then use **Detect beats · @audio1** (or the selected lane's slot) in its **Audio settings** in the right-hand inspector. It analyses only that lane's file and draws beat ticks under its waveform. **Snap to beats**, beside it, lets a video clip's right edge land on the nearest detected beat within a few pixels; hold **Shift** to drag freely. A clip without [Exact length](../build/exact-lengths.md) still keeps a length on H3's frame grid, so it lands on the grid length nearest the beat. Beats are kept for the session only; detect another lane explicitly if you want its beats too, and detect again after reloading.
 - The settings give exact **Video start (s)**, **Source in (s)** and **Length (s)**, and an audition player.
 - Choose **Music**, **Overall soundscape** or **Shot audio / voice**, then describe the sound for the Story writer.
 

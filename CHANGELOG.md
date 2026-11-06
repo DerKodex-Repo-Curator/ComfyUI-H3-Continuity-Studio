@@ -4,6 +4,14 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-06
+
+### Fixed
+
+- **Visible preview assembly.** The viewer shows a loading indicator and build status above the player, including while watching an individual clip. Failed builds show their reason beside the video controls. An existing preview stays playable while the next version builds.
+- **Mixed-size previews and exports.** Joined clips resize to the smallest clip's dimensions, including when their aspect ratios differ. Re-rendering the smaller clip at higher resolution automatically rebuilds the preview at the new common size; original clip files are preserved.
+- **Beats for the selected lane.** Select an audio lane to find **Detect beats · @audioN** and **Snap to beats** in its right-hand audio settings. Detection reads only that lane's file, with results labelled by lane.
+
 ## [0.16.0] - 2026-11-06
 
 ### Added

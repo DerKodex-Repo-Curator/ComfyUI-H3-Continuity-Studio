@@ -114,7 +114,7 @@ def build(folder, name, parsed, manifest, done, soundtrack, crf):
         items.append([entry, stamps, first, count])
     if soundtrack:
         items.append(["soundtrack", audio_tracks.soundtrack_sources(soundtrack)])
-    fingerprint = hashlib.sha1(json.dumps(items, sort_keys=True).encode("utf-8")).hexdigest()
+    fingerprint = hashlib.sha1(json.dumps(["smallest-clip-size-1", items], sort_keys=True).encode("utf-8")).hexdigest()
     record = manifest.get("partial_video")
     if (record and record.get("sources") == fingerprint and os.path.basename(record["file"]) == record["file"]
             and os.path.isfile(os.path.join(folder, record["file"]))):
@@ -139,9 +139,7 @@ def build(folder, name, parsed, manifest, done, soundtrack, crf):
     windows = [(os.path.join(folder, entry["video"]["file"] if entry else source["file"]),
                 *media.window_at_fps(first, count, entry["video"].get("fps") if entry else None))
                for entry, first, count in found]
-    video = rendered[0]["video"]
-    size = (video["width"], video["height"]) if video.get("width") and video.get("height") else None
-    written, note = media.build_full_video(os.path.join(folder, f"{name}_partial.mp4"), windows, audio, crf, size)
+    written, note = media.build_full_video(os.path.join(folder, f"{name}_partial.mp4"), windows, audio, crf)
     if written is None:
         return None, f"Partial video skipped: {note.removeprefix('Full video skipped: ')}"
     record = {"file": os.path.basename(written), "sources": fingerprint, "rendered": len(rendered), "boxes": len(found)}
