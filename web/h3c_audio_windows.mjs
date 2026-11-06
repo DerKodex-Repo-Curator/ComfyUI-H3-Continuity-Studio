@@ -81,3 +81,36 @@ export function coalesceWindows(windows) {
   }
   return result;
 }
+
+export function outputWindows(clip, windows, parts) {
+  const total=parts.reduce((n,p)=>n+p.frames,0)/24;
+  if (!Object.hasOwn(clip,'box_windows') && !Object.hasOwn(clip,'windows')) {
+    let movie=0,output=0,shift=0;
+    for(const part of parts) {
+      if(part.coverage.length) { if(movie<=clip.start)shift=output-movie; movie+=part.frames/24; }
+      output+=part.frames/24;
+    }
+    const start=clip.start+shift,duration=Math.min(clip.duration,total-start);
+    return clip.start<movie && duration>0 ? [{box:null,offset:0,start,source_start:clip.source_start,duration}] : [];
+  }
+  const result=[];let output=0;
+  for(const part of parts) {
+    let cursor=0;
+    for(const cover of part.coverage) {
+      const first=cover.first/24,last=(cover.first+cover.frames)/24;
+      for(const window of windows) {
+        if(window.box!==cover.box)continue;
+        const left=Math.max(first,window.offset),right=Math.min(last,window.offset+window.duration);
+        if(right>left)result.push({box:window.box,offset:left,start:output+cursor/24+left-first,source_start:window.source_start+left-window.offset,duration:right-left});
+      }
+      cursor+=cover.frames;
+    }
+    output+=part.frames/24;
+  }
+  return result;
+}
+
+export function equivalentWindows(left,right) {
+  left=coalesceWindows(left);right=coalesceWindows(right);
+  return left.length===right.length && left.every((a,i)=>keys.every(key=>Math.abs(a[key]-right[i][key])<1e-9));
+}

@@ -64,3 +64,36 @@ def coalesce(windows):
         else:
             result.append(dict(window))
     return result
+
+
+def on_output(clip, windows, parts):
+    total = sum(part['frames'] for part in parts) / 24
+    if 'box_windows' not in clip and 'windows' not in clip:
+        movie, output, shift = 0, 0, 0
+        for part in parts:
+            if part['coverage']:
+                if movie <= clip['start']: shift = output-movie
+                movie += part['frames']/24
+            output += part['frames']/24
+        start = clip['start']+shift
+        duration = min(clip['duration'],total-start)
+        return [dict(box=None,offset=0,start=start,source_start=clip['source_start'],duration=duration)] if clip['start'] < movie and duration > 0 else []
+    result, output = [], 0
+    for part in parts:
+        cursor = 0
+        for cover in part['coverage']:
+            first, last = cover['first']/24, (cover['first']+cover['frames'])/24
+            for window in windows:
+                if window['box'] != cover['box']: continue
+                left, right = max(first,window['offset']),min(last,window['offset']+window['duration'])
+                if right > left:
+                    result.append(dict(box=window['box'],offset=left,start=output+cursor/24+left-first,
+                                       source_start=window['source_start']+left-window['offset'],duration=right-left))
+            cursor += cover['frames']
+        output += part['frames']/24
+    return result
+
+
+def equivalent(left, right):
+    left, right = coalesce(left), coalesce(right)
+    return len(left)==len(right) and all(all(abs(a[key]-b[key]) < 1e-9 for key in KEYS) for a,b in zip(left,right))

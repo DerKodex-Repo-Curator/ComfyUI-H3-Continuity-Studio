@@ -1,10 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {captureWindows, resolveWindows, validateWindows} from '../../web/h3c_audio_windows.mjs';
+import {captureWindows, resolveWindows, validateWindows, outputWindows, equivalentWindows} from '../../web/h3c_audio_windows.mjs';
 import {audioBoxSpans, parseState, serialize} from '../../web/h3c_timeline_model.mjs';
 const f = JSON.parse(readFileSync(new URL('../fixtures/box_audio_windows.json', import.meta.url)));
 const locked = () => ({...f.clip, box_windows: captureWindows(f.clip, f.boxes, f.origin)});
+
+test('output windows preserve ownership with bridge gaps and compare geometry',()=>{
+  const clip=locked(), windows=resolveWindows(clip,f.boxes);
+  const parts=[{frames:96,coverage:[{box:'a',first:0,frames:96}]},{frames:12,coverage:[]},{frames:96,coverage:[{box:'b',first:0,frames:96}]}];
+  const output=outputWindows(clip,windows,parts);
+  assert.equal(output[1].start,4.5);assert.equal(output[1].source_start,33.5);
+  assert.equal(equivalentWindows(output,outputWindows(f.clip,resolveWindows(f.clip,f.boxes),parts)),false);
+  assert.equal(equivalentWindows(output,structuredClone(output)),true);
+});
 
 test('shared capture, resize and empty binding semantics', () => {
   const clip = locked();

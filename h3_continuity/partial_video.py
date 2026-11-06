@@ -121,7 +121,8 @@ def build(folder, name, parsed, manifest, done, soundtrack, crf):
         return record, ""
 
     if soundtrack:
-        audio = audio_tracks.soundtrack_audio(soundtrack, [(count, False) for _, _, count in found])
+        audio = audio_tracks.soundtrack_audio(soundtrack, [dict(frames=count,coverage=[dict(box=parsed.boxes[index].id,first=0,frames=count)])
+                                                          for index, (_,_,count) in enumerate(found)])
     else:
         heard, pieces = _source_audio(folder, source), []
         for entry, first, count in found:

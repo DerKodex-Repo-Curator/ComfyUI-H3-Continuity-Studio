@@ -338,7 +338,13 @@ def lock_conflicts(timeline):
         if clip.get("in_full_video") is not True:
             messages.append(f"@{slot} is locked to the sequence clock but isn't in the full video: turn on "
                             "In the full video, or unlock it.")
-        start, end = clip["start"], clip["start"] + clip["duration"]
+        if 'box_windows' in clip:
+            from . import audio_windows
+            windows=audio_windows.resolve(clip,rules.audio_box_spans(timeline))
+            if not windows: continue
+            start,end=min(w['start'] for w in windows),max(w['start']+w['duration'] for w in windows)
+        else:
+            start, end = clip['start'], clip['start'] + clip['duration']
         for bridge in timeline.bridges:
             index = positions[bridge["before"]]
             join = rules.box_start(timeline, index)

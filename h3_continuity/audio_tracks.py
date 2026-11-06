@@ -123,7 +123,9 @@ def marked(timeline, snapshots=None):
                 file = record['file']
         if file is None:
             raise ValueError(f"H3 Timeline: {clip['slot']}'s full-video soundtrack replacement needs an uploaded audio file")
-        clips.append({**{key: clip[key] for key in SOUNDTRACK_KEYS if key != 'file'}, 'file': file})
+        clips.append({**{key: clip[key] for key in SOUNDTRACK_KEYS if key != 'file'}, 'file': file,
+                      **({'windows': audio_windows.resolve(clip,rules.audio_box_spans(timeline)),
+                          'sample_clock': clip['box_windows']['placement']} if 'box_windows' in clip else {})})
     return clips
 
 
@@ -184,25 +186,12 @@ def place(clips, sources, parts):
             wave = comfy.audio.resample(wave, source["sample_rate"], rate)
         waves[clip["slot"]] = wave
     channels = 2 if any(wave.shape[0] >= 2 for wave in waves.values()) else 1
-    out = torch.zeros(channels, sample_at_frame(sum(frames for frames, _ in parts), rate))
-    boxes, on_timeline, in_video = [], 0, 0
-    for frames, bridge in parts:
-        if not bridge:
-            boxes.append((on_timeline / FPS, (in_video - on_timeline) / FPS))
-            on_timeline += frames
-        in_video += frames
+    out = torch.zeros(channels, sample_at_frame(sum(part['frames'] for part in parts), rate))
     for clip in clips:
-        if clip["start"] >= on_timeline / FPS:
-            continue
-        shift = next(shift for begin, shift in reversed(boxes) if clip["start"] >= begin)
         wave = waves[clip["slot"]]
         wave = wave[:channels] if wave.shape[0] >= channels else wave.repeat(channels, 1)
-        start = clip["start"] + shift
-        offset = round(clip["source_start"] * rate) - round(start * rate)
-        left = max(0, round(start * rate), -offset)
-        right = min(out.shape[-1], round((start + clip["duration"]) * rate), wave.shape[-1] - offset)
-        if right > left:
-            out[:, left:right] += wave[:, left + offset:right + offset]
+        windows = audio_windows.on_output(clip,clip.get('windows',audio_windows.resolve(clip,[])),parts)
+        out += samples(dict(waveform=wave,sample_rate=rate),windows,0,out.shape[-1],clip.get('sample_clock'))
     return out.clamp_(-1, 1), rate
 
 
