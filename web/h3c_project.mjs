@@ -192,7 +192,7 @@ export class ProjectSession {
     }
     throw new Error('Project session closed; the job remains on the server.');
   }
-  render({count=1,boxId,bridgeId}={}) {return this.serial(async()=>{
+  render({count=1,boxId,bridgeId,receipt}={}) {return this.serial(async()=>{
     if(!Number.isInteger(count)||count<1||count>10) throw new Error('Choose 1 to 10 takes.');
     if(!this.project) await this._load();
     if(this.metadata.pending_render) {
@@ -206,6 +206,7 @@ export class ProjectSession {
     for(let run=0;run<count;run++) {
       await this._save();
       const selection=boxId?{kind:'boxes',ids:[boxId],rerender:true}:bridgeId?{kind:'boxes',ids:[bridgeId]}:{kind:'all'};
+      if(receipt) selection.rebuild_continuity=receipt;
       const plan=await this.request(this.path('/plan'),{method:'POST',body:{expected_revision:this.project.revision,selection}});
       const key=crypto.randomUUID(); this.metadata.pending_render={key,body:{expected_revision:this.project.revision,selection,plan_sha256:plan.plan_sha256}};
       const job=await this.request(this.path('/jobs'),{method:'POST',body:this.metadata.pending_render.body,headers:{'Idempotency-Key':key}});

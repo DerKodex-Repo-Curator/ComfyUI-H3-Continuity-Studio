@@ -2,6 +2,7 @@
 
 import copy
 import datetime
+import json
 import os
 import threading
 from dataclasses import dataclass
@@ -56,6 +57,8 @@ class SegmentPlan:
     carried_audio_start: int = 0
     # The Timeline's box ids in order: saving numbers every saved segment by its box (store.align).
     box_order: list | None = None
+    # One queued regeneration's consent, never persisted into a take's metadata.
+    regeneration: dict | None = None
 
 
 def _plural(count, word):
@@ -344,8 +347,14 @@ class H3C_SaveSegment(io.ComfyNode):
             folder = sequence.folder
             os.makedirs(folder, exist_ok=True)
             manifest = store.load_manifest(folder)
-            manifest.pop("full_video", None)
-            if segment.box_order is not None:
+            if segment.regeneration:
+                from . import regeneration, timeline as rules
+                recovery = segment.regeneration
+                approved = regeneration.validate(folder, rules.parse(json.dumps(recovery["timeline"])),
+                                                 recovery["settings"], recovery["box"], recovery["receipt"])
+                archived = []
+                stem = store.free_stem(folder, manifest, sequence.index)
+            elif segment.box_order is not None:
                 # A Timeline box replaces only its own earlier take; every other box keeps its saved segment.
                 store.align(manifest, segment.box_order)
                 archived = store.archive_box(folder, manifest, (segment.timeline or {}).get("box"), now)
@@ -372,16 +381,29 @@ class H3C_SaveSegment(io.ComfyNode):
             played = (segment.timeline or {}).get("played")
             if played is not None:
                 entry["played"] = played
-            if images is not None:
-                _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space, codec)
-            store.save_segment(folder, entry, video, audio_latent, waveform)
-            manifest["segments"].append(entry)
-            manifest["segments"].sort(key=lambda e: e["index"])
+            try:
+                if images is not None:
+                    _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space, codec)
+                store.save_segment(folder, entry, video, audio_latent, waveform)
+                if segment.regeneration:
+                    manifest = regeneration.commit(folder, entry, segment.regeneration, now)
+                    archived = [sequence.index, *(item["number"] for item in approved["affected"])]
+            except Exception:
+                if segment.regeneration:
+                    # This stem was free before the save; only this failed attempt's files can use it.
+                    for file in store._stem_files(folder, stem):
+                        os.remove(os.path.join(folder, file))
+                raise
+            if not segment.regeneration:
+                manifest.pop("full_video", None)
+                manifest["segments"].append(entry)
+                manifest["segments"].sort(key=lambda e: e["index"])
             # The Timeline lists its bridges in `splice`; a Timeline record without it lists none.
             keys = (segment.timeline or {}).get("splice", {})
-            if segment.timeline:
+            if segment.timeline and not segment.regeneration:
                 bridges.keep(folder, manifest, keys, now)
-            store.write_manifest(folder, manifest)
+            if not segment.regeneration:
+                store.write_manifest(folder, manifest)
             spliced = bridges.spliced(folder, manifest, keys) if keys else []
 
             new = store.played_frames(entry)

@@ -152,6 +152,9 @@ class Artifacts:
                         or provenance["native_sha256"] != status["unit_evidence"][unit["id"]]):
                     raise APIError("native_media_stale", "Native media no longer matches verified API input identity.", status=409)
                 artifacts.append(self.snapshot(project,job,descriptor,expected_frames=unit["frames"],kind=unit["kind"]))
+            if job["selection"].get("rebuild_continuity"):
+                # This job intentionally delivered one new take; dependent clips now await Render remaining.
+                return artifacts
             owner = {"project_id":project["id"],"job_id":job["id"],"revision":job["revision"],
                      "profile_sha256":job["profile_sha256"],"owner_token":job["owner_token"]}
             current = native.status(project,materialize=True,managed_owner=owner)

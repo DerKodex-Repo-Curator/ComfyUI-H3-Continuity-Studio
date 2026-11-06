@@ -2,6 +2,8 @@
 
 ## Can Start
 
+- Current worktree: fix/incompatible-render-overlap at main 3b2d569. IO1-IO3 are implemented and verified (164JS +307Python, browser desktop/mobile, strict docs); recover features.md and incompatible-overlap ledger. Prior release entries below are historical. No live service or render changes.
+
 - Current focus: editing history on isolated `feat/editing-history`, rebased onto main `47c1d43`. The user authorized its PR, merge and v0.10.0 tagged release. Preserve the original checkout's unrelated edits. Installation remains the standard ComfyUI custom_nodes clone and `python -m pip install -r requirements.txt` with ComfyUI's Python; no live installation or inference is needed for release.
 - Isolated branch `design/guide-split-prompt-continuity`, starting at `469771e` from origin/main. No parent-checkout changes copied. This roadmap scopes only the user's split/prompt design discussion; the other checkout's PrefixStream work stays separate.
 - README installation: clone into ComfyUI/custom_nodes, run `python -m pip install -r requirements.txt` with ComfyUI's Python, restart ComfyUI. No install, live workflow change, service restart or generation authorized by this discussion.

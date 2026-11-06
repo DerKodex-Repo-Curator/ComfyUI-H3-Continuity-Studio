@@ -1,7 +1,7 @@
 import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-preparation-1';
 // H3 Timeline editor model: the timeline JSON, lengths on the H3 frame grid, edits, and the rules that
 // decide how a box runs. Mirrors h3_continuity/timeline.py.
-import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261031-held-jobs-1';
+import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 import {imageDescriptionPrompt, imageDescriptionSource} from './h3c_image_descriptions.mjs?v=20261010-image-descriptions-1';
 import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
 export const FPS = 24;

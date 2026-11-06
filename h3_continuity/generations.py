@@ -1,9 +1,68 @@
 """Same-installation generation interchange. State transfers; generator graphs do not."""
 import copy,hashlib,json,os,re,shutil,uuid
+import datetime
 from pathlib import Path
 from . import nodes,store,stills,studio_pictures,timeline,refmods
 
 FORMAT='h3-generation'
+
+
+def _request_name(body):
+    name = body.get('name')
+    if name is None and body.get('workflow'):
+        from . import timeline_prepare
+        graph = body['workflow']
+        inputs = graph.get(str(body.get('timeline_node')), {}).get('inputs', {})
+        name, _ = timeline_prepare.scalar(inputs.get('name'), graph, 'name')
+    return store.validate_name(name or '')
+
+
+def start(body):
+    """Start an empty render sequence, retaining previous sequence files and authored snapshots."""
+    from . import takes
+    name = _request_name(body)
+    timeline.parse(body['timeline'])
+    folder = _folder(name)
+    with nodes.SEQUENCE_LOCK:
+        if takes.busy(folder):
+            raise ValueError('Finish or cancel rendering before starting a new generation.')
+        manifest = store.load_manifest(folder)
+        previous = dict(name=name, created=datetime.datetime.now().isoformat(timespec='seconds'),
+                        timeline=body['timeline'], settings=copy.deepcopy(body.get('settings') or {}))
+        fresh = name[:40].rstrip(' .') + '_g' + uuid.uuid4().hex[:8]
+        destination = _folder(fresh)
+        os.makedirs(destination, exist_ok=False)
+        empty = store.empty_manifest(fresh)
+        empty['generation_history'] = [*copy.deepcopy(manifest.get('generation_history', [])), previous]
+        store.write_manifest(destination, empty)
+        return dict(ok=True, name=fresh)
+
+
+def history(body):
+    """Playable outputs of earlier generations, including partially rendered ones."""
+    folder = _folder(_request_name(body))
+    with nodes.SEQUENCE_LOCK:
+        manifest = store.load_manifest(folder)
+        found = []
+        for saved in reversed(manifest.get('generation_history', [])):
+            name = saved['name']
+            directory = _folder(name)
+            old = store.load_manifest(directory)
+
+            def view(filename):
+                if not filename or filename != os.path.basename(filename) or not os.path.isfile(os.path.join(directory, filename)):
+                    return None
+                return dict(filename=filename, subfolder='h3_sequences/' + name, type='output')
+
+            video = next((file for key in ('full_video', 'preview_video', 'partial_video')
+                          if (file := view((old.get(key) or {}).get('file')))), None)
+            parsed = timeline.parse(saved['timeline'])
+            store.align(old, [box.id for box in parsed.boxes])
+            clips = [dict(id=store.box_of(entry), number=entry['index'], file=file)
+                     for entry in store.placed(old, len(parsed.boxes))
+                     if (file := view((entry.get('video') or {}).get('file')))]
+            found.append(dict(name=name, created=saved['created'], video=video, clips=clips))
+        return dict(ok=True, generations=found)
 def _hash(path):
     digest=hashlib.sha256()
     with open(path,'rb') as stream:
