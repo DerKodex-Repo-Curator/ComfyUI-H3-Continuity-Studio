@@ -24,7 +24,7 @@ Place **H3 Context Windows** between the model and the sampler.
 The default maximum is **362** generated frames. A Timeline may set `"max_frames"` (a `17k + 5` value from 362 to 991) in its JSON to allow longer clips: a clip of up to that many generated frames when fresh, minus the carried frames when continuing. A clip over 362 frames gets a note telling you to connect H3 Context Windows, because without windows the sampler would try all of it at once.
 
 !!! note "Studio limit"
-    The Studio's editor and the Story planner still stop at 362. Set `max_frames` in the Timeline JSON or through the [API](../automation/api.md). `limits.max_frames` in the prepare bundle reports the range.
+    The Studio keeps a Timeline's `max_frames` and lets clips reach it, but has no control to set it, and the Story planner still stops at 362. Set `max_frames` in the Timeline JSON or through the [API](../automation/api.md). `limits.max_frames` in the prepare bundle reports the range.
 
 ## Removing seams
 

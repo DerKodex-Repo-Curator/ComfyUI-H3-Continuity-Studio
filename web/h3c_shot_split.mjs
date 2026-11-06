@@ -1,5 +1,5 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
+import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
 
 const number = (shot) => Number(/\d+/.exec(shot.label)[0]);
 // A later shot's cut time in milliseconds of generated video (replay included), or null when it has none.

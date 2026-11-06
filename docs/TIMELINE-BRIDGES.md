@@ -11,7 +11,7 @@ scene**. Its row on the Box page has a **Bridge** field next to Join. **Insert b
 one before it are rendered, and the one before plays every frame it generates. Otherwise it is off, and the line under
 the row says why, for example "Render box 3 first.", "Wait for the Timeline's status to catch up with the last edit."
 or, after an exact box that drops frames, "Box 3 drops 9 frames, so the bridge before box 4 can't start from its last
-frame: give box 3 a length on the grid."
+frame: use a replacement bridge, or give box 3 a length on the grid, which moves every later box."
 
 A new bridge has 29 frames, a new seed and a copy of the box's prompt. Its panel, under the box's row, has:
 

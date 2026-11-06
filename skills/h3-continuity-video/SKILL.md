@@ -92,6 +92,25 @@ texts are under `docs/` and the user guide is under `guide/`.
   under `output/h3_sequences/<name>/`. Keep the folder together, because the
   latents are what continuation, memory and bridges read.
 
+## Box lengths belong to the author
+
+Lip sync, music beats, timed text, audio lanes and guides all hang off each box's
+length, and every box starts where the boxes before it end. A changed length moves
+every later box, so lengths stay fixed while you work:
+
+- Never change a box's `frames`, `seconds` or `exact` to make something else fit. A
+  remembered moment, a guide, a plate change, a bridge or timing in a prompt depends
+  on its box. It never sets the box's length. Move the dependent thing inside the
+  box's played frames, point it at another box, or remove it.
+- Turning `cut` on or off for a box without `exact` also changes its length, because
+  a fresh box and a continuing box snap to different grids.
+- Some errors offer a length change as one of two fixes, for example "make box 4 a
+  cut, or give box 3 a length on the grid". Take the fix that keeps every length.
+  If only a length change would work, stop and ask the user first, and say which
+  later boxes would move.
+- When a length did change by mistake, put back the approved length, then fix
+  what depended on the wrong one.
+
 ## Defaults that differ by how a box is made
 
 A box drawn in the Studio or planned by H3 Story starts with visual memory on

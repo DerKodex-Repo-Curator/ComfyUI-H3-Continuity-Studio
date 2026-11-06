@@ -29,7 +29,7 @@ Select a clip after clip 1 that starts with **Cut** or **New scene**, and open *
 
 [![The bridge panel](../assets/screens/bridge.png){ align=right width=300 }](../assets/screens/bridge.png)
 
-**Insert bridge** is on when this clip and the one before it are rendered, and the one before plays every frame it generates. Otherwise it is off, and the line underneath says why, for example "Render box 3 first." or, after an exact clip that drops frames, "Box 3 drops 9 frames, so the bridge before box 4 can't start from its last frame: give box 3 a length on the grid." While a recording is [locked to the sequence clock](../sound/dialogue.md#lock-a-recording), **Insert bridge** is off and the join stays a cut: *A locked recording keeps its place, so this join stays a cut: a bridge would add time, and replacement bridges are unavailable.*
+**Insert bridge** is on when this clip and the one before it are rendered, and the one before plays every frame it generates. Otherwise it is off, and the line underneath says why, for example "Render box 3 first." or, after an exact clip that drops frames, "Box 3 drops 9 frames, so the bridge before box 4 can't start from its last frame: use a replacement bridge, or give box 3 a length on the grid, which moves every later box." While a recording is [locked to the sequence clock](../sound/dialogue.md#lock-a-recording), **Insert bridge** is off and the join stays a cut: *A locked recording keeps its place, so this join stays a cut: a bridge would add time, and replacement bridges are unavailable.*
 
 A new bridge has 29 frames, a new seed and a copy of the clip's prompt. Its panel has:
 

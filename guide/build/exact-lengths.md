@@ -31,7 +31,9 @@ The length reads like `0.38 s · 9 frames · H3 generates 22`. H3 generates the 
 
 A clip that continues the clip before replays that clip's last *generated* frames, so it **cannot follow a clip whose last frames were dropped**. After a clip that drops frames, the next clip must be a **Cut**, or there must be no next clip. Otherwise both clips show the problem and Render refuses with the same sentence, for example:
 
-> Box 3 drops 9 generated frames, so box 4 can't continue it: make box 4 a cut, or give box 3 a length on the grid (22 or 39 frames).
+> Box 3 drops 9 generated frames, so box 4 can't continue it: make box 4 a cut, or give box 3 a length on the grid (22 or 39 frames), which moves every later box.
+
+Making the next clip a Cut keeps every length, which matters when a recording or a beat map is synced to the clips.
 
 A clip that continues also carries `context_frames` (39 by default) from the clip before, so a clip that plays fewer frames than that cannot be continued either. An exact length that sits on the grid drops nothing, so the next clip can continue it as before.
 

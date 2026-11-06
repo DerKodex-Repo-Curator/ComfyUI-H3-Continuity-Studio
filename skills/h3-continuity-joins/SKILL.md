@@ -78,6 +78,9 @@ continuity still comes from `carry_audio`. Memory doesn't change a box's mode: o
 - **Choose by shot.** A return to a place seen earlier wants `selected` moments from
   where it was established. A new angle in the same scene wants `scene`. A shot that
   should look unlike anything before it wants `off` or a `new_scene`.
+- A remembered moment must lie inside its source box's played frames. When it
+  doesn't, choose an earlier moment or another source box. Never lengthen the source
+  box, and never shorten a box to suit a moment (see `h3-continuity-video`).
 - H3 snaps each moment to a 17-frame boundary and reads five frames from there,
   so a window can start slightly before the time you chose. In a continuing source,
   the time counts delivered footage, and a window never starts inside the replayed

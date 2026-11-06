@@ -38,7 +38,7 @@ A box that continues the box before it replays that box's last frames, so it can
 frames were dropped. After a box that drops frames, the next box must be a cut, or there must be no next box.
 Otherwise both boxes show the problem, and Render refuses with the same sentence, for example: "Box 3 drops 9
 generated frames, so box 4 can't continue it: make box 4 a cut, or give box 3 a length on the grid (22 or 39
-frames)." An exact length on the grid drops nothing, so the next box can continue it as before.
+frames), which moves every later box." Making box 4 a cut keeps every length. An exact length on the grid drops nothing, so the next box can continue it as before.
 
 A box that continues another also carries the Timeline's `context_frames` from it, 39 by default, so box 1 or a cut
 that plays fewer frames than that can't be continued either. The continuing box shows the problem, its **Render box**

@@ -1,7 +1,7 @@
 // Mention highlights for the H3 Timeline's text boxes: a layer behind a textarea repeats its text with each @image
 // and @audio mention marked, and a card shows which reference the mention under the pointer is. Plain DOM without
 // ComfyUI imports.
-import { mentionParts } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
+import { mentionParts } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
 
 const STYLE_ID = 'h3cm-style';
 const SHOW_DELAY_MS = 150;

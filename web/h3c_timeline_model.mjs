@@ -20,16 +20,30 @@ export function isFresh(state, index) {
   return index === 0 || !!state.boxes[index]?.cut;
 }
 
-export function limits(fresh, context) {
-  return fresh ? { min: 22, max: MAX_FRAMES } : { min: GRID, max: MAX_FRAMES - context };
+// The Timeline's most generated frames: its own max_frames (a long Timeline), else the default 362.
+export function maxFrames(state) {
+  return Number.isInteger(state?.max_frames) ? state.max_frames : MAX_FRAMES;
 }
 
-export function snapFrames(frames, fresh, context) {
+export function limits(fresh, context, most = MAX_FRAMES) {
+  return fresh ? { min: 22, max: most } : { min: GRID, max: most - context };
+}
+
+// For a length the user is choosing: the nearest grid length, within the limits.
+export function snapFrames(frames, fresh, context, limit = MAX_FRAMES) {
   const offset = fresh ? 5 : 0;
   const value = Number.isFinite(Number(frames)) && frames !== null ? Number(frames) : DEFAULT_GENERATED;
   const steps = Math.max(1, Math.round((value - offset) / GRID));
-  const most = Math.floor((limits(fresh, context).max - offset) / GRID);
+  const most = Math.floor((limits(fresh, context, limit).max - offset) / GRID);
   return GRID * Math.min(steps, most) + offset;
+}
+
+// The frames a box plays, as timeline.played_frames: an exact box its own, else the nearest grid length. Never clamped:
+// a saved length is the author's, so a box over the limit stays as it is and its problem says so.
+export function playedFrames(frames, exact, fresh) {
+  if (exact) return Math.max(1, Math.round(Number(frames) || 0));
+  const offset = fresh ? 5 : 0;
+  return GRID * Math.max(1, Math.round((Number(frames) - offset) / GRID)) + offset;
 }
 
 export function defaultFrames(fresh, context) {
@@ -42,8 +56,8 @@ export function generatedFrames(frames, fresh) {
   return GRID * Math.max(1, Math.ceil((frames - offset) / GRID)) + offset;
 }
 
-export function fitExact(frames, fresh, context) {
-  return Math.min(Math.max(1, Math.round(Number(frames) || 0)), limits(fresh, context).max);
+export function fitExact(frames, fresh, context, limit = MAX_FRAMES) {
+  return Math.min(Math.max(1, Math.round(Number(frames) || 0)), limits(fresh, context, limit).max);
 }
 
 export function droppedFrames(state, index) {
@@ -59,7 +73,8 @@ export function setExact(state, index, exact, context) {
 
 export function setFrames(state, index, frames, context) {
   const box = state.boxes[index], fresh = isFresh(state, index);
-  box.frames = box.exact ? fitExact(frames, fresh, context) : snapFrames(frames, fresh, context);
+  const most = maxFrames(state);
+  box.frames = box.exact ? fitExact(frames, fresh, context, most) : snapFrames(frames, fresh, context, most);
 }
 
 // The problem when box `index` drops generated frames and the next box continues it, or box `index` continues
@@ -70,11 +85,12 @@ export function dropConflict(state, index, context) {
     const dropped = droppedFrames(state, source);
     if (!dropped) continue;
     const fresh = isFresh(state, source);
-    const { min, max } = limits(fresh, context);
+    const { min, max } = limits(fresh, context, maxFrames(state));
     const above = generatedFrames(state.boxes[source].frames, fresh);
     const lengths = [above - GRID, above].filter((length) => min <= length && length <= max).join(' or ');
     return `Box ${source + 1} drops ${dropped} generated frames, so box ${source + 2} can't continue it: `
-      + `make box ${source + 2} a cut, or give box ${source + 1} a length on the grid (${lengths} frames).`;
+      + `make box ${source + 2} a cut, or give box ${source + 1} a length on the grid (${lengths} frames), `
+      + 'which moves every later box.';
   }
   return '';
 }
@@ -86,7 +102,7 @@ export function carryConflict(state, index, context) {
   const played = box.exact ? box.frames : snapFrames(box.frames, true, context);
   if (!(played < context)) return '';
   return `Box ${index + 1} continues box ${index}, which plays ${played} frames, fewer than the ${context} it carries: `
-    + `make box ${index + 1} a cut, or give box ${index} at least ${context} frames.`;
+    + `make box ${index + 1} a cut, or give box ${index} at least ${context} frames, which moves every later box.`;
 }
 
 export function newSeed() {
@@ -144,6 +160,7 @@ export function parseState(text) {
     ...(Array.isArray(data.bridges) ? { bridges: structuredClone(data.bridges).filter(record) } : {}),
     ...(record(data.dialogue) ? { dialogue: structuredClone(data.dialogue) } : {}),
     ...(Array.isArray(data.requires) ? { requires: data.requires.filter((item) => typeof item === 'string') } : {}),
+    ...(Number.isInteger(data.max_frames) ? { max_frames: data.max_frames } : {}),
     boxes: boxes.map((box, index) => ({
       id: String(box.id || `box${index + 1}`),
       frames: Number.isFinite(box.frames) ? Math.round(box.frames)
@@ -200,6 +217,7 @@ export function serialize(state) {
     ...(state.bible ? { bible: state.bible } : {}),
     ...(keptBridges(state).length ? { bridges: keptBridges(state) } : {}),
     ...(state.dialogue ? { dialogue: state.dialogue } : {}),
+    ...(Number.isInteger(state.max_frames) ? { max_frames: state.max_frames } : {}),
     boxes: state.boxes.map((box) => ({
       id: box.id, frames: box.frames, prompt: box.prompt, seed: box.seed, cut: !!box.cut,
       ...(box.seed_mode === 'randomize' ? {seed_mode:'randomize'} : {}),
@@ -237,8 +255,9 @@ export function normalize(state, context) {
   reconcileSceneAnchors(state);
   state.boxes.forEach((box, index) => {
     const fresh = isFresh(state, index);
-    box.frames = box.frames == null ? defaultFrames(fresh, context)
-      : box.exact ? fitExact(box.frames, fresh, context) : snapFrames(box.frames, fresh, context);
+    // Only what the box already plays: normalizing never shortens or lengthens a box (lip sync and beat cuts depend
+    // on its length). A box past the limit keeps its length and reports the problem.
+    box.frames = box.frames == null ? defaultFrames(fresh, context) : playedFrames(box.frames, box.exact, fresh);
   });
   if (state.bridges) state.bridges = keptBridges(state);
   return state;
@@ -337,7 +356,7 @@ export function bridgeProblem(state, index) {
   const dropped = index > 0 && !replacing ? droppedFrames(state, index - 1) : 0;
   if (dropped) {
     return `Box ${index} drops ${dropped} frames, so the bridge before box ${index + 1} can't start from its last frame: `
-      + `give box ${index} a length on the grid.`;
+      + `use a replacement bridge, or give box ${index} a length on the grid, which moves every later box.`;
   }
   const bridge = bridgeOf(state, index);
   if (bridge && !state.prompt.trim() && !String(bridge.prompt ?? '').trim()) {
@@ -955,7 +974,8 @@ export function describeBox(state, index, connected, context) {
     const source = state.boxes.findIndex(item => item.id === memory.box);
     if (source < 0 || source >= index) problems.push('Visual memory needs an earlier source box; choose it again.');
     else if (!Number.isInteger(memory.frame) || memory.frame < 0 || memory.frame >= state.boxes[source].frames)
-      problems.push('Visual memory is outside its source box; choose an earlier moment.');
+      problems.push(`Visual memory is past the end of box ${source + 1}, which plays ${state.boxes[source].frames} `
+        + 'frames; choose an earlier moment.');
   }
   if (!text) problems.push('The prompt is empty.');
   for (const item of found) {
@@ -1017,7 +1037,7 @@ export function describeBox(state, index, connected, context) {
     if (rawAudios > MAX_REF_AUDIOS) problems.push(`${rawAudios} audios; H3 takes at most ${MAX_REF_AUDIOS}.`);
     if (videos.length > 3) problems.push(`${videos.length} videos; H3 takes at most 3.`);
   }
-  const { max } = limits(fresh, context);
+  const { max } = limits(fresh, context, maxFrames(state));
   if (box.frames > max) problems.push(`Longer than the ${max} frames allowed.`);
   const conflict = dropConflict(state, index, context);
   if (conflict) problems.push(conflict);

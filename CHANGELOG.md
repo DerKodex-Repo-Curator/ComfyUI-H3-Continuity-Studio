@@ -4,6 +4,13 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-06
+
+### Fixed
+
+- **The Studio no longer changes clip lengths behind your back.** Every edit (a prompt, a remembered moment, a setting) re-checked all clip lengths and quietly cut any clip over 362 frames, or over the continuing limit after `context_frames` changed, down to the limit, which moved every later clip off its recording or beat map. Lengths now stay as saved, a clip over the limit shows the problem instead, and the Studio keeps a Timeline's `max_frames` (it used to drop it on save) and lets clips reach it.
+- **Errors no longer suggest changing a clip's length to fit something that depends on it.** A remembered moment past its source clip now says which frames that clip plays, and a plate change or guide past a clip's end says to move it earlier rather than lengthen the clip. Where a length change is one of two fixes (dropped frames before a continuation or a bridge, too few frames to carry), the message says it moves every later clip, and offers a cut or a replacement bridge first. The agent skills now say that lengths belong to the author: an agent moves the dependent memory, guide or prompt timing, or asks before changing a length.
+
 ## [0.13.0] - 2026-11-06
 
 ### Changed
