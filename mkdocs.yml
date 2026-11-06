@@ -107,6 +107,7 @@ nav:
       - Timed text: sound/timed-text.md
   - Output:
       - Full video and projects: output/full-video-and-projects.md
+      - Keep the first pass: output/first-pass-cache.md
   - Automation:
       - Timeline HTTP API: automation/api.md
   - Reference:

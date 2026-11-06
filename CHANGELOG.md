@@ -4,6 +4,13 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-06
+
+### Added
+
+- **Keep the first pass, re-render the second.** The new **H3 Disk Cache** node goes after the first-pass sampler and saves its result on disk, keyed by the Timeline's `positive`, `latent` and `seed` and by the settings above the sampler. Render the whole Timeline without a second pass, turn the second pass on, and render again: every clip loads its first pass from disk and goes straight to the second pass. Its `info` output says why a result was sampled again or could not be cached. See [Keep the first pass](guide/output/first-pass-cache.md).
+- **H3 Save Segment `guide_frames`.** Connect the first-pass decode, and a continuing clip is guided from the last frame of the clip before as it was sampled, not as finished, so a second-pass change no longer changes every later clip's first pass.
+
 ## [0.15.0] - 2026-11-06
 
 ### Added
