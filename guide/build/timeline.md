@@ -9,7 +9,8 @@ The Timeline is a list of **clips**. Each clip is one H3 generation with its own
 | To | Do this |
 | --- | --- |
 | Add a clip | **+ Clip** in the Timeline toolbar, or drag after the last clip on the track to draw one. |
-| Resize a clip | Drag its right edge. Lengths snap to H3's frame grid (see below), unless the clip uses [Exact length](exact-lengths.md). |
+| Resize a clip | Drag its right edge. Lengths snap to H3's frame grid (see below), unless the clip uses [Exact length](exact-lengths.md). With [beats detected](../sound/audio.md#add-audio) and **Snap to beats** ticked, the edge also lands on the nearest beat. |
+| Find a moment | Click or drag the ruler: the playhead moves there and the [video so far or the full video](../output/full-video-and-projects.md#the-full-video) plays from that moment. |
 | Select a clip | Click it. The right-hand panel and the Viewer follow. |
 | Move, copy or delete | **Clip N actions** in the panel: move earlier or later, **Duplicate** (the copy gets a new seed) or **Delete**. |
 | Split a clip | A clip whose prompt has more than one `[Shot N]` offers **Split before Shot N** in its **Shots** tab. Later shots need increasing `At MM:SS.mmm,` timestamps. The split separates the shots into two clips, with the second starting as a **Cut**; each half keeps the references it uses and accepted guides move with their shots. A bridge before the clip stays with the first half. Frame guides do not offer a separate split action. |

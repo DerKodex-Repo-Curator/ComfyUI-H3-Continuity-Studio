@@ -1,5 +1,6 @@
 import * as model from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
 import { importWhisper, validateTimedText, setTextSync, textClock, projectTimedText } from './h3c_timed_text.mjs?v=20261011-reference-preparation-1';
+import { loadAudio, loaded, beatTimes, drawWave } from './h3c_waveform.mjs?v=20261106-video-so-far-1';
 
 const node = (tag, cls, text) => {
   const item = document.createElement(tag);
@@ -14,6 +15,8 @@ const button = (text, action) => {
 };
 // A lane clip takes one of the node's wired audio slots; the Timeline refuses any other, such as a voice clip's.
 const LANE_SLOTS = Array.from({length: model.MAX_REF_AUDIOS}, (_, i) => `audio${i + 1}`);
+const SNAP_KEY = 'h3c-snap-to-beats';
+const MAX_CANVAS = 8192;
 
 export class AudioLanes {
   constructor(editor) {
@@ -37,6 +40,21 @@ export class AudioLanes {
       if (ref) this.addConnected(ref);
     });
     this.message = node('span', 'h3ct-hint');
+    // Beats are found on request, kept for the session by audio file, and drawn as ticks under each waveform.
+    this.beats = new Map();
+    this.drawings = [];
+    this.beatButton = button('Detect beats', () => this.detectBeats());
+    this.beatButton.title = 'Find the beats of each audio clip, drawn as ticks under its waveform, so clip edges can snap to them';
+    this.snapField = node('label', 'h3ct-field', 'Snap to beats');
+    this.snapField.title = 'Dragging a clip’s edge lands it on the nearest beat (hold Shift to drag freely). A clip '
+      + 'without an exact length still keeps a length on the frame grid.';
+    this.snapInput = node('input'); this.snapInput.type = 'checkbox';
+    this.snapInput.setAttribute('aria-label', 'Snap clip edges to beats');
+    try { this.snapInput.checked = localStorage.getItem(SNAP_KEY) === '1'; } catch { /* storage may be unavailable */ }
+    this.snapInput.addEventListener('change', () => {
+      try { localStorage.setItem(SNAP_KEY, this.snapInput.checked ? '1' : '0'); } catch { /* storage may be unavailable */ }
+    });
+    this.snapField.append(this.snapInput);
     this.textUpload = node('input'); this.textUpload.type = 'file'; this.textUpload.accept = '.json,application/json'; this.textUpload.hidden = true;
     this.textUpload.addEventListener('change', () => {
       const file = this.textUpload.files?.[0]; this.textUpload.value = '';
@@ -45,7 +63,8 @@ export class AudioLanes {
     this.textButton = button('+ Text', () => this.textUpload.click());
     this.textButton.title = 'Import timed text from Whisper JSON';
     this.textMessage = node('span', 'h3ct-hint'); this.textMessage.setAttribute('role', 'status');
-    this.header.append(node('span', 'h3ct-label', 'Audio'), this.addButton, this.connectedSelect, this.upload, this.message);
+    this.header.append(node('span', 'h3ct-label', 'Audio'), this.addButton, this.connectedSelect, this.upload,
+      this.beatButton, this.snapField, this.message);
     this.textHeader = node('div', 'h3ct-row');
     this.textSelect = button('Timed text', () => this.selectText());
     this.textSelect.setAttribute('aria-label', 'Edit timed text');
@@ -73,6 +92,65 @@ export class AudioLanes {
   }
 
   get clips() { return this.editor.state.audio_clips ?? []; }
+
+  // Whether clip edges snap: the box is ticked and some clip's beats are found.
+  get snapping() { return this.snapInput.checked && this.beatFrames().length > 0; }
+
+  // The file a clip plays from: its connected source, or its upload; null while a replacement has none.
+  sourceFile(clip) {
+    const reference = this.editor.host.connected().audios.find(ref => ref.name === clip?.slot);
+    return reference?.problem || (reference?.replaced && !reference.mediaFile) ? null : reference?.mediaFile ?? clip?.file ?? null;
+  }
+
+  sourceUrl(clip) {
+    const file = this.sourceFile(clip);
+    return file ? this.editor.host.viewUrl(file) : null;
+  }
+
+  // Each enabled clip's found beats inside its window, as Timeline frames.
+  beatFrames() {
+    const frames = [];
+    for (const clip of this.clips) {
+      const beats = this.beats.get(this.sourceUrl(clip));
+      if (!beats || !model.referenceEnabled(this.editor.state, clip.slot)) continue;
+      for (const beat of beats) {
+        if (beat >= clip.source_start && beat <= clip.source_start + clip.duration) {
+          frames.push((clip.start + beat - clip.source_start) * model.FPS);
+        }
+      }
+    }
+    return frames;
+  }
+
+  async detectBeats() {
+    const urls = [...new Set(this.clips.map(clip => this.sourceUrl(clip)).filter(Boolean))];
+    if (!urls.length) { this.message.textContent = 'No audio clip has a file to read.'; return; }
+    this.beatButton.disabled = true; this.message.textContent = 'Finding beats…';
+    try {
+      const found = [];
+      for (const url of urls) {
+        const analysis = await loadAudio(url);
+        this.beats.set(url, beatTimes(analysis));
+        found.push(`${analysis.beats.length} beats at about ${Math.round(analysis.tempo)} BPM`);
+      }
+      this.message.textContent = `${found.join('; ')}.${this.snapInput.checked ? '' : ' Tick Snap to beats to use them.'}`;
+      this.redraw();
+    } catch (error) { this.message.textContent = `Could not find beats: ${error.message}`; }
+    finally { this.beatButton.disabled = false; }
+  }
+
+  // Draws the waveforms decoded since the lanes were drawn (those of `url`, or every one), with their beats.
+  redraw(url = null) {
+    for (const drawing of this.drawings) {
+      if (url && drawing.url !== url) continue;
+      const analysis = loaded(drawing.url);
+      if (!analysis || !drawing.canvas.isConnected) continue;
+      drawing.fallback?.remove();
+      drawing.fallback = null;
+      drawWave(drawing.canvas, analysis, drawing.clip.source_start, drawing.clip.source_start + drawing.clip.duration,
+        this.beats.get(drawing.url) ?? []);
+    }
+  }
 
   selectAudio(slot) {
     if (!this.clips.some(clip => clip.slot === slot)) return;
@@ -228,10 +306,13 @@ export class AudioLanes {
   renderLanes() {
     this.renderText();
     if (this.header.parentNode === this.lanes) this.lanes.after(this.header);
+    const laneWidth = this.lanes.getBoundingClientRect().width;
     this.lanes.replaceChildren();
+    this.drawings = [];
     if (!this.clips.length) {
       this.lanes.append(this.header);
     }
+    this.beatButton.hidden = this.snapField.hidden = !this.clips.length;
     for (const clip of this.clips) {
       const reference = this.editor.host.connected().audios.find(ref => ref.name === clip.slot);
       const title = reference?.replaced ? reference.title || 'Replacement unavailable' : clip.title || 'Audio';
@@ -249,7 +330,25 @@ export class AudioLanes {
       item.setAttribute('aria-label', `Edit @${clip.slot} audio clip${inFullVideo ? ', in the full video' : ''}`);
       item.title = `${title} · ${clip.duration.toFixed(3)} s · original speed\nDrag to move · edges trim · Shift-drag selects a different source window`
         + (inFullVideo ? '\nIn the full video' : '');
-      if (!reference?.replaced) {
+      const url = reference?.replaced ? null : this.sourceUrl(clip);
+      let pending = null;
+      if (url) {
+        // The detailed waveform, decoded in the browser; the coarse saved peaks show until it is ready.
+        const canvas = node('canvas');
+        canvas.setAttribute('aria-hidden', 'true');
+        const scale = globalThis.devicePixelRatio || 1;
+        const pixels = (laneWidth || 800) * clip.duration * model.FPS / this.span * scale;
+        canvas.width = Math.max(1, Math.min(MAX_CANVAS, Math.round(pixels)));
+        canvas.height = Math.round(36 * scale);
+        item.append(canvas);
+        const drawing = {canvas, clip, url, fallback: null};
+        this.drawings.push(drawing);
+        if (!loaded(url)) {
+          loadAudio(url).then(() => this.redraw(url)).catch(() => { /* the saved peaks stay */ });
+          pending = drawing;
+        }
+      }
+      if (!reference?.replaced && (!url || pending)) {
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('viewBox', '0 0 256 36'); svg.setAttribute('preserveAspectRatio', 'none');
         svg.setAttribute('aria-hidden', 'true');
@@ -264,6 +363,7 @@ export class AudioLanes {
           svg.append(rect);
         }
         item.append(svg);
+        if (pending) pending.fallback = svg;
       }
       item.append(node('span', 'h3ct-audio-label', `@${clip.slot} · ${title} · ${clip.duration.toFixed(2)} s${reference?.replaced ? ' · Replaced source' : ''}${clip.locked === true && clip.file ? ' · locked' : ''}`));
       for (const edge of ['left', 'right']) {
@@ -283,6 +383,7 @@ export class AudioLanes {
       });
       lane.append(item); this.lanes.append(lane);
     }
+    this.redraw();
   }
 
   drag(event, clip, mode) {
@@ -316,7 +417,7 @@ export class AudioLanes {
   renderSettings() {
     const clip = this.clips.find(clip => clip.slot === this.selected) ?? this.clips[0];
     const reference = this.editor.host.connected().audios.find(ref => ref.name === clip?.slot);
-    const file = reference?.problem || (reference?.replaced && !reference.mediaFile) ? null : reference?.mediaFile ?? clip?.file;
+    const file = this.sourceFile(clip);
     const signature = JSON.stringify([this.clips, clip?.slot, model.totalFrames(this.editor.state), file, reference?.replaced]);
     const typing = this.settingsClip === clip && this.settingsState === this.editor.state
       && this.settings.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA';

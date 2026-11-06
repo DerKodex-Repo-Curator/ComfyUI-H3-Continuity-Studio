@@ -6,7 +6,7 @@ import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
 import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
 
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
-import { partialBadge, partialTitle } from './h3c_partial_video.mjs?v=20261104-partial-video-1';
+import { partialBadge, partialTitle, previewBadge, previewLabel, previewTitle, timelineFrame, videoSeconds } from './h3c_partial_video.mjs?v=20261106-video-so-far-1';
 import {historyShortcut} from './h3c_history.mjs?v=20261104-history-1';
 
 const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
@@ -15,6 +15,9 @@ const FOCUS = ['cast', 'story', 'pictures', 'refmods', 'project'];
 const CORE_HINT = 'For a moving preview, add KJNodes’ Model Preview Override before the sampler.';
 const OLDER_TAKE = 'Outdated take: this clip changed after it rendered. It still plays in the full video; regenerate the clip to update it.';
 const MOVING = 'Moving the take…';
+const FPS = 24;
+// The Timeline frame where box `index` starts.
+const boxStart = (state, index) => state.boxes.slice(0, index).reduce((sum, box) => sum + box.frames, 0);
 const NO_STORY = 'Link an H3 Story node to this Timeline’s story input to write with a model.';
 const STYLE_ID = 'h3cx-style';
 const LAYOUT_KEY = 'h3cx-layout';
@@ -305,6 +308,7 @@ export class Studio {
       this.setView('candidate');
     });
     root.addEventListener('h3c-play-region', (event) => this.playRegion(event.detail));
+    root.addEventListener('h3c-seek', (event) => this.seekTimeline(event.detail?.frame));
     root.addEventListener('h3c-takes-listed', () => this.refresh());
     root.addEventListener('h3c-takes-changing', () => this.letGo());
     root.addEventListener('h3c-takes-changed', () => {
@@ -1012,8 +1016,10 @@ export class Studio {
     this.renderNavigation();
     const full = host.editor.fullLink.hidden ? null : host.editor.fullLink.getAttribute('href');
     const partial = full ? host.editor.partialVideo : null;
+    const soFar = full ? host.editor.previewVideo : null;
     this.downloadVideo.disabled = !full;
     this.downloadVideo.title = partial ? `Download the partial video: ${partialTitle(partial)}`
+      : soFar ? `Download the ${previewBadge(soFar).toLowerCase()}`
       : full ? 'Download the existing assembled full video' : 'No assembled full video is available yet.';
     this.downloadVideo.dataset.file = full ? host.editor.fullDownloadLink.download : '';
     const cancel = this.story?.panel?.cancelButton;
@@ -1306,13 +1312,19 @@ export class Studio {
     const takeUrl = take ? this.host.viewUrl(take) : null;
     const fullUrl = editor.fullLink.hidden ? null : editor.fullLink.getAttribute('href');
     const partial = fullUrl ? editor.partialVideo : null;
-    const view = this.view ?? (fullUrl ? 'full' : 'take');
+    // The video so far plays once asked for; the take of the selected clip stays the default while clips render.
+    const soFar = fullUrl ? editor.previewVideo : null;
+    const view = this.view ?? (fullUrl && !soFar ? 'full' : 'take');
     this.fullButton.setAttribute('aria-pressed', String(view === 'full'));
     this.takeButton.setAttribute('aria-pressed', String(view === 'take'));
     this.takeButton.textContent = box ? `Clip ${editor.selected + 1} · active take` : 'Clip take';
     this.fullButton.disabled = !fullUrl;
+    this.fullButton.textContent = soFar ? previewLabel(soFar) : 'Full video';
     this.fullButton.title = partial ? `Play the partial video: ${partialTitle(partial)}`
-      : fullUrl ? 'Play the whole Timeline' : 'No assembled full video is available yet.';
+      : soFar ? previewTitle(soFar)
+      : fullUrl ? 'Play the whole Timeline'
+      : editor.status?.preview_video_building ? 'The video so far is being built from the clips rendered so far.'
+      : 'No video yet: render the first clip to watch the video so far.';
     this.takeButton.disabled = !box;
     const inUse = chosen?.bridge ? editor.bridgeStatusOf(chosen.box) : chosen ? editor.statusOf(box) : null;
     this.switchButton.hidden = !inUse?.video || !['chosen', chosen.bridge ? 'bridge' : 'take'].includes(view);
@@ -1351,13 +1363,20 @@ export class Studio {
       // While the status is being fetched again after an edit, the playing video stays as it is.
       if (editor.status == null && this.screen.querySelector('video:not(.h3cx-live)')) return;
       const src = view === 'full' ? fullUrl : takeUrl;
-      if (src) this.showVideo(src);
-      else this.showMessage(view === 'full' ? 'No assembled full video is available yet.' : 'Not rendered yet');
+      // A video so far that grows while it plays carries on from the same moment.
+      const playing = this.screen.querySelector('video:not(.h3cx-live)');
+      if (view === 'full' && src && !this.resumeAt && playing?.dataset.view === 'full' && playing.getAttribute('src') !== src) {
+        this.resumeAt = {time: playing.currentTime, playing: !playing.paused};
+      }
+      if (src) this.showVideo(src, {view, box: view === 'bridge' ? this.bridgeBox : box?.id ?? ''});
+      else this.showMessage(view === 'full' ? (editor.status?.preview_video_building ? 'Building the video so far…'
+        : 'No video yet: render the first clip to watch the video so far.') : 'Not rendered yet');
       this.badge.textContent = view === 'chosen' ? this.chosenLabel(chosen) : view === 'candidate' ? this.candidate.label
         : view === 'bridge'
         ? `Bridge before clip ${editor.selected + 1}${!entry || entry.status === 'done' ? '' : ' · older take'}`
         : view === 'take' && takeUrl && entry.status !== 'done' ? OLDER_TAKE
-        : view === 'full' && partial ? partialBadge(partial) : '';
+        : view === 'full' && partial ? partialBadge(partial)
+        : view === 'full' && soFar ? previewBadge(soFar) : '';
     }
     this.badge.hidden = !this.badge.textContent;
   }
@@ -1398,6 +1417,56 @@ export class Studio {
       video.load();
     }
     this.screen.replaceChildren(...nodes);
+    this.host?.editor.setPlayhead?.(null);
+  }
+
+  // The Timeline frame `video` shows: through the full video's clock, or from the start of the take's clip; a bridge
+  // holds at the cut it plays across. Null for a candidate.
+  timelineFrameOf(video) {
+    const editor = this.host?.editor;
+    if (!editor) return null;
+    const time = video.currentTime || 0, view = video.dataset.view;
+    if (view === 'full') return timelineFrame(editor.videoClock, time);
+    const index = editor.state.boxes.findIndex((box) => box.id === video.dataset.box);
+    if (index < 0 || !['take', 'chosen', 'bridge'].includes(view)) return null;
+    const start = boxStart(editor.state, index);
+    return view === 'bridge' ? start : start + Math.min(time * FPS, editor.state.boxes[index].frames);
+  }
+
+  syncPlayhead(video) {
+    if (this.screen.firstElementChild !== video) return;
+    this.host?.editor.setPlayhead?.(this.timelineFrameOf(video));
+  }
+
+  // The ruler moved the playhead to Timeline `frame`: the selected clip's take seeks there while the moment is inside
+  // that clip; otherwise the video so far (or the full video) plays from there, or from its end when it stops sooner.
+  seekTimeline(frame) {
+    const editor = this.host?.editor;
+    if (!editor || !Number.isFinite(frame)) return;
+    const shown = this.screen.querySelector('video:not(.h3cx-live)');
+    if (shown && ['take', 'chosen'].includes(shown.dataset.view)) {
+      const index = editor.state.boxes.findIndex((box) => box.id === shown.dataset.box);
+      const start = boxStart(editor.state, index);
+      if (index >= 0 && frame >= start && frame < start + editor.state.boxes[index].frames) {
+        shown.currentTime = (frame - start) / FPS;
+        return;
+      }
+    }
+    if (editor.fullLink.hidden) {
+      editor.setPlayhead(frame);
+      return;
+    }
+    let seconds = videoSeconds(editor.videoClock, frame);
+    if (seconds == null) {
+      const last = editor.videoClock?.[editor.videoClock.length - 1];
+      seconds = last ? Math.max(0, last[0] + last[1] - 1) / FPS : 0;
+    }
+    if (shown?.dataset.view !== 'full') this.setView('full');
+    const video = this.screen.querySelector('video:not(.h3cx-live)');
+    if (video?.dataset.view === 'full') {
+      video.currentTime = seconds;
+      this.syncPlayhead(video);
+    }
   }
 
   togglePins() {
@@ -1420,17 +1489,37 @@ export class Studio {
     this.refresh();
   }
 
-  showVideo(src) {
+  // `shown` is {view, box}: what the video is, for the playhead.
+  showVideo(src, shown = {}) {
     const current = this.screen.firstElementChild;
     const resume = this.resumeAt;
     this.resumeAt = null;
-    if (current?.matches('video:not(.h3cx-live)') && current.getAttribute('src') === src) return;
+    if (current?.matches('video:not(.h3cx-live)') && current.getAttribute('src') === src) {
+      if (current.dataset.view !== (shown.view ?? '') || current.dataset.box !== (shown.box ?? '')) {
+        Object.assign(current.dataset, {view: shown.view ?? '', box: shown.box ?? ''});
+        this.syncPlayhead(current);
+      }
+      return;
+    }
     const video = el('video');
     video.controls = true;
     video.preload = 'metadata';
     video.src = src;
+    Object.assign(video.dataset, {view: shown.view ?? '', box: shown.box ?? ''});
     if (resume) [video.currentTime, video.autoplay] = [resume.time, resume.playing];
+    // The playhead follows the video: on each frame while it plays, and whenever it seeks.
+    const sync = () => this.syncPlayhead(video);
+    for (const type of ['loadedmetadata', 'timeupdate', 'seeking', 'seeked']) video.addEventListener(type, sync);
+    video.addEventListener('play', () => {
+      const tick = () => {
+        if (video.paused || !video.isConnected) return;
+        sync();
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
     this.setScreen(video);
+    sync();
   }
 
   showMessage(text) {

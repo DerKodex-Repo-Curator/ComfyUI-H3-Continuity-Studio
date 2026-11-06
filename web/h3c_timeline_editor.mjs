@@ -3,7 +3,7 @@
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
 import * as model from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
-import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261103-replacement-bridges-1';
+import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261106-video-so-far-1';
 import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
 import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
 import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261104-shot-split-only-1';
@@ -16,7 +16,7 @@ import { CheckPanel } from './h3c_check.mjs?v=20261104-check-holds-1';
 import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261103-replacement-bridges-1';
 import { DialoguePanel } from './h3c_dialogue.mjs?v=20261104-dialogue-key-1';
 import { ChainSettings } from './h3c_chain_settings.mjs?v=20261104-chain-settings-1';
-import { exportedVideo } from './h3c_partial_video.mjs?v=20261104-partial-video-1';
+import { exportedVideo } from './h3c_partial_video.mjs?v=20261106-video-so-far-1';
 import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261104-take-marks-2';
 
 const STYLE_ID = 'h3ct-style';
@@ -63,17 +63,21 @@ const CSS = `
 .h3ct-advanced .h3ct-row { margin-top: 6px; }
 .h3ct-advanced .h3ct-field { min-width: 0; max-width: 100%; }
 .h3ct-advanced .h3ct-select { min-width: 0; flex: 1; }
-.h3ct-ruler { position: relative; height: 16px; overflow: hidden; background: #171a21; border-bottom: 1px solid #262a33; }
+.h3ct-ruler { position: relative; height: 16px; overflow: hidden; background: #171a21; border-bottom: 1px solid #262a33; cursor: col-resize; touch-action: none; }
+.h3ct-playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #ff6b6b; box-shadow: 0 0 3px #000a;
+  pointer-events: none; z-index: 5; }
+.h3ct-playhead[hidden] { display: none; }
 .h3ct-tick { position: absolute; top: 0; height: 16px; padding-left: 3px; border-left: 1px solid #3a414d;
   font-size: 11px; line-height: 16px; color: #aab1bd; pointer-events: none; }
 .h3ct-track { position: relative; height: 54px; cursor: crosshair; touch-action: none; user-select: none; }
 .h3ct-audio { display: flex; flex-direction: column; gap: 4px; }
+.h3ct-audio-lanes { position: relative; }
 .h3ct-audio-lane { position: relative; height: 40px; overflow: hidden; background: #171e21; border-bottom: 1px solid #344548; }
 .h3ct-audio-video { position: absolute; inset: 0 auto 0 0; border-right: 1px dashed #aaa; background: #283339; }
 .h3ct-audio-clip { position: absolute; height: 36px; top: 2px; min-width: 4px; border: 1px solid #72b8ad;
   background: #205d54; border-radius: 3px; cursor: grab; touch-action: none; user-select: none; overflow: hidden; }
 .h3ct-audio-clip.disabled { opacity: .4; }
-.h3ct-audio-clip svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: #80d3c2; opacity: .65; pointer-events: none; }
+.h3ct-audio-clip svg, .h3ct-audio-clip canvas { position: absolute; inset: 0; width: 100%; height: 100%; fill: #80d3c2; opacity: .65; pointer-events: none; }
 .h3ct-audio-label { position: absolute; inset: 2px 9px auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-size: 11px; text-shadow: 0 1px 3px #000; pointer-events: none; }
 .h3ct-audio-handle { position: absolute; top: 0; bottom: 0; width: 8px; background: #72b8ad55; cursor: ew-resize; }
@@ -339,7 +343,17 @@ export class TimelineEditor {
 
     const lane = this.laneEl = el('div', 'h3ct-lane');
     this.rulerEl = el('div', 'h3ct-ruler');
+    this.rulerEl.title = 'Click or drag to move the playhead: the video so far, or the full video, plays from there';
+    this.rulerEl.addEventListener('pointerdown', (event) => this.scrubStart(event));
     this.trackEl = el('div', 'h3ct-track');
+    // The playhead: where the playing video is on the Timeline, drawn over the ruler, the clips and the audio lanes.
+    this.playheadFrame = null;
+    this.playheads = [0, 1, 2].map(() => {
+      const line = el('div', 'h3ct-playhead');
+      line.hidden = true;
+      line.setAttribute('aria-hidden', 'true');
+      return line;
+    });
     this.trackEl.addEventListener('pointerdown', (event) => this.drawStart(event));
     this.stillsEl = el('div', 'h3ct-stills');
     this.audioLanes = new AudioLanes(this);
@@ -1017,8 +1031,13 @@ export class TimelineEditor {
     const perPixel = this.span / (this.trackEl.getBoundingClientRect().width || 1);
     this.renderTrack();
     const fit = box.exact ? model.fitExact : model.snapFrames;
+    const start = this.state.boxes.slice(0, index).reduce((sum, item) => sum + item.frames, 0);
     this.capture(event, (move) => {
-      const frames = fit(startFrames + (move.clientX - startX) * perPixel, fresh, context, model.maxFrames(this.state));
+      let wanted = startFrames + (move.clientX - startX) * perPixel;
+      // Snap to beats: the edge lands on the nearest detected beat within 12 pixels (Shift drags freely).
+      const beat = this.audioLanes.snapping && !move.shiftKey ? this.nearestBeat(start + wanted, 12 * perPixel) : null;
+      if (beat != null) wanted = beat - start;
+      const frames = fit(wanted, fresh, context, model.maxFrames(this.state));
       if (frames === box.frames) return;
       box.frames = frames;
       this.renderTrack();
@@ -1028,6 +1047,55 @@ export class TimelineEditor {
       this.span = null;
       this.commit();
     });
+  }
+
+  // Moves the playhead to the pointer: the Studio seeks its video there (`h3c-seek`, a Timeline frame).
+  scrubStart(event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const ruler = this.rulerEl;
+    const seek = (e) => {
+      const rect = ruler.getBoundingClientRect();
+      const frame = Math.max(0, Math.round((e.clientX - rect.left) / (rect.width || 1) * (this.span ?? this.defaultSpan())));
+      ruler.dispatchEvent(new CustomEvent('h3c-seek', {bubbles: true, detail: {frame}}));
+    };
+    seek(event);
+    const id = event.pointerId;
+    try { ruler.setPointerCapture(id); } catch { /* synthetic events have no active pointer */ }
+    const move = (e) => { if (e.pointerId === id) seek(e); };
+    const end = (e) => {
+      if (e.pointerId !== id) return;
+      ruler.removeEventListener('pointermove', move);
+      ruler.removeEventListener('pointerup', end);
+      ruler.removeEventListener('pointercancel', end);
+    };
+    ruler.addEventListener('pointermove', move);
+    ruler.addEventListener('pointerup', end);
+    ruler.addEventListener('pointercancel', end);
+  }
+
+  // Shows the playhead at Timeline `frame` (24 fps), or hides it for null.
+  setPlayhead(frame) {
+    this.playheadFrame = Number.isFinite(frame) ? frame : null;
+    this.placePlayhead();
+  }
+
+  placePlayhead(span = this.span ?? this.defaultSpan()) {
+    const frame = this.playheadFrame;
+    for (const line of this.playheads) {
+      line.hidden = frame == null;
+      if (frame != null) line.style.left = percent(Math.min(frame, span) / span);
+    }
+  }
+
+  // The Timeline frame nearest `frame` on a detected beat of an audio clip, within `reach` frames, or null.
+  nearestBeat(frame, reach) {
+    let best = null;
+    for (const at of this.audioLanes.beatFrames()) {
+      if (Math.abs(at - frame) <= reach && (best == null || Math.abs(at - frame) < Math.abs(best - frame))) best = at;
+    }
+    return best;
   }
 
   drawStart(event) {
@@ -1178,6 +1246,8 @@ export class TimelineEditor {
     if (replaced) summary += ` · ${replaced} ${replaced === 1 ? 'replacement' : 'replacements'}`;
     if (ok && !this.stale) summary += ` · ${this.status.message}`;
     if (ok && !this.stale && this.status.full_video_building) summary += ' · Building the full video in the background…';
+    else if (ok && !this.stale && this.status.preview_video_building) summary += ' · Building the video so far…';
+    else if (ok && !this.stale && this.status.preview_error && !this.status.preview_video) summary += ` · ${this.status.preview_error}`;
     this.summaryEl.textContent = summary;
     this.renderButton.textContent = count && !remaining ? '✓ All rendered' : `▶ Render ${remaining} remaining`;
     this.renderButton.disabled = this.host.hasVideo?.()===false || !remaining || this.queuing || this.host.feeding?.() || !this.seedInput.validity.valid;
@@ -1189,9 +1259,12 @@ export class TimelineEditor {
     const shown = ok && !this.stale && !this.queuing ? exportedVideo(this.status) : null;
     const full = shown?.file ?? null;
     this.partialVideo = shown?.partial ?? null;
+    this.previewVideo = shown?.preview ?? null;
+    this.videoClock = shown?.clock ?? null;
     const fullUrl = full ? this.host.viewUrl(full) : null;
-    this.fullLink.title = `Open the ${this.partialVideo ? 'partial' : 'full'} video in a new tab`;
-    this.fullDownloadLink.title = `Download the ${this.partialVideo ? 'partial' : 'full'} video`;
+    const which = this.partialVideo ? 'partial video' : this.previewVideo ? 'video so far' : 'full video';
+    this.fullLink.title = `Open the ${which} in a new tab`;
+    this.fullDownloadLink.title = `Download the ${which}`;
     for (const link of [this.fullLink, this.fullDownloadLink]) {
       link.hidden = !full;
       if (full) link.href = fullUrl;
@@ -1337,6 +1410,10 @@ export class TimelineEditor {
     this.renderStills(span);
     // AudioLanes guards typing by state/clip identity, including after its settings root is borrowed.
     this.audioLanes.render(span);
+    this.rulerEl.append(this.playheads[0]);
+    this.trackEl.append(this.playheads[1]);
+    this.audioLanes.lanes.append(this.playheads[2]);
+    this.placePlayhead(span);
     this.dialogue.render();
     this.chain.render();
   }

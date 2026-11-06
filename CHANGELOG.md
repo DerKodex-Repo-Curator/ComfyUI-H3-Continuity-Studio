@@ -4,6 +4,13 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+### Added
+
+- **Video so far.** Before every clip has rendered, the Viewer's switch reads **Video so far · 5/90** and plays the clips rendered from the first one on, joined with their bridges and the ticked audio clips (or H3's audio), so a timing problem against the soundtrack shows after a few clips instead of after the whole render. It is built in the background, grows as clips render, keeps playing from the same moment when it grows, and is saved as `<name>_sofar.mp4`.
+- **Playhead.** A playhead follows the playing video along the ruler, the clips and the audio lanes, holding at a cut while an inserted bridge plays. Click or drag the ruler to play from that moment.
+- **Detailed waveforms.** Audio clips draw their file's waveform at any zoom, decoded once per file in the browser, instead of a 256-point outline.
+- **Snap to beats.** **Detect beats** finds the beats of the audio lanes and draws them under the waveforms; with **Snap to beats** ticked, dragging a clip's edge lands it on the nearest beat (Shift drags freely).
+
 ## [0.13.1] - 2026-11-06
 
 ### Fixed

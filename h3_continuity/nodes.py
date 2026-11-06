@@ -641,7 +641,7 @@ def write_previews(folder, manifest, candidate, crf, spliced=(), soundtrack=()):
 
 
 def rebuild_full_video(folder, name, manifest, crf, spliced=(), soundtrack=(), *, managed_owner=None, replaced=(),
-                       background=False):
+                       background=False, kind="full"):
     """Joins the saved segments, each `spliced` bridge before the segment of its box and each `replaced` candidate in
     place of the frames it covers. With `soundtrack` clips (`audio_tracks.marked`), it plays them instead of the
     segments' audio, on the Timeline's clock: only spliced bridges add time.
@@ -649,11 +649,15 @@ def rebuild_full_video(folder, name, manifest, crf, spliced=(), soundtrack=(), *
     The segments are read and checked under SEQUENCE_LOCK, then encoded without it (unless the caller holds it), so
     status requests never wait for an encode. With `background`, the encode runs on its own thread and this returns at
     once; `full_video_state(folder)` says whether it is still building. The result is recorded only when the saved
-    segments are still the ones it joined."""
+    segments are still the ones it joined.
+    `kind` "preview" joins the first boxes rendered so far (the caller passes only those) into the video so far, which
+    is saved and recorded apart from the full video and builds on its own thread."""
     with SEQUENCE_LOCK:
         from .timeline_api.service import authorize_sequence
         authorize_sequence(name, managed_owner, "full_video")
         plan, note = _plan_full_video(folder, name, manifest, crf, spliced, soundtrack, replaced)
+        if plan is not None:
+            plan["kind"] = kind
         if plan is None:
             return note
         if background:
@@ -661,32 +665,35 @@ def rebuild_full_video(folder, name, manifest, crf, spliced=(), soundtrack=(), *
     return _finish_full_video(plan)
 
 
-# Background full-video builds by sequence folder: {"fingerprint", "thread", "error"}. One build per folder at a time.
+# Background builds by (sequence folder, kind): {"fingerprint", "thread", "error"}. One build of each kind per folder
+# at a time. Each kind is (the manifest key that records it, its file's suffix).
 _BUILDS = {}
 _BUILDS_LOCK = threading.Lock()
 BUILDING = "The full video is being built in the background."
+VIDEO_KINDS = {"full": ("full_video", "_full.mp4"), "preview": ("preview_video", "_sofar.mp4")}
 
 
-def full_video_state(folder):
+def full_video_state(folder, kind="full"):
     """{"building": bool, "fingerprint": the sources being built or last failed, "error": why the last build failed
-    or None} for sequence `folder`."""
+    or None} for sequence `folder`'s video of `kind`."""
     with _BUILDS_LOCK:
-        build = _BUILDS.get(os.path.normcase(folder)) or {}
+        build = _BUILDS.get((os.path.normcase(folder), kind)) or {}
         thread = build.get("thread")
         return {"building": bool(thread and thread.is_alive()), "fingerprint": build.get("fingerprint"),
                 "error": build.get("error")}
 
 
 def wait_full_video(folder, timeout=None):
-    """Waits for the background build of `folder`, if any (tests and shutdown)."""
+    """Waits for the background builds of `folder`, if any (tests and shutdown)."""
     with _BUILDS_LOCK:
-        thread = (_BUILDS.get(os.path.normcase(folder)) or {}).get("thread")
-    if thread is not None:
-        thread.join(timeout)
+        threads = [(_BUILDS.get((os.path.normcase(folder), kind)) or {}).get("thread") for kind in VIDEO_KINDS]
+    for thread in threads:
+        if thread is not None:
+            thread.join(timeout)
 
 
 def _start_full_video(plan):
-    key = os.path.normcase(plan["folder"])
+    key = (os.path.normcase(plan["folder"]), plan.get("kind", "full"))
     with _BUILDS_LOCK:
         build = _BUILDS.get(key) or {}
         thread = build.get("thread")
@@ -705,7 +712,7 @@ def _start_full_video(plan):
                 _BUILDS[key] = {"fingerprint": plan["fingerprint"], "thread": None, "error": error}
             _notify(plan["name"])
 
-        thread = threading.Thread(target=run, name=f"h3c-full-video-{plan['name']}", daemon=True)
+        thread = threading.Thread(target=run, name=f"h3c-{plan.get('kind', 'full')}-video-{plan['name']}", daemon=True)
         _BUILDS[key] = {"fingerprint": plan["fingerprint"], "thread": thread, "error": None}
         thread.start()
     return BUILDING
@@ -759,20 +766,30 @@ def _plan_full_video(folder, name, manifest, crf, spliced, soundtrack, replaced)
 
 def _finish_full_video(plan):
     folder, name = plan["folder"], plan["name"]
-    temporary = os.path.join(folder, f"{name}_full.{threading.get_ident()}.tmp.mp4")
-    written, note = media.build_full_video(os.path.join(folder, f"{name}_full.mp4"), plan["windows"], plan["audio"],
+    key, suffix = VIDEO_KINDS[plan.get("kind", "full")]
+    temporary = os.path.join(folder, f"{name}{suffix.removesuffix('.mp4')}.{threading.get_ident()}.tmp.mp4")
+    written, note = media.build_full_video(os.path.join(folder, f"{name}{suffix}"), plan["windows"], plan["audio"],
                                            plan["crf"], temporary=temporary)
     if written is None:
         return note
     record = {"file": os.path.basename(written), "sources": plan["fingerprint"]}
+    if key == "preview_video":
+        record["boxes"] = len(plan["segments"])
     with SEQUENCE_LOCK:
         latest = store.load_manifest(folder)
         joined = [entry for entry in latest["segments"] if 1 <= entry["index"] <= len(plan["segments"])]
         if (joined != plan["segments"] or store.full_video_fingerprint(
                 folder, {**latest, "segments": joined}, plan["bridges"], plan["sources"]) != plan["fingerprint"]):
             return "Full video not recorded: the saved boxes changed while it was built; it is built again from them."
-        latest["full_video"] = record
+        earlier = (latest.get(key) or {}).get("file")
+        latest[key] = record
         store.write_manifest(folder, latest)
-        plan["manifest"]["full_video"] = record
+        plan["manifest"][key] = record
+    if key == "preview_video" and earlier and earlier != record["file"] and earlier == os.path.basename(earlier):
+        # A video so far written beside a playing one (Windows keeps it open) is replaced by the next one, not kept.
+        try:
+            os.remove(os.path.join(folder, earlier))
+        except OSError:
+            pass
     heard = f", with the soundtrack from {plan['heard']}" if plan["heard"] else ""
     return f"Full video: {written}{heard}." + (f" {note}" if note else "")
