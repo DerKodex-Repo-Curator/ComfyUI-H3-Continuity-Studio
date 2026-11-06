@@ -1,6 +1,6 @@
 # Box audio range brainstorming
 
-**Status:** Design discussion; no implementation authorized
+**Status:** Design approved; implementation plan awaiting review and execution choice
 **Current Phase:** Box audio range design
 
 ## Phase Ledgers
@@ -16,50 +16,56 @@ Prior merged work: [P-H3 node ledger](phases/2026-11-04-ph3-image-still.md). Its
 ```json
 {
   "version": 1,
-  "revision": 29,
+  "revision": 31,
   "phase": "Box audio range design",
   "active_features": [
-    "BA1"
+    "BA2"
   ],
-  "focus_feature": "BA1",
-  "goal": "Brainstorm box-bound source-audio intervals and edit behavior with the user.",
-  "done_when": "Approach and behavior choices are reviewed and a written design is approved; no implementation in this task.",
-  "last_completed": "All behavior choices reviewed; fresh builder check returned one question, now resolved and documented.",
-  "in_progress": "Builder conflict resolved under explicit delegated judgment: block only playback-changing enable with existing inserted bridges. Written design ready for review; no implementation planned or started.",
+  "focus_feature": "BA2",
+  "goal": "Prepare and review an implementation plan for the approved box-bound audio design.",
+  "done_when": "Plan coverage and interfaces are checked, user reviews the plan and selects an execution method; no implementation in this planning task.",
+  "last_completed": "BA1 written design explicitly approved by user; source/behavior inspection and design documentation verification complete. BA2 five-task plan drafted and self-reviewed.",
+  "in_progress": "BA2 plan ready: five tasks and 25 steps; timing/schema, edits/persistence, conditioning/cues, owner-aware assembly, UI/integration. Plan review and execution choice pending.",
   "next": {
-    "action": "Verify and commit the design documents, then present the written design for user review and approval.",
-    "reason": "The brainstorming discussion is complete enough to review a concrete design; written approval is still pending and product work is outside this task."
+    "action": "Commit planning documents and ask the user to review the plan and choose Native or Subagent-driven execution.",
+    "reason": "The writing-plans handoff requires review of the concrete plan and an execution-method choice before implementation."
   },
   "files": [
     {
       "path": "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md",
-      "state": "Written design ready for user review; builder question resolved"
+      "state": "Approved design"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md",
+      "state": "Self-reviewed implementation plan awaiting user review and execution choice"
     },
     {
       "path": "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
-      "state": "Approved behavior, delegated edge-case decision and recovery state"
+      "state": "BA1 passing; BA2 active planning handoff"
     }
   ],
   "repository": {
     "branch": "design/box-audio-range-lock",
-    "head": "b7eaedcdba09",
+    "head": "ef8091ccd52d",
     "dirty": [
       "docs/roadmap-discipline/readiness-checklist.md",
+      "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md",
       "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md"
     ],
-    "dirty_hash": "1841032983d9ab2bd6d1eb1d9d54f21b9e1eeab5db78680a85542ea8a974c335"
+    "dirty_hash": "1113423d7330ed4a9d3ca5f0bb23bfd65755229838bcb7cb0caf24a979365a33"
   },
   "verification": {
-    "required": "Inspect source timing consumers and review behavior choices with the user; no product implementation.",
+    "required": "Self-review implementation-plan coverage, signatures, paths and test steps; obtain user plan review and execution-method choice.",
     "last_run": "Inspect source timing consumers and review behavior choices with the user; no product implementation.",
     "status": "not_run",
-    "detail": "Read-only builder check completed and sole question resolved; final documentation checks and commit next. No runtime tests or rendering."
+    "detail": "Plan structural/reference checks passed (5 tasks,25 steps); semantic self-review complete. User plan review/execution choice pending. No product tests or rendering."
   },
   "blockers": [],
   "reload": [
     "docs/roadmap-discipline/features.md",
     "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
-    "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md"
+    "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md",
+    "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md"
   ]
 }
 ```

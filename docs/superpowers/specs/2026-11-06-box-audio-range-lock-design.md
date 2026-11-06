@@ -1,6 +1,6 @@
 # Lock audio to boxes
 
-Status: ready for user review; written design approval is pending. Behavior choices were reviewed in the brainstorming conversation. Scope is design only on `design/box-audio-range-lock`, created from local `main` at `b7eaedc` before any file edits.
+Status: approved by the user on 2026-11-06 ("Approved"). Scope of this session remains design and implementation planning only on `design/box-audio-range-lock`, created from local `main` at `b7eaedc` before any file edits. Execution method and implementation authorization are still pending.
 
 Builder review found one product conflict: enabling on a lane whose selected continuous soundtrack already crosses an inserted bridge. Preserving its current box reference windows and introducing silence at that bridge cannot also preserve its assembled soundtrack. The user delegated this choice to the author. Resolution: block enabling only when it would change existing selected soundtrack playback, identify the conflicting bridge(s), and leave the Timeline untouched. This preserves the already-approved enabling invariant. There are no unresolved behavior questions from that review.
 

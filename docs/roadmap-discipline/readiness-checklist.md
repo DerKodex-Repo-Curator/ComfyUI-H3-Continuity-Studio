@@ -2,7 +2,7 @@
 
 ## Can Start
 
-- Current scope: brainstorm box-bound audio source ranges on fresh `design/box-audio-range-lock`, based on local main `b7eaedc`. Documentation only; no implementation, dependency setup, rendering or deployment. Inherited IO4 release instructions are historical to this worktree; recover the box-audio-range ledger and current Recovery State.
+- Current scope: approved box-bound audio design and implementation planning on `design/box-audio-range-lock`, based on local main `b7eaedc`. BA1 design approved; BA2 plan ready for user review and execution-method choice. Documentation only; no product implementation, dependency setup, rendering or deployment. Inherited IO4 release instructions are historical to this worktree; recover the box-audio-range ledger, approved design, plan and current Recovery State.
 
 - Current worktree: fix/incompatible-render-overlap at main 3b2d569. IO1-IO3 are implemented and verified (164JS +307Python, browser desktop/mobile, strict docs); recover features.md and incompatible-overlap ledger. Prior release entries below are historical. No live service or render changes.
 
@@ -21,5 +21,7 @@
 - `features.md` and the linked design ledger record investigation, open decisions and recommendations separately from approved decisions.
 
 ## Can Pick Up Next Steps
+
+- Current next step: review `docs/superpowers/plans/2026-11-06-box-audio-range-lock.md` with the user and record the execution method/authorization before product implementation. Native execution is recommended because the five tasks share timing interfaces. Older entries below are historical.
 
 - Recover the index and editing-history release ledger. GSP2 is historically complete (PR #19 and v0.7.0 verified). EH2 owns the current PR/merge/release; do not merge unrelated open PRs or change the live ComfyUI installation.
