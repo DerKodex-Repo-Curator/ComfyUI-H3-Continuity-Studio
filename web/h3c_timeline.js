@@ -3,11 +3,11 @@ import {generationControl,setGenerationControl} from './h3c_generation_archive.m
 // Mounts the H3 Timeline face on H3C_Timeline nodes, edits the Timeline in the Studio, and keeps its status in sync
 // with the server. ComfyUI permits caching .mjs helpers. Bump their ?v= revision together across web/ when they change.
 import { freshProject } from './h3c_new_project.mjs?v=20261007-new-project-in-place-1';
-import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261106-durable-1';
+import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261106-checkpoints-1';
 import { app } from '../../scripts/app.js';
 import {syncImageOutputs,compileImageOutputs} from './h3c_timeline_images.mjs?v=20261012-picture-outputs-1';
 import { api } from '../../scripts/api.js';
-import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
+import { mountSavedState, autosaveEnabled } from './h3c_saved_state.mjs?v=20261106-checkpoints-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
 import { DEFAULT_AHEAD, QueueFeed, feedNote, queueAhead } from './h3c_queue_feed.mjs?v=20261105-queue-feed-1';
@@ -1094,7 +1094,11 @@ export class TimelineHost {
     let timer;
     this.saved = {bar, ready,
       flush: async () => {await ready; await project.save();},
-      changed: () => {clearTimeout(timer); timer = setTimeout(() => project.save().catch(() => {}), 250);},
+      changed: () => {
+        clearTimeout(timer);
+        if(!autosaveEnabled(app)){label.textContent='Autosave off — save a checkpoint to keep your edits.';return;}
+        timer = setTimeout(() => {if(autosaveEnabled(app))project.save().catch(() => {});}, 250);
+      },
       destroy: () => {clearTimeout(timer); project.destroy(); bar.remove();}};
     if (reopen) this.openStudio(page, {link: false});
   }

@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 import {StoryLibrary} from '../../web/h3c_story_library.mjs?v=20261106-durable-1';
 import {groupStories} from '../../web/h3c_story_groups.mjs?v=20261106-durable-1';
 
+test('opening a named checkpoint restores an editable copy before loading', async () => {
+  const calls = [];
+  const l = new StoryLibrary({busy: () => false, save: async () => {},
+    request: async (url, body) => {calls.push([url, body]);return body ? {graph: 'editable'} : {checkpoint_name: 'Rendered'};},
+    load: async value => {calls.push(['load', value]);}});
+  await l.open('snapshot');
+  assert.deepEqual(calls, [['/h3c/stories?id=snapshot', undefined], ['/h3c/stories/restore', {id: 'snapshot'}],
+    ['load', {graph: 'editable', restored_checkpoint: true}]]);
+});
+
 const rows = [
   {id: 'a', graph: 'g1', title: 'Heavy things fall up', updated: 1, boxes: 3, status: 'saved'},
   {id: 'b', graph: 'g2', title: 'Heavy things fall up', updated: 2, boxes: 3, status: 'saved'},
