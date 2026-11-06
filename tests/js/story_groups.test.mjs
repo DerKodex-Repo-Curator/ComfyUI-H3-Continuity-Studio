@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {groupKey, groupLabel, groupStories, initialSelection, versionLabel} from '../../web/h3c_story_groups.mjs?v=20261104-story-groups-2';
+import {groupKey, groupLabel, groupStories, initialSelection, versionLabel} from '../../web/h3c_story_groups.mjs?v=20261106-durable-1';
 
 const row = (id, title, updated, extra = {}) => ({id, title, updated, boxes: 4, status: 'saved', ...extra});
 

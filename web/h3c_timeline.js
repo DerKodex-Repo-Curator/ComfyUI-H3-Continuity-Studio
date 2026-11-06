@@ -3,7 +3,7 @@ import {generationControl,setGenerationControl} from './h3c_generation_archive.m
 // Mounts the H3 Timeline face on H3C_Timeline nodes, edits the Timeline in the Studio, and keeps its status in sync
 // with the server. ComfyUI permits caching .mjs helpers. Bump their ?v= revision together across web/ when they change.
 import { freshProject } from './h3c_new_project.mjs?v=20261007-new-project-in-place-1';
-import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261104-story-groups-1';
+import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261106-durable-1';
 import { app } from '../../scripts/app.js';
 import {syncImageOutputs,compileImageOutputs} from './h3c_timeline_images.mjs?v=20261012-picture-outputs-1';
 import { api } from '../../scripts/api.js';
@@ -11,9 +11,9 @@ import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
 import { DEFAULT_AHEAD, QueueFeed, feedNote, queueAhead } from './h3c_queue_feed.mjs?v=20261105-queue-feed-1';
-import { studio } from './h3c_studio.mjs?v=20261105-queue-feed-1';
+import { studio } from './h3c_studio.mjs?v=20261106-durable-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261105-queue-feed-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261106-durable-1';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
@@ -1028,6 +1028,8 @@ export class TimelineHost {
         body: this.takesClient.statusBody(body),
       }).then((response) => response.json()));
       if (request === this.request && !this.removed) this.editor.setStatus(body === input() ? status : null);
+      // While the full video builds in the background, check again now and then in case its event is missed.
+      if (status?.full_video_building && request === this.request && !this.removed) this.schedule(15000);
     } catch (error) {
       if (request === this.request && !this.removed) this.editor.setStatus(body === input()
         ? { ok: false, error: `Status unavailable: ${error?.message ?? error}` } : null);
@@ -1208,6 +1210,10 @@ app.registerExtension({
     }
     api.addEventListener('execution_success', () => {
       for (const host of mounted) host.schedule(0);
+    });
+    // A full video built in the background is ready (or failed): ask for status again.
+    api.addEventListener('h3c-full-video', (event) => {
+      for (const host of mounted) if (host.requestBody().name === event.detail?.name) host.schedule(0);
     });
   },
   beforeRegisterNodeDef(nodeType, nodeData) {

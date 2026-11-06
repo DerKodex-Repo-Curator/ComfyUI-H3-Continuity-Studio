@@ -63,7 +63,7 @@ A **bridge** is a generated move between two rendered clips; see [Joins and brid
 | Button | Renders |
 | --- | --- |
 | **Render next** | The next clip that is not current, or once every clip is current, the next [bridge](../continuity/joins-and-bridges.md#bridges). |
-| **▶ Render N remaining** | Every clip that is not current, in Timeline order, then every bridge that needs a render. |
+| **▶ Render N remaining** | Every clip that has no saved take, in Timeline order, then every bridge that needs a render. [Outdated](#outdated-clips) clips keep their take; regenerate them one by one. |
 | **Generate clip N** | Only that clip. The number beside it sets how many [takes](../continuity/takes.md) to render (1 to 10), each with a new seed. |
 
 ComfyUI's **Run** button also works: each queued run renders the next clip that needs it.
@@ -76,6 +76,14 @@ A clip is **current** when its saved render still matches its prompt, seed, leng
     **Generate clip N** renders only that clip, with its saved neighbours as anchors. Re-rendering can put later clips that continue it, or remember frames from it, out of date; the Timeline marks them and says why, and nothing renders again until you ask.
 
 ## Where files go
+
+### Outdated clips
+
+A clip whose prompt, length, settings or references changed after it rendered, or whose remembered clip was rendered again, is **outdated**: it keeps its picture and video, is drawn with a dashed border and ⟳, and plays in the full video until you regenerate it. Its tooltip says what changed. **Render N remaining** does not re-render outdated clips; select one and press **Regenerate clip N** to update it.
+
+Saved takes stay with their clip, not its position: inserting, removing or moving a clip never hides the clips after it, and rendering a clip moves only that clip's earlier take to `takes/`. Takes of a clip you removed stay in the folder and come back with the clip (for example through Undo).
+
+If a status check fails or times out, the Studio keeps showing the clips it last knew about, with a note, instead of showing them as unrendered.
 
 Renders are written to `output/h3_sequences/<name>/`: one MP4, one latent file (`.safetensors`) and a last-frame PNG per clip, a manifest, the full video, and a `takes/` folder for earlier renders. Keep the folder together; the latents are what let a later clip continue exactly.
 

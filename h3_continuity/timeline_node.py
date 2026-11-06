@@ -90,9 +90,13 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
     """`known` holds the node settings a bridge compares, None where they are unknown."""
     with continuity.SEQUENCE_LOCK:
         segments = manifest["segments"]
-        done = {entry["index"] - 1 for entry in segments
-                if 1 <= entry["index"] <= len(parsed.boxes) and is_done(entry["index"] - 1, entry)}
-        next_index = next((i for i in range(len(parsed.boxes)) if i not in done), None)
+        count = len(parsed.boxes)
+        placed = store.placed(manifest, count)
+        done = {entry["index"] - 1 for entry in placed if is_done(entry["index"] - 1, entry)}
+        # A box with a saved take keeps it in the Timeline and the full video even when it is outdated; Render only
+        # renders the boxes that have none.
+        kept = {entry["index"] - 1 for entry in placed if store.has_segment_latents(folder, entry)} - done
+        next_index = next((i for i in range(count) if i not in done and i not in kept), None)
         known = known or {}
         keys = bridges.splice(parsed, known)
         spliced = bridges.spliced(folder, manifest, keys) if keys else []
@@ -104,9 +108,10 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
                 return None
             return _view(name, filename, entry.get("created", ""))
 
-        contiguous = [e["index"] for e in segments] == list(range(1, len(segments) + 1))
-        current = bool(segments) and len(done) == len(segments) == len(parsed.boxes)
+        current = bool(count) and len(placed) == count and next_index is None
+        joined = {**manifest, "segments": placed}
         full_video = None
+        building = False
         export_error = ""
         try:
             soundtrack = audio_tracks.marked(parsed, manifest.get('reference_audio'))
@@ -115,7 +120,7 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
             soundtrack = None
         if unchecked and not export_error:
             export_error = unchecked
-        if contiguous and current and materialize and not unchecked:
+        if current and materialize and not unchecked:
             from .timeline_api.service import authorize_sequence
             authorize_sequence(name, managed_owner, "full_video")
 
@@ -124,15 +129,19 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
                     sources = audio_tracks.soundtrack_sources(soundtrack)
                 except ValueError:
                     return None
-                return store.current_full_video(folder, manifest, [*spliced, *replaced], sources)
+                return store.current_full_video(folder, joined, [*spliced, *replaced], sources)
 
             record = saved_full_video() if soundtrack is not None else None
             if record is None and soundtrack is not None:
+                # Built on its own thread: a status request never waits for an encode of every box.
                 try:
-                    export_error = continuity.rebuild_full_video(folder, name, manifest, FULL_VIDEO_CRF, spliced, soundtrack,
-                                                                managed_owner=managed_owner, replaced=replaced)
+                    note = continuity.rebuild_full_video(folder, name, joined, FULL_VIDEO_CRF, spliced, soundtrack,
+                                                         managed_owner=managed_owner, replaced=replaced, background=True)
                 except (OSError, ValueError) as error:
-                    export_error = f"Full video could not be saved: {error}"
+                    note = f"Full video could not be saved: {error}"
+                building = continuity.full_video_state(folder)["building"]
+                if not building and note != continuity.BUILDING:
+                    export_error = note
                 record = saved_full_video()
             if record:
                 full_video = _view(name, record["file"], record["sources"])
@@ -146,7 +155,9 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
                 note = f"Partial video could not be saved: {error}"
             export_error = export_error or note
         status = rules.status_payload(name, parsed, segments, next_index, thumb, full_video,
-                                      store.sequence_seconds(manifest, spliced), done)
+                                      store.sequence_seconds(joined, spliced), done, kept)
+        if building and full_video is None:
+            status["full_video_building"] = True
         if export_error and full_video is None:
             status["export_error"] = export_error
         if partial:
@@ -182,8 +193,9 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
             status["replacement_unavailable"] = replacement.UNAVAILABLE
         context = known.get("context_frames")
         checks = box_checks.load(folder)
+        placed = {entry["index"]: entry for entry in store.placed(manifest, len(parsed.boxes))}
         for index, (item, box) in enumerate(zip(status["boxes"], parsed.boxes)):
-            entry = next((e for e in segments if (e.get("timeline") or {}).get("box") == box.id), None)
+            entry = placed.get(index + 1)
             if entry and entry.get("video"):
                 video = entry["video"]
                 item["video"] = {"file": _view(name, video["file"], entry.get("created", "")),
@@ -243,6 +255,16 @@ def read_request(body):
     known = body.get("settings") or {}
     context = known.get("context_frames")
     return parsed, folder, known, None if context in (None, "") else int(context)
+
+
+def saved_manifest(folder, parsed, persist=False):
+    """The sequence's manifest with every saved segment numbered by its box's place in `parsed` (store.align), so a
+    box that moved keeps its take. With `persist`, a changed numbering is written back."""
+    with continuity.SEQUENCE_LOCK:
+        manifest = store.load_manifest(folder)
+        if store.align(manifest, [box.id for box in parsed.boxes]) and persist and os.path.isdir(folder):
+            store.write_manifest(folder, manifest)
+        return manifest
 
 
 def box_problem(parsed, index, entry, folder, entries, known, context, is_done, files=None):
@@ -306,7 +328,7 @@ def request_status(body, *, materialize=True, managed_owner=None):
                 authorize_sequence(body.get("name"), managed_owner, "full_video")
             parsed, folder, known, context = read_request(body)
             name = os.path.basename(folder)
-            manifest = store.load_manifest(folder)
+            manifest = saved_manifest(folder, parsed, persist=materialize)
             entries = {entry["index"]: entry for entry in manifest["segments"]}
             is_done, reasons = status_test(parsed, folder, entries, known, context)
             status = _status(name, folder, parsed, manifest, is_done, reasons, materialize=materialize, managed_owner=managed_owner,
@@ -427,7 +449,7 @@ class H3C_Timeline(io.ComfyNode):
         value = (store.manifest_fingerprint(folder), [ref.get("stamp") for ref in parsed.refmods])
         sources = {source + 1 for index in range(len(parsed.boxes)) for source, _, _ in rules.memory_sources(parsed, index)}
         if sources:
-            entries = {entry["index"]: entry for entry in store.load_manifest(folder)["segments"]}
+            entries = {entry["index"]: entry for entry in saved_manifest(folder, parsed)["segments"]}
             stamps = []
             for index in sorted(sources):
                 entry = entries.get(index)
@@ -500,7 +522,7 @@ class H3C_Timeline(io.ComfyNode):
         images, audios = reference_replacements.media(parsed, images, audios, loaded)
         folder = store.sequence_dir(continuity.sequences_root(), name)
         name = os.path.basename(folder)
-        manifest = store.load_manifest(folder)
+        manifest = saved_manifest(folder, parsed)
         with continuity.SEQUENCE_LOCK:
             records = manifest.get('reference_audio', {})
             if audio_tracks.snapshot_replacements(parsed, {**source_audios, **audios}, name,
@@ -560,7 +582,10 @@ class H3C_Timeline(io.ComfyNode):
             return ((record.get("mode") == box.slots.mode and record.get("media") == hashes[index].of(box.slots))
                     or (record.get("mode") != "ref2va" and box.slots.mode != "ref2va"))
 
-        next_index = parsed.render_box - 1 if parsed.render_box is not None else rules.next_box(len(parsed.boxes), by_index, is_done)
+        # Render renders the boxes without a saved take; an outdated box is rendered again only when selected.
+        next_index = (parsed.render_box - 1 if parsed.render_box is not None
+                      else rules.next_box(len(parsed.boxes), by_index,
+                                          lambda index, entry: store.has_segment_latents(folder, entry)))
         known = bridges.settings(width, height, context, carry_audio, audio_context_frames=audio_context_frames)
         replacing = parsed.render_bridge in {item["before"] for item in parsed.replacements}
         if (parsed.render_bridge is not None and not replacing) or (next_index is None and parsed.bridges):
@@ -573,7 +598,8 @@ class H3C_Timeline(io.ComfyNode):
             else:
                 chosen = next((state for state in found if state.status == "next"), None)
             if chosen is not None:
-                complete = len(done) == len(parsed.boxes) and not any(index > len(parsed.boxes) for index in by_index)
+                complete = all(i + 1 in by_index and store.has_segment_latents(folder, by_index[i + 1])
+                               for i in range(len(parsed.boxes)))
                 return cls.bridge(chosen, parsed, name, folder, manifest, by_index, is_done, known, complete,
                                   clip, vae, audio_vae, ref_image_size, negative)
         if replacing or (next_index is None and parsed.replacements):
@@ -678,8 +704,8 @@ class H3C_Timeline(io.ComfyNode):
                 # Rebuild this end from the accepted guide, not the obsolete neighbor's frozen overlap.
                 segment.preserve_following = True
             elif same_box and not cut and (references_changed or not references_match(next_index + 1, following)):
-                segment.preserve_following = False
-                box.notes.append("References changed; following boxes will be moved to takes/ and rebuilt.")
+                box.notes.append("References changed; the boxes that continue this one are outdated until you "
+                                 "regenerate them.")
             elif compatible and not cut:
                 ending = following["context_frames"]
                 next_video, next_audio = store.load_segment_latents(folder, following)
@@ -694,8 +720,7 @@ class H3C_Timeline(io.ComfyNode):
             elif parsed.render_box is not None and same_box and not cut:
                 raise ValueError(f"H3 Timeline: box {next_index + 2} has no compatible saved overlap; "
                                  "render the remaining boxes to rebuild continuity")
-            elif parsed.render_box is None:
-                segment.preserve_following = False
+        segment.box_order = [item.id for item in parsed.boxes]
         segment.description = box.prompt
         segment.timeline = {"box": box.box.id, "layout": box.layout, "mode": box.slots.mode,
                             "settings": box.settings, "media": hashes[next_index].of(box.slots),
@@ -705,9 +730,10 @@ class H3C_Timeline(io.ComfyNode):
             segment.timeline["played"] = box.frames
         if rules.text_chain(parsed, next_index, context):
             segment.timeline["text_chain"] = rules.text_chain(parsed, next_index, context)
-        segment.timeline_complete = (not any(index > len(parsed.boxes) for index in by_index)
-                                     and all(i == next_index or (i + 1 in by_index and is_done(i, by_index[i + 1]))
-                                             for i in range(len(parsed.boxes))))
+        # Saving the last box without a take starts the full video; outdated boxes play in it until regenerated.
+        segment.timeline_complete = all(i == next_index or (i + 1 in by_index
+                                                            and store.has_segment_latents(folder, by_index[i + 1]))
+                                        for i in range(len(parsed.boxes)))
         if rules.plate_chain(parsed, next_index):
             segment.timeline["plate_chain"] = rules.plate_chain(parsed, next_index)
         if memories:
@@ -719,9 +745,7 @@ class H3C_Timeline(io.ComfyNode):
         if parsed.replacements:
             segment.timeline["replace"] = selections(folder, parsed, manifest, by_index, is_done, known)
         attach_soundtrack(segment.timeline, parsed, manifest)
-        saved = max(by_index, default=0)
-        if segment.preserve_following:
-            saved = next_index + 1 if next_index + 1 in by_index else 0
+        saved = next_index + 1 if next_index + 1 in by_index else 0
         info = describe(box, len(parsed.boxes), saved, segment.preserve_following)
         if ending:
             info += f" Ending frozen to the first {ending} frames of box {next_index + 2}; later boxes are kept."
@@ -748,6 +772,7 @@ class H3C_Timeline(io.ComfyNode):
         latent, segment.ending_video, segment.ending_audio = latents.build_ending(
             latent, next_video, next_audio, frozen, carry_audio, segment.context_frames)
         segment.preserve_following = True
+        segment.box_order = [item.id for item in parsed.boxes]
         segment.description = plan.prompt
         segment.timeline = {"bridge": state.bridge["before"], "layout": plan.layout, "settings": plan.settings,
                             "from": bridges.link(folder, before), "to": bridges.link(folder, after),
@@ -800,41 +825,29 @@ class H3C_Timeline(io.ComfyNode):
 
     @classmethod
     def finish(cls, name, folder, parsed, manifest, is_done, known=None):
-        """Every box is rendered: trim segments after the last box and bridges the Timeline no longer has, and
-        block the sampling nodes."""
+        """Every box has a saved take: move bridges the Timeline no longer has to takes/, start the full video in the
+        background and block the sampling nodes. Takes of boxes the Timeline no longer has stay where they are, so
+        the box finds its take again when it comes back."""
         with continuity.SEQUENCE_LOCK:
             from .timeline_api.service import authorize_sequence, sequence_owner
             authorize_sequence(name, sequence_owner(cls), "conditioning")
             latest = store.load_manifest(folder)
+            aligned = store.align(latest, [box.id for box in parsed.boxes])
             if latest["segments"] != manifest["segments"]:
                 raise ValueError("H3 Timeline: saved boxes changed during completion; queue again to use their current versions")
             manifest = latest
             count = len(parsed.boxes)
-            trailing = [entry["index"] for entry in manifest["segments"] if entry["index"] > count]
             info = ("The box" if count == 1 else f"All {count} boxes") + f" of '{name}' {'is' if count == 1 else 'are'} rendered"
             now = datetime.datetime.now()
-            if trailing:
-                store.archive_from(folder, manifest, count + 1, now)
-                store.write_manifest(folder, manifest)
-                info += (f"; moved segment{'s' if len(trailing) > 1 else ''} {', '.join(map(str, trailing))} after the "
-                         "last box to takes/")
             moved = bridges.keep(folder, manifest, {bridge["before"] for bridge in parsed.bridges}, now)
-            if moved:
+            if moved or aligned:
                 store.write_manifest(folder, manifest)
+            if moved:
                 info += f"; moved {moved} bridge{'s' if moved > 1 else ''} the Timeline no longer has to takes/"
             keys = bridges.splice(parsed, known or {})
             spliced = bridges.spliced(folder, manifest, keys) if keys else []
-            info += f" ({store.sequence_seconds(manifest, spliced):.1f} s). Nothing to generate."
-            if trailing:
-                soundtrack = {}
-                attach_soundtrack(soundtrack, parsed, manifest)
-                done = {entry["index"] - 1 for entry in manifest["segments"]
-                        if entry["index"] <= count and is_done(entry["index"] - 1, entry)}
-                _, replaced, unchecked = replacement_states(folder, parsed, manifest, done, known or {})
-                info += " " + (soundtrack['export_error'] if 'export_error' in soundtrack else unchecked or
-                               continuity.rebuild_full_video(folder, name, manifest, FULL_VIDEO_CRF, spliced,
-                                  soundtrack.get('soundtrack', ()), managed_owner=sequence_owner(cls),
-                                  replaced=replaced))
+            joined = {**manifest, "segments": store.placed(manifest, count)}
+            info += f" ({store.sequence_seconds(joined, spliced):.1f} s). Nothing to generate."
             blocked = ExecutionBlocker(None)
             status = _status(name, folder, parsed, manifest, is_done, materialize=True, known=known, managed_owner=sequence_owner(cls))
             return io.NodeOutput(blocked, blocked, blocked, blocked, blocked, blocked, info, ui={"h3c_timeline": [status]})

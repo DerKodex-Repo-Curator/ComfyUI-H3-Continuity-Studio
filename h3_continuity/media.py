@@ -179,72 +179,135 @@ def _replace(temporary, path):
         return alternative, f"{os.path.basename(path)} is open in another program, so this version is {os.path.basename(alternative)}."
 
 
-def build_full_video(path, videos, audio, crf, size=None):
+def _aspect(width, height):
+    return width / height
+
+
+def _source_frames(path, start, frames):
+    """How many frames a window of video `path` from `start` holds: `frames`, or the rest of the video."""
+    if frames is not None:
+        return frames
+    with av.open(path) as container:
+        count = sum(1 for packet in container.demux(video=0) if packet.pts is not None and packet.size)
+    return max(0, count - start)
+
+
+def _picks(start, count, source_rate, rate, begin):
+    """(source frame numbers a window plays at the join's `rate`, the running clock after it). The window holds `count`
+    frames from `start` at `source_rate` and begins at `begin` seconds; frames are rounded on the running clock, so
+    no window drifts, and a slower video repeats frames."""
+    end = begin + Fraction(count) / Fraction(source_rate)
+    wanted = round(end * Fraction(rate)) - round(begin * Fraction(rate))
+    return [start + min(count - 1, int((number + Fraction(1, 2)) * Fraction(source_rate) / Fraction(rate)))
+            for number in range(wanted)], end
+
+
+def build_full_video(path, videos, audio, crf, size=None, temporary=None):
     """Concatenate segment videos into `path` with `audio` = (waveform, sample_rate) or None. Each video is a path, or
-    (path, first frame, frames) for a window of it. With `size` = (width, height), videos of other sizes are scaled to
-    it instead of refused.
+    (path, first frame, frames) for a window of it.
+    Videos may differ in frame rate, size, colour space and codec, as long as they share an aspect ratio: the join takes
+    the best of them (the highest frame rate, repeating frames of slower videos; HDR when any video is HDR, converting
+    SDR into it; the largest size, or `size` = (width, height) when given). Every window keeps its duration.
     Packets are copied when every file has the same encoding and every window starts at its first frame (segments
     have no B-frames, so a prefix is its first packets); otherwise the frames are re-encoded in the first video's
     codec, so a sequence saved as HEVC stays HEVC.
     Returns (written path or None, note)."""
+    from . import color
     windows = [(video, 0, None) if isinstance(video, str) else tuple(video) for video in videos]
     signatures = [_signature(video) for video, _, _ in windows]
     first = signatures[0]
-    if any(signature[4] != first[4] or (size is None and signature[2:4] != first[2:4]) for signature in signatures):
-        return None, "Full video skipped: the segment videos differ in size or frame rate."
-    if any(signature[5] != first[5] for signature in signatures):
-        return None, "Full video skipped: the segment videos differ in color space."
-    width, height = size or first[2:4]
-    copy = (all(signature[:2] == first[:2] and signature[2:4] == (width, height) for signature in signatures)
+    rate = max(signature[4] for signature in signatures)
+    space = color.target_space([signature[5] for signature in signatures])
+    width, height = size or max((signature[2:4] for signature in signatures), key=lambda pair: pair[0] * pair[1])
+    if any(abs(_aspect(*signature[2:4]) - _aspect(width, height)) > 0.01 * _aspect(width, height)
+           for signature in signatures):
+        return None, "Full video skipped: the segment videos have different aspect ratios."
+    copy = (all(signature[:2] == first[:2] and signature[2:4] == (width, height) and signature[4:] == first[4:]
+                for signature in signatures)
             and all(start == 0 for _, start, _ in windows))
-    temporary = path + ".tmp.mp4"
-    with av.open(windows[0][0]) as template, av.open(temporary, mode="w") as container:
-        color_space = first[5]
-        if copy:
-            video_stream = container.add_stream_from_template(template.streams.video[0], opaque=True)
-            if first[0] == "hevc":
-                video_stream.codec_tag = "hvc1"  # the mp4 muxer would otherwise write hev1, which Apple refuses
-        else:
-            video_stream = _add_video_stream(container, first[4], width, height, crf, color_space,
-                                             CODEC_OF_STREAM.get(first[0], "H.264"))
-        audio_stream = _add_audio_stream(container, *audio) if audio is not None else None
-        offset, encoded = Fraction(0), 0
-        for video, start, frames in windows:
-            end = None if frames is None else start + frames
-            with av.open(video) as source_container:
-                source = source_container.streams.video[0]
-                if not copy:
-                    for number, frame in enumerate(source_container.decode(source)):
-                        if end is not None and number >= end:
-                            break
-                        if number >= start:
-                            if (frame.width, frame.height) != (width, height):
+    temporary = temporary or path + ".tmp.mp4"
+    converted = set()
+    try:
+        with av.open(windows[0][0]) as template, av.open(temporary, mode="w") as container:
+            if copy:
+                video_stream = container.add_stream_from_template(template.streams.video[0], opaque=True)
+                if first[0] == "hevc":
+                    video_stream.codec_tag = "hvc1"  # the mp4 muxer would otherwise write hev1, which Apple refuses
+            else:
+                video_stream = _add_video_stream(container, rate, width, height, crf, space,
+                                                 CODEC_OF_STREAM.get(first[0], "H.264"))
+            audio_stream = _add_audio_stream(container, *audio) if audio is not None else None
+            offset, encoded, clock = Fraction(0), 0, Fraction(0)
+            for (video, start, frames), signature in zip(windows, signatures):
+                with av.open(video) as source_container:
+                    source = source_container.streams.video[0]
+                    if not copy:
+                        source_space = signature[5]
+                        picks, clock = _picks(start, _source_frames(video, start, frames), signature[4], rate, clock)
+                        convert = source_space != space
+                        if convert:
+                            converted.add(os.path.basename(video))
+                        position = 0
+                        for number, frame in enumerate(source_container.decode(source)):
+                            if position >= len(picks):
+                                break
+                            if number < picks[position]:
+                                continue
+                            if convert:
+                                array = frame.to_ndarray(format="rgb48le", src_colorspace="bt2020"
+                                                         if source_space in color.HDR_SPACES else "itu709")
+                                rgb = color.convert(torch.from_numpy(array.astype(np.float32) / 65535), source_space, space)
+                                frame = av.VideoFrame.from_ndarray((rgb * 65535).round().numpy().astype(np.uint16),
+                                                                   format="rgb48le")
+                                frame = frame.reformat(width=width, height=height, format=video_stream.pix_fmt,
+                                                       dst_colorspace=video_stream.codec_context.colorspace)
+                                set_video_color_properties(frame, space)
+                            elif (frame.width, frame.height) != (width, height):
                                 frame = frame.reformat(width=width, height=height)
-                            # a decoded frame keeps its source time base, so numbering it there collapses the times
-                            frame.pts, frame.time_base = encoded, 1 / first[4]
-                            encoded += 1
-                            container.mux(video_stream.encode(frame))
-                    continue
-                origin, count = None, 0
-                for packet in source_container.demux(source):
-                    if packet.pts is None or packet.size == 0:
+                            while position < len(picks) and picks[position] == number:
+                                # each output frame gets its own object: a decoded frame keeps its source time base,
+                                # so it is renumbered on the join's clock
+                                out = frame if position + 1 >= len(picks) or picks[position + 1] != number \
+                                    else frame.reformat(format=frame.format.name)
+                                out.pts, out.time_base = encoded, 1 / rate
+                                encoded += 1
+                                position += 1
+                                container.mux(video_stream.encode(out))
                         continue
-                    if end is not None and count >= end:
-                        break
-                    if origin is None:
-                        origin = packet.pts
-                    shift = offset / packet.time_base - origin
-                    packet.pts = round(packet.pts + shift)
-                    packet.dts = round(packet.dts + shift) if packet.dts is not None else packet.pts
-                    packet.stream = video_stream
-                    container.mux(packet)
-                    count += 1
-                offset += Fraction(count) / source.average_rate
-        if not copy:
-            container.mux(video_stream.encode(None))
-        if audio_stream is not None:
-            _mux_audio(container, audio_stream, *audio)
+                    origin, count = None, 0
+                    end = None if frames is None else start + frames
+                    for packet in source_container.demux(source):
+                        if packet.pts is None or packet.size == 0:
+                            continue
+                        if end is not None and count >= end:
+                            break
+                        if origin is None:
+                            origin = packet.pts
+                        shift = offset / packet.time_base - origin
+                        packet.pts = round(packet.pts + shift)
+                        packet.dts = round(packet.dts + shift) if packet.dts is not None else packet.pts
+                        packet.stream = video_stream
+                        container.mux(packet)
+                        count += 1
+                    offset += Fraction(count) / source.average_rate
+            if not copy:
+                container.mux(video_stream.encode(None))
+            if audio_stream is not None:
+                _mux_audio(container, audio_stream, *audio)
+    except BaseException:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+        raise
     written, note = _replace(temporary, path)
     if not copy:
-        note = ("Segment encodings differ, so the full video was re-encoded. " + note).strip()
+        details = []
+        if len({signature[4] for signature in signatures}) > 1:
+            details.append(f"clips joined at {float(rate):g} fps")
+        if converted:
+            details.append(f"{len(converted)} clip{'s' if len(converted) > 1 else ''} converted to {space}")
+        if len({signature[2:4] for signature in signatures}) > 1 or size:
+            details.append(f"scaled to {width}x{height}")
+        joined = ("Segment encodings differ, so the full video was re-encoded"
+                  + (f" ({', '.join(details)})" if details else "") + ".")
+        note = (joined + " " + note).strip()
     return written, note

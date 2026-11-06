@@ -77,7 +77,7 @@ A bridge after an exact clip that drops frames, or one whose prompt and the shar
 | Button | Renders |
 | --- | --- |
 | **Render bridge** | Only this bridge, keeping both clips. |
-| **▶ Render N remaining** | Every clip that isn't rendered, then every bridge that needs a render and has no problem, in Timeline order. A replacement counts once its region is confirmed and it has no candidate for its prompt and seed. |
+| **▶ Render N remaining** | Every clip that has no saved take, then every bridge that needs a render and has no problem, in Timeline order. A replacement counts once its region is confirmed and it has no candidate for its prompt and seed. |
 | **Render next** | The next clip, or once every clip is rendered, the next bridge or confirmed replacement. |
 | **Play** | The bridge's take in the player, labelled "Bridge before box 4". |
 

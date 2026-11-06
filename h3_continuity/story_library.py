@@ -176,10 +176,21 @@ def _legacy():
             continue
 
 
+def _rendered(sequence, counts):
+    """How many saved segments with a video sequence folder `sequence` holds (cached per listing); None when unknown."""
+    if sequence not in counts:
+        try:
+            manifest = store.load_manifest(store.sequence_dir(nodes.sequences_root(), sequence))
+            counts[sequence] = sum(1 for entry in manifest.get('segments', []) if entry.get('video'))
+        except (OSError, ValueError, TypeError, AttributeError):
+            counts[sequence] = None
+    return counts[sequence]
+
+
 def listing():
     with saved_state.LOCK:
         _legacy()
-        rows = []
+        rows, counts = [], {}
         for path in Path(folder_paths.get_system_user_directory('h3c_state')).glob('*.json'):
             try:
                 raw = _read_file(path).get('value')
@@ -193,7 +204,8 @@ def listing():
                 line = fields.get((state.get('timeline'), 'timeline'), {})
                 rows.append({'id': path.stem, 'graph': value['graph'], 'title': state.get('title') or result.get('title') or 'Untitled story',
                              'updated': value['updated'], 'boxes': len(line.get('boxes') or result.get('boxes') or result.get('outline') or []),
-                             'status': 'Deletion incomplete — retry' if saved_state.deleted(value['graph']) else view.get('state', 'saved'), 'sequence': value['sequence'], 'revision': value.get('workflow_revision', 0)})
+                             'status': 'Deletion incomplete — retry' if saved_state.deleted(value['graph']) else view.get('state', 'saved'), 'sequence': value['sequence'], 'revision': value.get('workflow_revision', 0),
+                             'rendered': _rendered(value['sequence'], counts)})
             except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 continue
         return sorted(rows, key=lambda row: row['updated'], reverse=True)

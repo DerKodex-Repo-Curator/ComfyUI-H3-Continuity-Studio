@@ -13,8 +13,8 @@ import { mountSavedState } from './h3c_saved_state.mjs?v=20261018-story-fork-1';
 import { migrateStoryDescriptionInputs, migrateSerializedStoryDescriptionInputs } from './h3c_story_inputs.mjs?v=20261003-story-inputs-2';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import * as story from './h3c_story_model.mjs?v=20261011-reference-preparation-1';
-import { StoryPanel } from './h3c_story_panel.mjs?v=20261104-story-groups-2';
-import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261104-story-groups-1';
+import { StoryPanel } from './h3c_story_panel.mjs?v=20261106-durable-1';
+import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261106-durable-1';
 import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=20261014-story-library-1';
 import { parseState, serialize } from './h3c_timeline_model.mjs?v=20261104-flf-audio-1';
 
@@ -377,9 +377,10 @@ class StoryHost {
         throw Error('The open story changed while loading. Your edits were kept; load again.');
       if(this.libraryBusy())throw Error('Wait for writing, uploads and rendering to finish before switching stories.');
       const samePair=graph._nodes.filter(node=>['H3C_Story','H3C_Timeline'].includes(node.type)).length===2;
-      this.applyGeneration(content,content.renders&&samePair?{graphId:value.graph,revision:value.workflow_revision,libraryId:value.id}:{});
+      // Continue the saved story itself (its library entry and autosaves), never a new copy of it.
+      this.applyGeneration(content,samePair?{graphId:value.graph,revision:value.workflow_revision,libraryId:value.id}:{});
       this.openStudio();
-      this.panel.say(content.renders?'Story loaded into this workflow.':'Story loaded into this workflow with its frame guides. Saved renders and still candidates were skipped because the wiring or settings differ.');
+      this.panel.say(content.wiring?'Story loaded into this workflow.':'Story loaded into this workflow with its rendered clips. The wiring of this workflow differs from the saved one; clips whose render settings changed show as outdated.');
     } finally {resume();}
   }
 
