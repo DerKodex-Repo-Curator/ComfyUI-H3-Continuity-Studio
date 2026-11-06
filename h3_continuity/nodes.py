@@ -781,15 +781,18 @@ def _finish_full_video(plan):
         if (joined != plan["segments"] or store.full_video_fingerprint(
                 folder, {**latest, "segments": joined}, plan["bridges"], plan["sources"]) != plan["fingerprint"]):
             return "Full video not recorded: the saved boxes changed while it was built; it is built again from them."
-        earlier = (latest.get(key) or {}).get("file")
         latest[key] = record
         store.write_manifest(folder, latest)
         plan["manifest"][key] = record
-    if key == "preview_video" and earlier and earlier != record["file"] and earlier == os.path.basename(earlier):
-        # A video so far written beside a playing one (Windows keeps it open) is replaced by the next one, not kept.
-        try:
-            os.remove(os.path.join(folder, earlier))
-        except OSError:
-            pass
+    if key == "preview_video":
+        # A video so far written beside a playing one (Windows keeps it open) gets a dated name; every earlier one is
+        # removed once nothing holds it, so only the recorded one is kept.
+        stem = f"{name}{suffix.removesuffix('.mp4')}"
+        for file in os.listdir(folder):
+            if file != record["file"] and (file == f"{stem}.mp4" or (file.startswith(f"{stem}_") and file.endswith(".mp4"))):
+                try:
+                    os.remove(os.path.join(folder, file))
+                except OSError:
+                    pass
     heard = f", with the soundtrack from {plan['heard']}" if plan["heard"] else ""
     return f"Full video: {written}{heard}." + (f" {note}" if note else "")

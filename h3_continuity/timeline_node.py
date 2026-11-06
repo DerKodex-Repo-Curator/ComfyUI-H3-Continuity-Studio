@@ -146,6 +146,15 @@ def video_so_far(name, folder, parsed, manifest, playable, spliced, replaced, so
             note = ""
         else:
             note = note.replace("Full video", "Video so far", 1)
+    if record is None and (building or note == ""):
+        # While the next one builds, the last one keeps playing, so the Studio can swap it in at the same moment.
+        earlier = manifest.get("preview_video") or {}
+        file, shown = earlier.get("file"), min(int(earlier.get("boxes") or 0), count)
+        if shown and file == os.path.basename(file) and os.path.isfile(os.path.join(folder, file)):
+            older = {**manifest, "segments": store.placed(manifest, shown)}
+            within = [entry for entry in inside if indices.get(entry.get("box"), shown) < shown]
+            replacing = [entry for entry in kept if indices.get(entry.get("box"), shown) < shown]
+            return {"record": earlier, "boxes": shown, "clock": _clock(parsed, older, within, replacing)}, True, ""
     if record is None:
         return None, building, note
     return {"record": record, "boxes": count, "clock": _clock(parsed, joined, inside, kept)}, building, ""
@@ -238,7 +247,7 @@ def _status(name, folder, parsed, manifest, is_done, reasons=None, materialize=F
         if so_far:
             status["preview_video"] = {"file": _view(name, so_far["record"]["file"], so_far["record"]["sources"]),
                                        "boxes": so_far["boxes"], "total": count, "clock": so_far["clock"]}
-        elif so_far_building:
+        if so_far_building:
             status["preview_video_building"] = True
         if so_far_note:
             status["preview_error"] = so_far_note

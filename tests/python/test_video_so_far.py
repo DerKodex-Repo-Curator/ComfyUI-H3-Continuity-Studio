@@ -80,6 +80,26 @@ class VideoSoFarTest(unittest.TestCase):
         self.manifest["segments"][0]["index"] = 2
         self.assertNotIn("preview_video", self.built()[1], "box a has no take, so nothing plays from the start")
 
+    def test_the_last_one_plays_while_the_next_builds(self):
+        rendered = self.manifest["segments"]
+        self.manifest["segments"] = rendered[:1]
+        self.assertEqual(self.built()[1]["preview_video"]["boxes"], 1)
+        self.manifest["segments"] = rendered
+        with mock.patch.object(nodes, "rebuild_full_video", return_value=nodes.BUILDING), \
+                mock.patch.object(nodes, "full_video_state", return_value={"building": True}):
+            status = self.status()
+        self.assertTrue(status["preview_video_building"])
+        self.assertEqual(status["preview_video"]["boxes"], 1, "box b joins once its build is saved")
+        self.assertEqual(status["preview_video"]["clock"], [[0, 22, 0, 1]])
+        self.assertEqual(self.built()[1]["preview_video"]["boxes"], 2)
+
+    def test_only_the_recorded_video_so_far_is_kept(self):
+        stale = os.path.join(self.folder, "seq_sofar_20261106-101010.mp4")
+        open(stale, "wb").close()
+        self.built()
+        self.assertFalse(os.path.exists(stale))
+        self.assertTrue(os.path.exists(os.path.join(self.folder, "seq_sofar.mp4")))
+
     def test_it_is_reused_until_a_box_changes(self):
         self.built()
         with mock.patch.object(media, "build_full_video") as rebuilt:

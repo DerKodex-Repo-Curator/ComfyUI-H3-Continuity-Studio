@@ -1028,8 +1028,8 @@ export class TimelineHost {
         body: this.takesClient.statusBody(body),
       }).then((response) => response.json()));
       if (request === this.request && !this.removed) this.editor.setStatus(body === input() ? status : null);
-      // While the full video builds in the background, check again now and then in case its event is missed.
-      if (status?.full_video_building && request === this.request && !this.removed) this.schedule(15000);
+      // While the full video or the video so far builds in the background, check again now and then in case its event is missed.
+      if ((status?.full_video_building || status?.preview_video_building) && request === this.request && !this.removed) this.schedule(15000);
     } catch (error) {
       if (request === this.request && !this.removed) this.editor.setStatus(body === input()
         ? { ok: false, error: `Status unavailable: ${error?.message ?? error}` } : null);
