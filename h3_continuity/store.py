@@ -82,7 +82,7 @@ def full_video_fingerprint(folder, manifest, bridges=(), soundtrack_sources=()):
         sources.append([entry, stamps])
     if sources and soundtrack_sources:
         sources.append(["soundtrack", list(soundtrack_sources)])
-    return hashlib.sha1(json.dumps(sources, sort_keys=True).encode("utf-8")).hexdigest() if sources else None
+    return hashlib.sha1(json.dumps(["smallest-clip-size-1", sources], sort_keys=True).encode("utf-8")).hexdigest() if sources else None
 
 
 def current_full_video(folder, manifest, bridges=(), soundtrack_sources=(), key="full_video"):
@@ -311,18 +311,36 @@ def undo_moves(folder, moves, archived):
         os.rmdir(os.path.join(folder, archived))
 
 
-def save_last_frame(folder, entry, image):
+def _save_frame(path, image):
     array = (image[..., :3].clamp(0, 1) * 255).round().to(torch.uint8).cpu().numpy()
-    Image.fromarray(array).save(os.path.join(folder, entry["stem"] + "_last.png"))
+    Image.fromarray(array).save(path)
 
 
-def load_last_frame(folder, entry):
-    path = os.path.join(folder, entry["stem"] + "_last.png")
+def _load_frame(path):
     if not os.path.exists(path):
         return None
     with Image.open(path) as image:
         array = np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0
     return torch.from_numpy(array)[None]
+
+
+def save_last_frame(folder, entry, image):
+    _save_frame(os.path.join(folder, entry["stem"] + "_last.png"), image)
+
+
+def load_last_frame(folder, entry):
+    return _load_frame(os.path.join(folder, entry["stem"] + "_last.png"))
+
+
+def save_guide_frame(folder, entry, image):
+    """The last played frame of the latent the next box carries, before any upscale or grade."""
+    _save_frame(os.path.join(folder, entry["stem"] + "_guide.png"), image)
+
+
+def load_continuation_frame(folder, entry):
+    """The image a continuing box is guided to start from: the saved guide frame, else the finished last frame."""
+    guide = _load_frame(os.path.join(folder, entry["stem"] + "_guide.png"))
+    return guide if guide is not None else load_last_frame(folder, entry)
 
 
 def has_segment_latents(folder, entry):

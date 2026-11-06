@@ -92,7 +92,7 @@ class PartialVideoTest(unittest.TestCase):
         self.keep(**keep)
         captured = []
         with mock.patch.object(media, "build_full_video",
-                               side_effect=lambda path, videos, audio, crf, size: (captured.append(audio), (path, ""))[1]):
+                               side_effect=lambda path, videos, audio, crf, size=None: (captured.append(audio), (path, ""))[1]):
             self.build()
         return captured[0]
 
@@ -102,7 +102,7 @@ class PartialVideoTest(unittest.TestCase):
         self.assertEqual(note, "")
         self.assertEqual((record["rendered"], record["boxes"]), (2, 3))
         size, labels = decoded(os.path.join(self.folder, record["file"]))
-        self.assertEqual(size, (SEGMENT_SIZE, SEGMENT_SIZE), "the source is scaled to the rendered boxes")
+        self.assertEqual(size, (SOURCE_SIZE, SOURCE_SIZE), "rendered boxes are scaled to the smaller source")
         self.assertEqual(labels, [(0, i) for i in range(22)] + [(1, 22 + i) for i in range(17)]
                          + [(2, i) for i in range(17)])
         self.assertEqual(store.load_manifest(self.folder)["partial_video"], record)

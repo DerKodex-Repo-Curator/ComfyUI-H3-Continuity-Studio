@@ -304,13 +304,18 @@ class H3C_SaveSegment(io.ComfyNode):
                                        "what phones decode in hardware for HDR and what Apple players need for HLG; "
                                        "a browser without HEVC support can't play it in the Studio. The full video "
                                        "keeps the codec of its segments."),
+                io.Image.Input("guide_frames", optional=True,
+                               tooltip="The sampler's latent decoded as is (24 fps, before any second pass, upscale "
+                                       "or grade). When connected, the next H3 Timeline box is guided from this "
+                                       "run's last frame as it is in the latent it carries, not as finished, so a "
+                                       "change to the finishing steps does not change the next box's first pass."),
             ],
             outputs=[io.String.Output(display_name="info")],
         )
 
     @classmethod
     def execute(cls, segment, latent, fps, write_full_video, crf, images=None, audio=None, description="", color_space="sRGB",
-                codec="H.264") -> io.NodeOutput:
+                codec="H.264", guide_frames=None) -> io.NodeOutput:
         sequence = segment.sequence
         from .timeline_api.service import authorize_sequence, sequence_owner
         authorize_sequence(sequence.name, sequence_owner(cls), "save_segment")
@@ -384,6 +389,8 @@ class H3C_SaveSegment(io.ComfyNode):
             try:
                 if images is not None:
                     _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space, codec)
+                if guide_frames is not None:
+                    store.save_guide_frame(folder, entry, guide_frame(guide_frames, entry))
                 store.save_segment(folder, entry, video, audio_latent, waveform)
                 if segment.regeneration:
                     manifest = regeneration.commit(folder, entry, segment.regeneration, now)
@@ -530,6 +537,15 @@ class H3C_SaveSegment(io.ComfyNode):
             if notes:
                 info += " " + " ".join(notes)
             return io.NodeOutput(info, ui=ui.PreviewText(info))
+
+
+def guide_frame(frames, entry):
+    """The last frame `entry` plays, from `frames`: every frame of its latent decoded at 24 fps, carried ones first."""
+    if frames.shape[0] != entry["frames"]:
+        raise ValueError(f"H3 Save Segment: guide_frames has {frames.shape[0]} frames, but this run's latent decodes to "
+                         f"{entry['frames']}. Connect the sampler's latent decoded as is, before any interpolation.")
+    played = entry.get("played")
+    return frames[entry["context_frames"] + played - 1 if played is not None else entry["frames"] - 1]
 
 
 def _write_video(folder, entry, images, fps, crf, waveform, sample_rate, notes, color_space="sRGB", codec="H.264"):

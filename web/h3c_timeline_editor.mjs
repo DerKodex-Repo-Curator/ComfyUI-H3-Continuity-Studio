@@ -3,7 +3,7 @@
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
 import * as model from './h3c_timeline_model.mjs?v=20261106-keep-lengths-1';
-import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261106-video-so-far-1';
+import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261106-lane-beats-2';
 import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
 import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
 import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261104-shot-split-only-1';

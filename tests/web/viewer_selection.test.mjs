@@ -25,7 +25,7 @@ document.createElement = tag => {
 function player() {
   const studio = Object.create(Studio.prototype);
   for (const name of ['screen', 'badge', 'hint', 'fullButton', 'takeButton', 'switchButton', 'fullLinks',
-    'takeLinks', 'takeOpen', 'takeDownload', 'pinButton', 'pinMenu', 'pinNote', 'soundtrackNote']) {
+    'takeLinks', 'takeOpen', 'takeDownload', 'pinButton', 'pinMenu', 'pinNote', 'soundtrackNote', 'exportStatus', 'exportProgress', 'exportMessage']) {
     studio[name] = document.createElement('div');
   }
   const editor = {
@@ -82,4 +82,52 @@ test('an unassociated render cannot take over the selected clip viewer', () => {
   studio.host.runningBox = () => null;
   studio.refreshPlayer({...idleWatch(), running: true, preview: {source: 'kj', mime: 'video/mp4', data: 'frame'}});
   assert.equal(studio.screen.firstElementChild.src, '/view/b.mp4');
+});
+
+test('preview build is visible while watching a clip and clears when the preview is ready', () => {
+  const studio = player(), editor = studio.host.editor;
+  editor.selected = 1;
+  editor.status.preview_video_building = true;
+  studio.refreshPlayer(idleWatch());
+  assert.equal(studio.exportStatus.hidden, false);
+  assert.equal(studio.exportProgress.hidden, false);
+  assert.match(studio.exportMessage.textContent, /Building the video so far/);
+  assert.match(studio.fullButton.textContent, /Video so far/);
+  assert.equal(studio.fullButton.getAttribute('aria-busy'), 'true');
+  assert.equal(studio.screen.firstElementChild.src, '/view/b.mp4');
+
+  editor.status = {ok: true};
+  editor.fullLink.hidden = false;
+  editor.fullLink.setAttribute('href', '/view/preview.mp4');
+  editor.previewVideo = {boxes: 2, total: 3};
+  studio.refreshPlayer(idleWatch());
+  assert.equal(studio.exportStatus.hidden, true);
+  assert.equal(studio.exportProgress.hidden, true);
+  assert.equal(studio.fullButton.disabled, false);
+  assert.equal(studio.fullButton.getAttribute('aria-busy'), 'false');
+});
+
+test('a failed preview explains the disabled button beside the viewer', () => {
+  const studio = player();
+  studio.host.editor.status.preview_error = 'Video so far skipped: the segment videos have different aspect ratios.';
+  studio.refreshPlayer(idleWatch());
+  assert.equal(studio.exportStatus.hidden, false);
+  assert.equal(studio.exportProgress.hidden, true);
+  assert.match(studio.exportMessage.textContent, /different aspect ratios/);
+  assert.match(studio.fullButton.textContent, /unavailable/);
+  assert.equal(studio.fullButton.disabled, true);
+});
+
+test('an older preview stays playable while the next one builds', () => {
+  const studio = player(), editor = studio.host.editor;
+  editor.status.preview_video_building = true;
+  editor.fullLink.hidden = false;
+  editor.fullLink.setAttribute('href', '/view/preview.mp4');
+  editor.previewVideo = {boxes: 2, total: 3};
+  studio.view = 'full';
+  studio.refreshPlayer(idleWatch());
+  assert.equal(studio.fullButton.disabled, false);
+  assert.equal(studio.screen.firstElementChild.src, '/view/preview.mp4');
+  assert.equal(studio.exportStatus.hidden, false);
+  assert.match(studio.exportMessage.textContent, /Updating the video so far/);
 });

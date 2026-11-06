@@ -57,6 +57,28 @@ async def story_library_save(request):
         return web.json_response({'error': str(error)}, status=400)
 
 
+async def story_checkpoint_save(request):
+    try:
+        body = await _object(request) or {}
+        if story_job.JOBS.busy('') or story_job.JOBS.comfy.busy():
+            raise ValueError('Wait for Story writing and rendering to finish before saving a checkpoint.')
+        result = await asyncio.to_thread(story_library.save_checkpoint, body['graph'], body['story'],
+                                         body['workflow'], body['sequence'], body.get('name'))
+        return web.json_response(result)
+    except (ValueError, OSError, KeyError, TypeError, APIError) as error:
+        return web.json_response({'error': str(error)}, status=400)
+
+
+async def story_checkpoint_restore(request):
+    try:
+        body = await _object(request) or {}
+        if story_job.JOBS.busy('') or story_job.JOBS.comfy.busy():
+            raise ValueError('Wait for Story writing and rendering to finish before opening a checkpoint.')
+        return web.json_response(await asyncio.to_thread(story_library.restore_checkpoint, body['id']))
+    except (ValueError, OSError, KeyError, TypeError, APIError) as error:
+        return web.json_response({'error': str(error)}, status=400)
+
+
 async def story_library_rename(request):
     try:
         body = await _object(request) or {}
@@ -422,6 +444,8 @@ def register():
     routes.post(STATE_ROUTE)(state_save)
     routes.get('/h3c/stories')(story_library_view)
     routes.post('/h3c/stories')(story_library_save)
+    routes.post('/h3c/stories/checkpoint')(story_checkpoint_save)
+    routes.post('/h3c/stories/restore')(story_checkpoint_restore)
     routes.post('/h3c/stories/delete')(story_library_delete)
     routes.post('/h3c/stories/rename')(story_library_rename)
     from .timeline_api import routes as project_routes

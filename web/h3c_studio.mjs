@@ -50,6 +50,8 @@ const CSS = `
 .h3cx-inspector { display: flex; flex-direction: column; gap: 6px; min-width:0; min-height: 0; overflow-y: auto; padding: 8px 10px;
   background: #1a1c22; border-left: 1px solid #2c313c; }
 .h3cx-switch { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.h3cx-export-status { display:flex; align-items:center; gap:8px; margin:0; overflow-wrap:anywhere; }
+.h3cx-export-status progress { width:80px; flex:0 0 80px; accent-color:#729cdd; }
 .h3cx-switch .h3ct-button[aria-pressed="true"] { background: #293e60; border-color: #729cdd; }
 .h3cx-links { display: inline-flex; flex-wrap:wrap; align-items:center; min-width:0; max-width:100%; gap: 10px; margin-left: 8px; }
 .h3cx-stage { position: relative; flex: 1 1 auto; min-height: 120px; overflow: hidden;
@@ -377,6 +379,13 @@ export class Studio {
     this.pinMenu = el('span', 'h3cx-links h3cx-pin-menu');
     this.pinMenu.hidden = true;
     views.append(this.fullButton, this.takeButton, this.switchButton, this.fullLinks, this.takeLinks, this.pinMenu);
+    this.exportStatus = el('div', 'h3cx-export-status');
+    this.exportStatus.setAttribute('role', 'status');
+    this.exportProgress = el('progress');
+    this.exportProgress.setAttribute('aria-label', 'Assembling video');
+    this.exportMessage = el('span');
+    this.exportStatus.append(this.exportProgress, this.exportMessage);
+    this.exportStatus.hidden = true;
     const stage = this.stage = el('div', 'h3cx-stage');
     this.screen = el('div', 'h3cx-screen');
     this.badge = el('span', 'h3cx-badge');
@@ -391,7 +400,7 @@ export class Studio {
     player.id = 'h3cx-page-viewer'; player.setAttribute('role', 'tabpanel');
     player.setAttribute('aria-labelledby', 'h3cx-tab-viewer');
     this.player = player;
-    player.append(views, stage, this.hint, this.pinNote, this.soundtrackNote);
+    player.append(views, this.exportStatus, stage, this.hint, this.pinNote, this.soundtrackNote);
 
     this.library = el('aside', 'h3cx-library');
     this.library.id = 'h3cx-references';
@@ -1361,17 +1370,26 @@ export class Studio {
     const partial = fullUrl ? editor.partialVideo : null;
     // The video so far plays once asked for; the take of the selected clip stays the default while clips render.
     const soFar = fullUrl ? editor.previewVideo : null;
+    const building = !!(editor.status?.preview_video_building || editor.status?.full_video_building);
+    const exportError = editor.status?.preview_error || editor.status?.export_error || '';
+    const previewPending = !!(editor.status?.preview_video_building || editor.status?.preview_error);
+    const exportName = previewPending ? 'video so far' : 'full video';
+    this.exportMessage.textContent = building ? `${fullUrl ? 'Updating' : 'Building'} the ${exportName}…`
+      : exportError;
+    this.exportProgress.hidden = !building;
+    this.exportStatus.hidden = !this.exportMessage.textContent;
     const view = this.view ?? (fullUrl && !soFar ? 'full' : 'take');
     this.fullButton.setAttribute('aria-pressed', String(view === 'full'));
     this.takeButton.setAttribute('aria-pressed', String(view === 'take'));
     this.takeButton.textContent = box ? `Clip ${editor.selected + 1} · active take` : 'Clip take';
     this.fullButton.disabled = !fullUrl;
-    this.fullButton.textContent = soFar ? previewLabel(soFar) : 'Full video';
+    this.fullButton.setAttribute('aria-busy', String(building));
+    this.fullButton.textContent = soFar ? previewLabel(soFar) : previewPending
+      ? `Video so far · ${building ? 'building…' : 'unavailable'}` : 'Full video';
     this.fullButton.title = partial ? `Play the partial video: ${partialTitle(partial)}`
       : soFar ? previewTitle(soFar)
       : fullUrl ? 'Play the whole Timeline'
-      : editor.status?.preview_video_building ? 'The video so far is being built from the clips rendered so far.'
-      : 'No video yet: render the first clip to watch the video so far.';
+      : this.exportMessage.textContent || 'No video yet: render the first clip to watch the video so far.';
     this.takeButton.disabled = !box;
     const inUse = chosen?.bridge ? editor.bridgeStatusOf(chosen.box) : chosen ? editor.statusOf(box) : null;
     this.switchButton.hidden = !inUse?.video || !['chosen', chosen.bridge ? 'bridge' : 'take'].includes(view);
@@ -1416,8 +1434,8 @@ export class Studio {
         this.resumeAt = {time: playing.currentTime, playing: !playing.paused};
       }
       if (src) this.showVideo(src, {view, box: view === 'bridge' ? this.bridgeBox : box?.id ?? ''});
-      else this.showMessage(view === 'full' ? (editor.status?.preview_video_building ? 'Building the video so far…'
-        : 'No video yet: render the first clip to watch the video so far.') : 'Not rendered yet');
+      else this.showMessage(view === 'full' ? (this.exportMessage.textContent
+        || 'No video yet: render the first clip to watch the video so far.') : 'Not rendered yet');
       this.badge.textContent = view === 'chosen' ? this.chosenLabel(chosen) : view === 'candidate' ? this.candidate.label
         : view === 'bridge'
         ? `Bridge before clip ${editor.selected + 1}${!entry || entry.status === 'done' ? '' : ' · older take'}`

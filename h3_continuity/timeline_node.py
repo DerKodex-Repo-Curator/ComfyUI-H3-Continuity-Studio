@@ -756,7 +756,7 @@ class H3C_Timeline(io.ComfyNode):
         memories = visual_memory.records(parsed, next_index, folder, by_index, is_done, width, height)
         memory_args = {}
         if video is not None and parsed.continuation_guide:
-            memory_args['continuation_image'] = store.load_last_frame(folder, previous)
+            memory_args['continuation_image'] = store.load_continuation_frame(folder, previous)
         if memories:
             memory_args["memories"] = visual_memory.load(folder, by_index, memories)
             memory_args["memory_frames"] = [item.get("frames") for item in memories]

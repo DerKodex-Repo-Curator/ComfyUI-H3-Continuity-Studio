@@ -204,7 +204,7 @@ class RegenerationTest(unittest.TestCase):
             regeneration.commit(self.folder, entry, recovery, datetime.datetime.now())
         self.assertFalse(os.path.exists(os.path.join(self.folder, "takes")))
 
-    def save(self, recovery):
+    def save(self, recovery, guide_frames=None):
         from h3_continuity import nodes, latents
         sequence = nodes.SequenceRef("seq", self.folder, 1, None, None, None)
         segment = nodes.SegmentPlan(sequence, 0, 0, 107, (4, 4), None, None,
@@ -214,7 +214,29 @@ class RegenerationTest(unittest.TestCase):
         audio = torch.ones(1, 32, 2, timing.ticks_for_frames(107))
         with mock.patch.object(latents, "split_h3_latent", return_value=(video, audio)), \
                 mock.patch("h3_continuity.timeline_api.service.authorize_sequence", return_value=None):
-            return nodes.H3C_SaveSegment.execute(segment, {}, 24, False, 16)
+            return nodes.H3C_SaveSegment.execute(segment, {}, 24, False, 16, guide_frames=guide_frames)
+
+    def test_recovery_preserves_first_pass_guide_frames(self):
+        self.save(self.recovery(), torch.ones(107, 64, 64, 3))
+        entry = store.load_manifest(self.folder)["segments"][0]
+        self.assertTrue(os.path.isfile(os.path.join(self.folder, entry["stem"] + "_guide.png")))
+
+    def test_guide_write_failure_does_not_archive_existing_renders(self):
+        recovery = self.recovery()
+        before = store.load_manifest(self.folder)
+        with mock.patch.object(store, "save_guide_frame", side_effect=OSError("guide write failed")):
+            with self.assertRaisesRegex(OSError, "guide write failed"):
+                self.save(recovery, torch.ones(107, 64, 64, 3))
+        self.assertEqual(store.load_manifest(self.folder), before)
+        for item in before["segments"]:
+            self.assertTrue(store.has_segment_latents(self.folder, item))
+
+    def test_consent_detects_changes_to_native_continuation_guides(self):
+        receipt = self.incompatible()["receipt"]
+        with open(os.path.join(self.folder, "seg_0001_guide.png"), "wb") as handle:
+            handle.write(b"a changed native continuation guide")
+        with self.assertRaisesRegex(ValueError, "changed.*confirm"):
+            regeneration.validate(self.folder, rules.parse(json.dumps(self.line)), KNOWN, "a", receipt)
 
     def test_save_node_applies_recovery_only_after_writing_new_media(self):
         recovery = self.recovery()

@@ -48,7 +48,19 @@ Saves the run as the next segment (the finished video without repeated frames, p
 | `color_space` | HDR videos use 10-bit BT.2020. |
 | `codec` | `H.264` (default) plays everywhere. `HEVC` is 10-bit Main10 for HDR and tagged `hvc1`, which phones decode in hardware and Apple players need to show HLG. A browser without HEVC support can't play these videos in the Studio. The full video keeps its segments' codec. |
 | `description` | Text stored with the segment, such as the prompt. |
+| `guide_frames` | Optional. The sampler's latent decoded as is, before any second pass. The next continuing clip is guided from its last played frame instead of the finished one, so a second-pass change does not change the next clip's first pass. See [Keep the first pass](../output/first-pass-cache.md). |
 | `write_full_video` | Only affects the deprecated H3 Sequence chain; the Timeline always exports when every clip is done. |
+
+## H3 Disk Cache
+
+Saves the first-pass sampler's result on disk and loads it, without running the sampler, when a later run has the same keys and the same settings above the sampler. See [Keep the first pass](../output/first-pass-cache.md).
+
+| Input | Notes |
+| --- | --- |
+| `result` | The sampler's output. Asked for only when no saved result matches. |
+| `keys` | The Timeline's `positive`, `latent` and `seed`. |
+| `mode` | `use`, `refresh` or `off`. |
+| `namespace` | Folder under `output/h3c_cache/`. |
 
 ## H3 Continuation Model
 

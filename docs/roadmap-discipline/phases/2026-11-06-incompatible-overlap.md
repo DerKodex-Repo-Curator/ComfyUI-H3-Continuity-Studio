@@ -29,3 +29,5 @@ IO3 review findings: linked sequence names now resolve using the existing static
   - *Scope:* Preserve existing local tracked/untracked work and all generated media. Do not restart services or render.
   - *Evidence:* origin/main e154bb1/v0.16.1 fetched; original checkout has only roadmap/product uncommitted work. Target v0.17.0 for new generation feature.
   - *Next:* Commit implementation, integrate latest main, verify and publish.
+
+IO4: integrated main e154bb1/v0.16.1, retaining checkpoints/autosave and disk cache. Save conflict resolved by writing first-pass guide frames inside the recovery staging/rollback block; fingerprints now include native guide PNG stamps. Fresh175JS +332Python, browser smoke, strict docs and syntax/diff checks pass. Target v0.17.0.

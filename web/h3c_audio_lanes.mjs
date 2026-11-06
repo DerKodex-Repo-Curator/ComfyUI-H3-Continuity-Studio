@@ -42,9 +42,12 @@ export class AudioLanes {
     this.message = node('span', 'h3ct-hint');
     // Beats are found on request, kept for the session by audio file, and drawn as ticks under each waveform.
     this.beats = new Map();
+    this.beatMessages = new Map();
     this.drawings = [];
     this.beatButton = button('Detect beats', () => this.detectBeats());
-    this.beatButton.title = 'Find the beats of each audio clip, drawn as ticks under its waveform, so clip edges can snap to them';
+    this.beatButton.title = 'Find beats only in the selected audio lane’s file, drawn as ticks under its waveform';
+    this.beatMessage = node('span', 'h3ct-hint');
+    this.beatMessage.setAttribute('role', 'status');
     this.snapField = node('label', 'h3ct-field', 'Snap to beats');
     this.snapField.title = 'Dragging a clip’s edge lands it on the nearest beat (hold Shift to drag freely). A clip '
       + 'without an exact length still keeps a length on the frame grid.';
@@ -64,7 +67,7 @@ export class AudioLanes {
     this.textButton.title = 'Import timed text from Whisper JSON';
     this.textMessage = node('span', 'h3ct-hint'); this.textMessage.setAttribute('role', 'status');
     this.header.append(node('span', 'h3ct-label', 'Audio'), this.addButton, this.connectedSelect, this.upload,
-      this.beatButton, this.snapField, this.message);
+      this.message);
     this.textHeader = node('div', 'h3ct-row');
     this.textSelect = button('Timed text', () => this.selectText());
     this.textSelect.setAttribute('aria-label', 'Edit timed text');
@@ -123,20 +126,33 @@ export class AudioLanes {
   }
 
   async detectBeats() {
-    const urls = [...new Set(this.clips.map(clip => this.sourceUrl(clip)).filter(Boolean))];
-    if (!urls.length) { this.message.textContent = 'No audio clip has a file to read.'; return; }
-    this.beatButton.disabled = true; this.message.textContent = 'Finding beats…';
+    if (this.findingBeats) return;
+    const clip = this.clips.find(clip => clip.slot === this.selected) ?? this.clips[0];
+    if (!clip) return;
+    const url = this.sourceUrl(clip);
+    const message = text => {
+      this.beatMessages.set(clip.slot, {url, text});
+      this.renderBeatControls();
+    };
+    if (!url) { message(`@${clip.slot} has no audio file to read.`); return; }
+    this.findingBeats = true;
+    message(`Finding beats for @${clip.slot}…`);
     try {
-      const found = [];
-      for (const url of urls) {
-        const analysis = await loadAudio(url);
-        this.beats.set(url, beatTimes(analysis));
-        found.push(`${analysis.beats.length} beats at about ${Math.round(analysis.tempo)} BPM`);
-      }
-      this.message.textContent = `${found.join('; ')}.${this.snapInput.checked ? '' : ' Tick Snap to beats to use them.'}`;
-      this.redraw();
-    } catch (error) { this.message.textContent = `Could not find beats: ${error.message}`; }
-    finally { this.beatButton.disabled = false; }
+      const analysis = await loadAudio(url);
+      this.beats.set(url, beatTimes(analysis));
+      message(`@${clip.slot}: ${analysis.beats.length} beats at about ${Math.round(analysis.tempo)} BPM.`
+        + (this.snapInput.checked ? '' : ' Tick Snap to beats to use them.'));
+      this.redraw(url);
+    } catch (error) { message(`Could not find beats for @${clip.slot}: ${error.message}`); }
+    finally { this.findingBeats = false; this.renderBeatControls(); }
+  }
+
+  renderBeatControls() {
+    const clip = this.clips.find(clip => clip.slot === this.selected) ?? this.clips[0];
+    this.beatButton.textContent = clip ? `Detect beats · @${clip.slot}` : 'Detect beats';
+    this.beatButton.disabled = !!this.findingBeats;
+    const found = this.beatMessages.get(clip?.slot);
+    this.beatMessage.textContent = found?.url === this.sourceUrl(clip) ? found?.text ?? '' : '';
   }
 
   // Draws the waveforms decoded since the lanes were drawn (those of `url`, or every one), with their beats.
@@ -312,7 +328,6 @@ export class AudioLanes {
     if (!this.clips.length) {
       this.lanes.append(this.header);
     }
-    this.beatButton.hidden = this.snapField.hidden = !this.clips.length;
     for (const clip of this.clips) {
       const reference = this.editor.host.connected().audios.find(ref => ref.name === clip.slot);
       const title = reference?.replaced ? reference.title || 'Replacement unavailable' : clip.title || 'Audio';
@@ -415,6 +430,7 @@ export class AudioLanes {
   }
 
   renderSettings() {
+    this.renderBeatControls();
     const clip = this.clips.find(clip => clip.slot === this.selected) ?? this.clips[0];
     const reference = this.editor.host.connected().audios.find(ref => ref.name === clip?.slot);
     const file = this.sourceFile(clip);
@@ -467,6 +483,9 @@ export class AudioLanes {
       lock.append(locked); row.append(lock);
     } else row.append(node('span', 'h3ct-hint', 'Upload this audio’s file to play it in the full video.'));
     this.settings.append(row);
+    const beats = node('div', 'h3ct-row');
+    beats.append(this.beatButton, this.snapField, this.beatMessage);
+    this.settings.append(beats);
     const timing = node('div', 'h3ct-row');
     for (const [key, label] of [['start', 'Video start (s)'], ['source_start', 'Source in (s)'], ['duration', 'Length (s)']]) {
       const field = node('label', 'h3ct-field', label);

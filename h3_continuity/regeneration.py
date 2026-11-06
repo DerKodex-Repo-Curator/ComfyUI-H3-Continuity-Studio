@@ -69,7 +69,7 @@ def _fingerprint(folder, parsed, known, manifest, index):
     stamps = []
     for entries in records.values():
         for entry in entries:
-            files = [entry["stem"] + ".safetensors", entry["stem"] + "_last.png"]
+            files = [entry["stem"] + ".safetensors", entry["stem"] + "_last.png", entry["stem"] + "_guide.png"]
             if entry.get("video"):
                 files.append(entry["video"]["file"])
             for file in files:

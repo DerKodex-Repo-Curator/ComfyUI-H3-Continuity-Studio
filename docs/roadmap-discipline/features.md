@@ -15,7 +15,7 @@ Prior merged work: [P-H3 node ledger](phases/2026-11-04-ph3-image-still.md). Its
 ```json
 {
   "version": 1,
-  "revision": 17,
+  "revision": 18,
   "phase": "Phase 13: P-H3 still prompt instructions",
   "active_features": [
     "IO4"
@@ -24,10 +24,10 @@ Prior merged work: [P-H3 node ledger](phases/2026-11-04-ph3-image-still.md). Its
   "goal": "Create and merge PR, publish v0.17.0, and fast-forward development and installed ComfyUI node checkouts without restarting.",
   "done_when": "PR merged; annotated release tag and GitHub release point at merge commit; both checkouts equal released main; local work preserved.",
   "last_completed": "IO3 Project settings/new generations verified; combined164JS +307Python, strict docs, browser1440/390px and native/attached host smoke, syntax/diff/roadmap checks pass.",
-  "in_progress": "User authorized release/install synchronization. origin/main advanced to e154bb1 with checkpoints/disk cache/preview fixes. Current implementation uncommitted; integration pending.",
+  "in_progress": "Implementation committed ba832c0; latest main e154bb1 integrated with conflicts resolved, v0.17.0 changelog prepared. Fresh175JS/332Python, browser and strict docs pass. PR creation next.",
   "next": {
-    "action": "Commit current implementation, merge origin/main into this branch, resolve and reverify before creating PR.",
-    "reason": "Release must retain current main features and integrate their checkpoint/disk-cache behavior."
+    "action": "Commit integration/release metadata, push branch and create PR against main.",
+    "reason": "Fresh current-main verification passes; release is authorized."
   },
   "files": [
     {
@@ -61,9 +61,9 @@ Prior merged work: [P-H3 node ledger](phases/2026-11-04-ph3-image-still.md). Its
   },
   "verification": {
     "required": "full tests; browser smoke; strict docs; PR merge/tag/release; both checkout HEADs",
-    "last_run": "",
-    "status": "not_run",
-    "detail": "Previous implementation164JS/307Python verified; refreshed-main verification pending."
+    "last_run": "node tests/run.mjs; browser smoke; strict docs; syntax/diff checks",
+    "status": "passed",
+    "detail": "175 JavaScript +332 Python, no skips/failures. Browser native/attached desktop/mobile and strict docs pass. Added guide-frame success/failure and consent stamp integration regressions. Remote integration/tag/checkout synchronization pending."
   },
   "blockers": [],
   "reload": [

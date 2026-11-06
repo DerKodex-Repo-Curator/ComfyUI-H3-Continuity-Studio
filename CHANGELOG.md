@@ -4,6 +4,8 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-06
+
 ### Added
 
 - **Start a new generation** in **Project settings** keeps the Timeline, prompts, seeds, render settings and references while every clip and bridge starts unrendered in a separate render folder. The previous generation's clips, full video and Takes remain untouched. **Previous generations** links to earlier joined videos and individual clips, including unfinished generations. Nothing renders until you ask.
@@ -11,6 +13,28 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 ### Fixed
 
 - **Regenerating a clip with incompatible saved continuity now offers recovery before queueing.** The confirmation names the affected clips and explains that their videos will be kept in Takes. Once the replacement saves successfully, only dependent clips and bridges are archived; independent clips stay rendered. **Render remaining** rebuilds the missing clips. Cancelling, stale confirmation or a failed save leaves existing renders in place. Recovery starts with one take; compatible regeneration still supports batches.
+
+## [0.16.1] - 2026-11-06
+
+### Fixed
+
+- **Visible preview assembly.** The viewer shows a loading indicator and build status above the player, including while watching an individual clip. Failed builds show their reason beside the video controls. An existing preview stays playable while the next version builds.
+- **Mixed-size previews and exports.** Joined clips resize to the smallest clip's dimensions, including when their aspect ratios differ. Re-rendering the smaller clip at higher resolution automatically rebuilds the preview at the new common size; original clip files are preserved.
+- **Beats for the selected lane.** Select an audio lane to find **Detect beats · @audioN** and **Snap to beats** in its right-hand audio settings. Detection reads only that lane's file, with results labelled by lane.
+
+## [0.16.0] - 2026-11-06
+
+### Added
+
+- **Keep the first pass, re-render the second.** The new **H3 Disk Cache** node goes after the first-pass sampler and saves its result on disk, keyed by the Timeline's `positive`, `latent` and `seed` and by the settings above the sampler. Render the whole Timeline without a second pass, turn the second pass on, and render again: every clip loads its first pass from disk and goes straight to the second pass. Its `info` output says why a result was sampled again or could not be cached. See [Keep the first pass](guide/output/first-pass-cache.md).
+- **H3 Save Segment `guide_frames`.** Connect the first-pass decode, and a continuing clip is guided from the last frame of the clip before as it was sampled, not as finished, so a second-pass change no longer changes every later clip's first pass.
+
+## [0.15.0] - 2026-11-06
+
+### Added
+
+- **Named checkpoints with videos.** In **Saved stories**, **Save checkpoint…** preserves the current workflow, Timeline, rendered videos and takes as a named snapshot, separate from automatic versions. Later edits and renders cannot overwrite it. Loading a checkpoint opens an independent editable copy with its own media. Checkpoints and restored copies use additional disk space; existing versions are kept.
+- **Optional autosave.** The **Autosave** checkbox in **Saved stories**, also available in **H3 Continuity → Story → Autosave** settings, persistently disables background Story and Timeline saving across workflows, including attached projects. Explicit actions that require saving still save their state. Checkpoint saving captures local edits directly, without first restoring another workflow's autosave.
 
 ## [0.14.0] - 2026-11-06
 
