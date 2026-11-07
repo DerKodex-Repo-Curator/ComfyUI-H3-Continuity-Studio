@@ -36,6 +36,8 @@ Load `examples/ph3_image_story_studio.json` (Story, Timeline and the P-H3-Image 
 
 The node's own prompt and seed are filled in by the Studio for each request. **Studio resolution** defaults to **8 MP**, using the aspect ratio of width and height even when those inputs are linked to a smaller video size. Choose **4 MP** for less memory, or **custom** to use width and height exactly. An explicit still-size API request also uses its supplied dimensions. Video dimensions are unchanged. Its **image** output can feed a Save or Preview node for direct generation, which uses width and height exactly.
 
+Optionally connect a **LORA_STACK** output, such as Easy Use's LoRA stack, to **lora_stack**. Each entry is `(filename, model strength, CLIP strength)`. The node applies entries in stack order to the diffusion model and conditioning text encoder for both direct images and Studio candidates; the prompt upsampler keeps its own text encoder. Use LoRAs compatible with P-H3-Image. An unconnected or empty stack leaves generation unchanged. Entries named `None` and entries with both strengths at zero are skipped.
+
 [![A P-H3-Image candidate applied as the First guide](../assets/screens/ph3-image-guide-applied.png){ width=480 }](../assets/screens/ph3-image-guide-applied.png)
 
 ## What it does with your clip

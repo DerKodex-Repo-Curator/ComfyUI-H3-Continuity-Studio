@@ -110,6 +110,37 @@ class RequirementsTest(unittest.TestCase):
 
 
 class GraphTest(unittest.TestCase):
+    def test_lora_stack_is_an_optional_connection(self):
+        _, schema = options_of(FILES)
+        socket = next((item for item in schema.inputs if item.id == "lora_stack"), None)
+        self.assertIsNotNone(socket)
+        self.assertTrue(socket.optional)
+        self.assertEqual(ph3.H3C_PH3ImageStill.INPUT_TYPES()["optional"]["lora_stack"][0], "LORA_STACK")
+
+    def test_loras_patch_model_and_clip_in_stack_order_before_generation(self):
+        graph = run(lora_stack=[("style.safetensors", 0.7, 0.2), ("detail.safetensors", -0.3, 0.0)]).expand
+        loaders = [(key, node["inputs"]) for key, node in graph.items() if node["class_type"] == "LoraLoader"]
+        self.assertEqual(len(loaders), 2)
+        (first_id, first), (second_id, second) = loaders
+        by_type = {node["class_type"]: key for key, node in graph.items()}
+        self.assertEqual(first, {"model": [by_type["UNETLoader"], 0], "clip": [by_type["CLIPLoader"], 0],
+                                 "lora_name": "style.safetensors", "strength_model": 0.7, "strength_clip": 0.2})
+        self.assertEqual(second, {"model": [first_id, 0], "clip": [first_id, 1],
+                                  "lora_name": "detail.safetensors", "strength_model": -0.3, "strength_clip": 0.0})
+        found = classes(graph)
+        self.assertEqual(found["MiniMaxH3SigmaShift"]["inputs"]["model"], [second_id, 0])
+        self.assertEqual(found["PH3ImageConditioning"]["inputs"]["clip"], [second_id, 1])
+        self.assertEqual(found["BasicGuider"]["inputs"]["model"], [by_type["MiniMaxH3SigmaShift"], 0])
+
+    def test_empty_or_disabled_lora_stack_keeps_the_original_graph(self):
+        for stack in (None, [], [("None", 1.0, 1.0), ("unused.safetensors", 0.0, 0.0)]):
+            with self.subTest(stack=stack):
+                graph = run(lora_stack=stack).expand
+                found = classes(graph)
+                self.assertNotIn("LoraLoader", found)
+                unet = next(key for key, node in graph.items() if node["class_type"] == "UNETLoader")
+                self.assertEqual(found["MiniMaxH3SigmaShift"]["inputs"]["model"], [unet, 0])
+
     def test_studio_size_uses_eight_megapixels_at_the_requested_aspect(self):
         size = ph3.H3C_PH3StillSize.execute(736, 992).result
         self.assertEqual(size, (2496, 3360))

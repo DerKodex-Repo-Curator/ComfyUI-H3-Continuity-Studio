@@ -4,6 +4,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-07
+
+### Added
+
+- **LoRA stacks for P-H3 stills.** Connect a `LORA_STACK` output (such as Easy Use's stack) to the P-H3-Image Still node's optional `lora_stack` input. LoRAs apply in stack order with separate model and CLIP strengths to both direct images and Studio candidates. Empty or unconnected stacks keep the existing behavior.
+
 ## [0.18.0] - 2026-11-06
 
 ### Added
