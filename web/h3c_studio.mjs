@@ -3,11 +3,12 @@
 // closes, opens another Timeline or the Timeline's Story changes. Its Story page edits the Story node's inputs.
 import { liveBadge, progressText } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
 import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
-import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 import { partialBadge, partialTitle, previewBadge, previewLabel, previewTitle, timelineFrame, videoSeconds } from './h3c_partial_video.mjs?v=20261106-video-so-far-1';
-import {historyShortcut} from './h3c_history.mjs?v=20261104-history-1';
+import {historyShortcut} from './h3c_history.mjs?v=20261107-editing-lag-1';
+import {setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
 
 const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
 const CENTER = ['viewer', 'story', 'cast', 'pictures', 'refmods'];
@@ -231,6 +232,8 @@ export class Studio {
   constructor() {
     ensureStyle();
     this.host = null;
+    // cover(covered), when set, hears when the Studio comes to fill the page and when it leaves it.
+    this.cover = null;
     this.page = 'box';
     this.libraryPage = 'references';
     this.focusPage = null;
@@ -743,6 +746,7 @@ export class Studio {
       this.before = document.activeElement;
       if (!this.root.isConnected) document.body.append(this.root);
       this.root.hidden = false;
+      this.cover?.(true);
     }
     if (this.host !== host) {
       this.giveBack();
@@ -886,6 +890,7 @@ export class Studio {
     this.remembered = {host:this.host, snapshot:this.snapshot()};
     this.giveBack();
     this.root.hidden = true;
+    this.cover?.(false);
     for (const {node, overflow} of this.scrollBefore ?? []) node.style.overflow = overflow;
     this.scrollBefore = null;
     // The editor's panel goes back to its node, so the Studio won't hear when a take that is moving lands.
@@ -960,7 +965,11 @@ export class Studio {
     for (const [page, control] of Object.entries(this.mobileButtons))
       control.setAttribute('aria-pressed', String(page === (this.mobilePage === 'focus' ? 'more' : this.mobilePage)));
     this.root.style.setProperty('--h3cx-track-width', `${Math.max(480, (this.host?.editor.state.boxes.length ?? 0) * 96)}px`);
-    this.host?.editor.renderHint();
+    const editor = this.host?.editor;
+    if (editor) {
+      editor.touchPan = mobile;
+      editor.renderHint();
+    }
     this.resizeViewport();
   }
 
@@ -1032,9 +1041,9 @@ export class Studio {
     const editor = this.host?.editor;
     this.clipPromptButton.hidden = target === 'clip' || !editor?.box();
     this.emptyInspector.hidden = target !== 'clip' || !!editor?.box();
-    this.inspectorTitle.textContent = target === 'audio' ? `Audio @${this.inspectorTarget.slot}`
-      : target === 'text' ? 'Timed text' : editor?.box() ? `Clip ${editor.selected + 1}` : 'No clip selected';
-    this.focusContext.textContent = editor?.box() ? `Selected clip ${editor.selected + 1}` : 'No clip selected';
+    setText(this.inspectorTitle, target === 'audio' ? `Audio @${this.inspectorTarget.slot}`
+      : target === 'text' ? 'Timed text' : editor?.box() ? `Clip ${editor.selected + 1}` : 'No clip selected');
+    setText(this.focusContext, editor?.box() ? `Selected clip ${editor.selected + 1}` : 'No clip selected');
     this.renderMobile();
   }
 
@@ -1064,9 +1073,9 @@ export class Studio {
       this.inspectorTarget = {kind: 'clip', box: host.editor.box()?.id ?? null};
     const watch = host.watch();
     this.showStory(host.story?.() ?? null);
-    this.nameEl.textContent = host.title();
+    setText(this.nameEl, host.title());
     this.nameEl.title = host.sequenceName?.() ?? '';
-    this.progressEl.textContent = host.progress?.() ?? progressText(watch, host.runningBox(), (id) => host.titleOf(id));
+    setText(this.progressEl, host.progress?.() ?? progressText(watch, host.runningBox(), (id) => host.titleOf(id)));
     this.stopButton.hidden = host.editor.host.projectAttached === true || !(watch.running && !watch.turn);
     this.feedbackButton.hidden = host.editor.feedbackEl.hidden;
     this.renderNavigation();
@@ -1154,6 +1163,7 @@ export class Studio {
     editor?.setLaneView();
     this.host = null;
     this.trackWidth = 0;
+    if (editor) editor.touchPan = false;
     editor?.renderTrack();
     editor?.renderHint();
   }
@@ -1374,18 +1384,18 @@ export class Studio {
     const exportError = editor.status?.preview_error || editor.status?.export_error || '';
     const previewPending = !!(editor.status?.preview_video_building || editor.status?.preview_error);
     const exportName = previewPending ? 'video so far' : 'full video';
-    this.exportMessage.textContent = building ? `${fullUrl ? 'Updating' : 'Building'} the ${exportName}…`
-      : exportError;
+    setText(this.exportMessage, building ? `${fullUrl ? 'Updating' : 'Building'} the ${exportName}…`
+      : exportError);
     this.exportProgress.hidden = !building;
     this.exportStatus.hidden = !this.exportMessage.textContent;
     const view = this.view ?? (fullUrl && !soFar ? 'full' : 'take');
     this.fullButton.setAttribute('aria-pressed', String(view === 'full'));
     this.takeButton.setAttribute('aria-pressed', String(view === 'take'));
-    this.takeButton.textContent = box ? `Clip ${editor.selected + 1} · active take` : 'Clip take';
+    setText(this.takeButton, box ? `Clip ${editor.selected + 1} · active take` : 'Clip take');
     this.fullButton.disabled = !fullUrl;
     this.fullButton.setAttribute('aria-busy', String(building));
-    this.fullButton.textContent = soFar ? previewLabel(soFar) : previewPending
-      ? `Video so far · ${building ? 'building…' : 'unavailable'}` : 'Full video';
+    setText(this.fullButton, soFar ? previewLabel(soFar) : previewPending
+      ? `Video so far · ${building ? 'building…' : 'unavailable'}` : 'Full video');
     this.fullButton.title = partial ? `Play the partial video: ${partialTitle(partial)}`
       : soFar ? previewTitle(soFar)
       : fullUrl ? 'Play the whole Timeline'
@@ -1393,7 +1403,7 @@ export class Studio {
     this.takeButton.disabled = !box;
     const inUse = chosen?.bridge ? editor.bridgeStatusOf(chosen.box) : chosen ? editor.statusOf(box) : null;
     this.switchButton.hidden = !inUse?.video || !['chosen', chosen.bridge ? 'bridge' : 'take'].includes(view);
-    this.switchButton.textContent = view === 'chosen' ? 'Compare with active take' : 'Back to selected take';
+    setText(this.switchButton, view === 'chosen' ? 'Compare with active take' : 'Back to selected take');
     this.switchButton.title = view === 'chosen' ? 'Play the take in use from the same moment'
       : 'Play the chosen take from the same moment';
     this.fullLinks.hidden = view !== 'full';
@@ -1413,16 +1423,16 @@ export class Studio {
     if (!pinnable || this.pinMenu.dataset.box !== box.id) this.pinMenu.hidden = true;
     if (this.pinNoteBox !== box?.id) [this.pinNoteBox, this.pinNote.textContent] = [null, ''];
     this.pinNote.hidden = !this.pinNote.textContent;
-    this.soundtrackNote.textContent = view === 'full' ? soundtrackLine(soundtrackSlots(editor.state)) : '';
+    setText(this.soundtrackNote, view === 'full' ? soundtrackLine(soundtrackSlots(editor.state)) : '');
     this.soundtrackNote.hidden = !this.soundtrackNote.textContent;
     this.hint.hidden = preview?.source !== 'core';
     if (preview) {
       this.showLive(preview);
-      this.badge.textContent = liveBadge(watch, runningBox);
+      setText(this.badge, liveBadge(watch, runningBox));
     } else if (this.moving) {
       this.endLive();
       this.showMessage(MOVING);
-      this.badge.textContent = '';
+      setText(this.badge, '');
     } else {
       this.endLive();
       // While the status is being fetched again after an edit, the playing video stays as it is.
@@ -1436,12 +1446,12 @@ export class Studio {
       if (src) this.showVideo(src, {view, box: view === 'bridge' ? this.bridgeBox : box?.id ?? ''});
       else this.showMessage(view === 'full' ? (this.exportMessage.textContent
         || 'No video yet: render the first clip to watch the video so far.') : 'Not rendered yet');
-      this.badge.textContent = view === 'chosen' ? this.chosenLabel(chosen) : view === 'candidate' ? this.candidate.label
+      setText(this.badge, view === 'chosen' ? this.chosenLabel(chosen) : view === 'candidate' ? this.candidate.label
         : view === 'bridge'
         ? `Bridge before clip ${editor.selected + 1}${!entry || entry.status === 'done' ? '' : ' · older take'}`
         : view === 'take' && takeUrl && entry.status !== 'done' ? OLDER_TAKE
         : view === 'full' && partial ? partialBadge(partial)
-        : view === 'full' && soFar ? previewBadge(soFar) : '';
+        : view === 'full' && soFar ? previewBadge(soFar) : '');
     }
     this.badge.hidden = !this.badge.textContent;
   }

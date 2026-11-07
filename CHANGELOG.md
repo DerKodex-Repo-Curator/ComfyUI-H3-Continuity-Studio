@@ -4,6 +4,13 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-11-07
+
+### Fixed
+
+- **Typing keeps up on long Timelines.** Each key in a clip prompt, its sections, the shared prompt, a bridge prompt or an audio direction shows at once instead of waiting for the whole Timeline to redraw (about a second per key on an 88-clip Timeline, now about 35 milliseconds). The saved Timeline still follows every key; the Timeline redraws and Undo records the edit once typing pauses, and Undo or Redo during typing first keeps what was typed.
+- **Other edits respond faster.** Changing a clip's length, selecting or dragging redraws the Timeline once instead of twice and updates the clips and stills already shown rather than rebuilding them. The ComfyUI graph under the Studio stops redrawing while the Studio is open and resumes when it closes. The current video stays in the player while an edit's status refreshes.
+
 ## [0.19.0] - 2026-11-07
 
 ### Added

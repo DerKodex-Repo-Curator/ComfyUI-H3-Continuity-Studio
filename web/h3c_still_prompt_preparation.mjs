@@ -1,4 +1,5 @@
 // One explicit batch owns the editable prompts; previews and render jobs do not invalidate its source.
+import {replaceChanged,setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
 const canonical = target => target?.kind==='shot'&&target.shot===1?{kind:'first'}:target;
 const sameTarget = (a,b) => {a=canonical(a);b=canonical(b);return a?.kind===b?.kind&&a?.shot===b?.shot;};
 const copy = value => structuredClone(value);
@@ -133,21 +134,23 @@ export class StillPromptPreparation {
     this.useAllButton.disabled=!!this.busy;
     if(saved&&document.activeElement!==this.instructionsEl)this.instructionsEl.value=saved.instructions;
     this.button.disabled=!!this.busy||!!this.cancelling||!!this.instructionsLoading||!this.editor.state.boxes.length;
-    this.button.textContent=this.busy?'Preparing all still prompts…':knownJob?'Resume still prompt preparation':saved?.prompts?.length?'Regenerate all still prompts':'Prepare all still prompts';
+    setText(this.button,this.busy?'Preparing all still prompts…':knownJob?'Resume still prompt preparation':saved?.prompts?.length?'Regenerate all still prompts':'Prepare all still prompts');
     if(!this.busy) {
       const stale=stillPromptsStale(this.editor.state,currentSource(this.editor,this.instructionsEl.value));
-      this.status.textContent=stale?'Still prompts are out of date. Regenerate to use the current Timeline; existing prompts and images remain available.':
+      setText(this.status,stale?'Still prompts are out of date. Regenerate to use the current Timeline; existing prompts and images remain available.':
         saved?.prompts?.length?`${saved.prompts.length} prepared prompts across all clips. Continuous Last and next First share their prompt.`:
-          `Prepare First, Last and Shot prompts for all ${this.editor.state.boxes.length} clips in one batch.`;
+          `Prepare First, Last and Shot prompts for all ${this.editor.state.boxes.length} clips in one batch.`);
     }
-    const selected=preparedStillPrompt(this.editor.state,boxId,target);this.components.hidden=!selected;this.componentBody.replaceChildren();
+    const selected=preparedStillPrompt(this.editor.state,boxId,target);this.components.hidden=!selected;
+    const body=[];
     if(selected) {
-      if(selected.members.length>1)this.componentBody.append(el('p','Editing this prompt also edits its shared continuous endpoint.','h3ct-hint'));
-      for(const issue of selected.issues??[])this.componentBody.append(el('p',issue,'h3ct-hint'));
+      if(selected.members.length>1)body.push(el('p','Editing this prompt also edits its shared continuous endpoint.','h3ct-hint'));
+      for(const issue of selected.issues??[])body.push(el('p',issue,'h3ct-hint'));
       for(const [name,label] of [['subject','Subject and visible state'],['setting','Setting'],['style','Visual style'],['lighting','Lighting'],['color','Color palette'],['camera','Camera and composition']]) {
-        if(selected.components?.[name])this.componentBody.append(el('strong',label),el('p',selected.components[name]));
+        if(selected.components?.[name])body.push(el('strong',label),el('p',selected.components[name]));
       }
     }
+    replaceChanged(this.componentBody,body);
     this.loadInstructions();
   }
   async prepare() {

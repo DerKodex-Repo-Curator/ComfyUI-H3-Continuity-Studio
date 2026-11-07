@@ -1,30 +1,33 @@
 // The H3 Timeline editor: a track of boxes, the selected box and the shared prompt.
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
-import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261011-reference-preparation-1';
+import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261107-editing-lag-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import * as model from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import * as model from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 import {audioSourceLocked} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
-import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261106-box-audio-1';
-import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
+import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261107-editing-lag-1';
+import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=20261107-editing-lag-1';
 import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
 import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=20261106-box-audio-1';
 import { fillReferenceSwitches } from './h3c_reference_switches.mjs?v=20261106-box-audio-1';
 import { ReferenceReplacements } from './h3c_reference_replacements.mjs?v=20261106-box-audio-1';
 import { fillPicturePicker, mentionedReferences, referenceChip } from './h3c_reference_pictures.mjs?v=20261010-reference-workspace-1';
-import { CastPage } from './h3c_cast.mjs?v=20261103-replacement-bridges-1';
+import { CastPage } from './h3c_cast.mjs?v=20261107-editing-lag-1';
 import { PicturesPanel, highestSlot } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
-import { CheckPanel } from './h3c_check.mjs?v=20261104-check-holds-1';
-import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261103-replacement-bridges-1';
-import { DialoguePanel } from './h3c_dialogue.mjs?v=20261106-box-audio-1';
+import { CheckPanel } from './h3c_check.mjs?v=20261107-editing-lag-1';
+import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261107-editing-lag-1';
+import { DialoguePanel } from './h3c_dialogue.mjs?v=20261107-editing-lag-1';
 import { ChainSettings } from './h3c_chain_settings.mjs?v=20261104-chain-settings-1';
 import { exportedVideo } from './h3c_partial_video.mjs?v=20261106-video-so-far-1';
-import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261104-take-marks-2';
+import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261107-editing-lag-1';
+import { drawsSame, replaceChanged, setText } from './h3c_dom.mjs?v=20261107-editing-lag-1';
 
 const STYLE_ID = 'h3ct-style';
 const PANEL_HEIGHT = 470;
 const JOIN_LABELS = {continue: 'Continue', transition: 'Transition', cut: 'Cut', new_scene: 'New scene'};
 // Untargeted guides need unique shot numbers; numbers from here on are free frame guides, never prompt shots.
 const FREE_GUIDE = 1000;
+// How long typing pauses before the whole Timeline redraws; drawing a long Timeline on every key lags the keyboard.
+export const TYPING_PAUSE = 200;
 const CSS = `
 .h3ct-root { display: flex; flex-direction: column; gap: 6px; width: 100%; height: ${PANEL_HEIGHT}px; overflow-y: auto; box-sizing: border-box; padding: 4px 2px;
   color: var(--input-text, #ddd); font: 14px/1.45 system-ui, sans-serif; }
@@ -365,6 +368,7 @@ export class TimelineEditor {
     this.chain = new ChainSettings(this);
     lane.append(this.stillsEl, this.rulerEl, this.trackEl, this.audioLanes.root, this.audioLanes.settings, this.dialogue.root);
     this.hintEl = el('p', 'h3ct-hint');
+    this.touchPan = false;
 
     this.panelEl = el('div', 'h3ct-panel');
     const panelHead = el('div', 'h3ct-panelhead');
@@ -432,7 +436,7 @@ export class TimelineEditor {
     this.promptEl.addEventListener('input', () => {
       this.box().prompt = this.promptEl.value;
       this.sectionsButton.disabled = !promptSections(this.promptEl.value);
-      this.commit(false);
+      this.typed();
     });
     this.promptEl.addEventListener('focus', () => { this.activePromptEl = this.promptEl; });
     const promptTabs = el('div', 'h3ct-prompt-tabs');
@@ -606,7 +610,7 @@ export class TimelineEditor {
     this.sharedEl.placeholder = 'Added before every clip’s prompt: style, place, who @image1 is…';
     this.sharedEl.addEventListener('input', () => {
       this.state.prompt = this.sharedEl.value;
-      this.commit(false);
+      this.typed();
     });
     this.sharedMarks = new MentionLayer(this.sharedEl, this.mentionHooks());
     shared.append(el('span', 'h3ct-label', 'Shared prompt'), this.sharedMarks.root);
@@ -684,6 +688,7 @@ export class TimelineEditor {
   }
 
   destroy() {
+    clearTimeout(this.typingTimer);
     this.frameImages.destroy();
     this.replacements.destroy();
     for (const marks of [...this.sectionMarks, this.promptMarks, this.sharedMarks]) marks.destroy();
@@ -837,6 +842,15 @@ export class TimelineEditor {
     this.renderPanelInfo();
   }
 
+  // The status no longer matches the Timeline. It stays drawn, marked stale, until the next one arrives: dropping it
+  // would draw every clip without its take and then again with it.
+  markStale() {
+    if (this.stale) return;
+    this.stale = true;
+    this.renderHead();
+    this.renderPanelInfo();
+  }
+
   // Edits
 
   // Converted clips keep one image per endpoint: free guides on their first/last frame become First/Last stills.
@@ -849,18 +863,37 @@ export class TimelineEditor {
   }
 
   commit(renderPanel = true) {
-    this.adoptEndpoints();
-    model.normalize(this.state, this.host.context());
-    syncTargets(this.state,this.host.context());
+    clearTimeout(this.typingTimer);
+    this.typingTimer = null;
+    this.writeState();
     this.stale = true;
     this.followNote = '';
-    this.host.write(model.serialize(this.state));
     this.renderTrack();
     this.renderHead();
     if (renderPanel) this.renderPanel();
     else { this.renderReferenceOverview(); this.renderPanelInfo(); }
     this.host.changed();
     this.cast.changed();
+  }
+
+  // A key typed into a text field: the Timeline text follows every key, and the rest of commit(), with the edit's
+  // place in the undo history, waits for a pause.
+  typed() {
+    this.writeState(true);
+    clearTimeout(this.typingTimer);
+    this.typingTimer = setTimeout(() => this.commit(false), TYPING_PAUSE);
+  }
+
+  // Undo and Redo first take typing that hasn't paused yet, or they would step past it.
+  flushTyping() {
+    if (this.typingTimer != null) this.commit(false);
+  }
+
+  writeState(typing = false) {
+    this.adoptEndpoints();
+    model.normalize(this.state, this.host.context());
+    syncTargets(this.state,this.host.context());
+    this.host.write(model.serialize(this.state), typing);
   }
 
   select(index) {
@@ -1258,15 +1291,16 @@ export class TimelineEditor {
     if (ok && !this.stale && this.status.full_video_building) summary += ' · Building the full video in the background…';
     else if (ok && !this.stale && this.status.preview_video_building) summary += ' · Building the video so far…';
     else if (ok && !this.stale && this.status.preview_error && !this.status.preview_video) summary += ` · ${this.status.preview_error}`;
-    this.summaryEl.textContent = summary;
-    this.renderButton.textContent = count && !remaining ? '✓ All rendered' : `▶ Render ${remaining} remaining`;
+    setText(this.summaryEl, summary);
+    setText(this.renderButton, count && !remaining ? '✓ All rendered' : `▶ Render ${remaining} remaining`);
     this.renderButton.disabled = this.host.hasVideo?.()===false || !remaining || this.queuing || this.host.feeding?.() || !this.seedInput.validity.valid;
     this.renderButton.title = remaining
       ? `Queue ${remaining} run${remaining === 1 ? '' : 's'}, one per ${what} that has no take yet (outdated takes are kept; regenerate those one by one)`
       : `Every ${what} is rendered`;
     this.renderNextButton.disabled = this.renderButton.disabled;
     this.renderNextButton.title = remaining ? `Queue one run, for the next ${what} that is not rendered yet` : `Every ${what} is rendered`;
-    const shown = ok && !this.stale && !this.queuing ? exportedVideo(this.status) : null;
+    // A stale status keeps its video too, or every pause in typing would take the full video off the player and back.
+    const shown = ok && !this.queuing ? exportedVideo(this.status) : null;
     const full = shown?.file ?? null;
     this.partialVideo = shown?.partial ?? null;
     this.previewVideo = shown?.preview ?? null;
@@ -1295,10 +1329,12 @@ export class TimelineEditor {
       ? `Status is unavailable right now (${this.status.unavailable.replace(/^Status unavailable: /, '')}); the clips shown are the last known ones and are still saved.` : '';
     const error = this.status && !this.status.ok ? this.status.error
       : [unavailable, this.status?.export_error, ...conflicts].filter(Boolean).join(' ');
-    const pan = getComputedStyle(this.trackEl).touchAction.includes('pan-x');
-    this.hintEl.textContent = error || this.followNote || (pan
+    // Set by the Studio, whose mobile layout lets touches pan the track: reading styles after an edit restyles the
+    // whole ComfyUI page, and so does replacing text that hasn't changed.
+    const text = error || this.followNote || (this.touchPan
       ? 'Swipe to pan · drag edges to trim · tap a clip to edit · use + Clip to add'
       : 'Drag a clip’s right edge to resize it · drag after the last clip to draw one · click a clip to edit it');
+    if (this.hintEl.textContent !== text) this.hintEl.textContent = text;
     this.hintEl.classList.toggle('problem', !!error);
   }
 
@@ -1321,7 +1357,9 @@ export class TimelineEditor {
     const context = this.host.context();
     const connected = this.connectedSets();
     const span = this.span ?? this.defaultSpan();
-    this.trackEl.textContent = '';
+    // Measured before drawing: a size read after the track is redrawn restyles the whole ComfyUI page once more.
+    const stillsWidth = this.stillsWidth(), laneWidth = this.audioLanes.width();
+    const nodes = [];
     let start = 0;
     const starts = [];
     this.state.boxes.forEach((box, index) => {
@@ -1371,12 +1409,12 @@ export class TimelineEditor {
         event.stopPropagation();
         this.select(index);
       });
-      this.trackEl.append(item);
+      nodes.push(item);
       start += box.frames;
     });
     for (const bridge of model.keptBridges(this.state)) {
       const index = this.state.boxes.findIndex((box) => box.id === bridge.before);
-      const status = this.stale ? undefined : this.bridgeStatusOf(bridge.before);
+      const status = this.bridgeStatusOf(bridge.before);
       const replacing = model.isReplacement(bridge);
       const line = bridgeLine(status, model.bridgeProblem(this.state, index));
       if (replacing) {
@@ -1384,7 +1422,7 @@ export class TimelineEditor {
         region.classList.toggle('plays', !!status?.plays);
         region.style.left = percent(Math.max(0, starts[index] - bridge.left) / span);
         region.style.width = percent((bridge.left + bridge.right) / span);
-        this.trackEl.append(region);
+        nodes.push(region);
       }
       const mark = el('button', 'h3ct-bridge-mark');
       mark.type = 'button';
@@ -1406,23 +1444,23 @@ export class TimelineEditor {
         this.trackEl.dispatchEvent(new CustomEvent('h3c-show-page', {bubbles: true, detail: {page: 'box'}}));
         this.select(index);
       });
-      this.trackEl.append(mark);
+      nodes.push(mark);
     }
     if (this.draft != null) {
       const ghost = el('div', 'h3ct-draft', `${model.seconds(this.draft)} s`);
       ghost.style.left = percent(start / span);
       ghost.style.width = percent(this.draft / span);
-      this.trackEl.append(ghost);
+      nodes.push(ghost);
     } else if (!this.state.boxes.length) {
-      this.trackEl.append(el('span', 'h3ct-empty', 'Start with + Clip or drag here. Use Story in Studio to write prompts.'));
+      nodes.push(el('span', 'h3ct-empty', 'Start with + Clip or drag here. Use Story in Studio to write prompts.'));
     }
+    // Clips' and bridges' listeners use only their place, which their label names.
+    replaceChanged(this.trackEl, [...nodes, this.playheads[1]], (node) => node.getAttribute('aria-label'));
     this.renderRuler(span);
-    this.renderStills(span);
+    this.renderStills(span, stillsWidth);
     // AudioLanes guards typing by state/clip identity, including after its settings root is borrowed.
-    this.audioLanes.render(span);
-    this.rulerEl.append(this.playheads[0]);
-    this.trackEl.append(this.playheads[1]);
-    this.audioLanes.lanes.append(this.playheads[2]);
+    this.audioLanes.render(span, laneWidth);
+    if (this.audioLanes.lanes.lastChild !== this.playheads[2]) this.audioLanes.lanes.append(this.playheads[2]);
     this.placePlayhead(span);
     this.dialogue.render();
     this.chain.render();
@@ -1437,14 +1475,15 @@ export class TimelineEditor {
   }
 
   renderRuler(span) {
-    this.rulerEl.textContent = '';
+    const ticks = [];
     const total = span / model.FPS;
     const step = [1, 2, 5, 10, 15, 30, 60, 120].find((s) => total / (this.zoom ?? 1) / s <= 10) ?? 300;
     for (let t = 0; t < total; t += step) {
       const tick = el('span', 'h3ct-tick', `${t}s`);
       tick.style.left = percent((t * model.FPS) / span);
-      this.rulerEl.append(tick);
+      ticks.push(tick);
     }
+    replaceChanged(this.rulerEl, [...ticks, this.playheads[0]], () => 'tick');
   }
 
   renderPanel() {
@@ -1569,16 +1608,19 @@ export class TimelineEditor {
     const box = this.box();
     const names = box ? [box.prompt, this.state.prompt].flatMap(text => model.mentions(text ?? '').map(ref => ref.name)) : [];
     const refs = mentionedReferences(names, this.referenceOptions());
-    this.promptRefsEl.replaceChildren(...refs.map(ref => referenceChip(ref)));
+    replaceChanged(this.promptRefsEl, refs.map(ref => referenceChip(ref)));
     this.promptRefsEl.hidden = !refs.length;
   }
 
   renderReferenceOverview() {
     this.renderPromptReferences();
     const root = this.referenceOverviewEl;
-    root.replaceChildren();
     const box = this.box();
-    if (!box) return;
+    if (!box) {
+      this.overviewKey = null;
+      root.replaceChildren();
+      return;
+    }
     const used = new Set([box.prompt,this.state.prompt].flatMap(text=>model.mentions(text??'').map(ref=>ref.name)));
     const connected = this.host.connected().images.filter(ref=>used.has(ref.name));
     const byName = new Map(connected.map(ref => [ref.name, ref]));
@@ -1596,6 +1638,14 @@ export class TimelineEditor {
     };
 
     const subjects = definitions.filter(part => part.label.startsWith('<Subject ') || model.mentions(part.value).some(ref => ref.kind === 'image'));
+    // Thumbnails join their cards once they load, so a redrawn overview never equals the one shown: draw it again
+    // only when what it shows changes.
+    const key = JSON.stringify([subjects.map(part => [part.label, part.value,
+      model.mentions(part.value).filter(ref => ref.kind === 'image').map(ref => previewFor(ref.name))]),
+      connected.map(ref => [ref.name, ref.title, previewFor(ref.name), !!plates[ref.name]])]);
+    if (key === this.overviewKey) return;
+    this.overviewKey = key;
+    root.replaceChildren();
     if (subjects.length) {
       root.append(el('div', 'h3ct-section-heading', 'Subjects and their images'));
       const grid = el('div', 'h3ct-subject-grid');
@@ -1690,7 +1740,7 @@ export class TimelineEditor {
           part.value = area.value;
           box.prompt = writePromptSections(source, sections);
           this.promptEl.value = box.prompt;
-          this.commit(false);
+          this.typed();
         });
         const marks = new MentionLayer(area, this.mentionHooks());
         this.sectionMarks.push(marks);
@@ -1726,6 +1776,10 @@ export class TimelineEditor {
       details.append(el('summary', null, 'Compile source'), source);
       chips.splice(chips.indexOf(source), 1, details);
     }
+    // The chips' listeners hold the clip and Cast view they were drawn from; while those are the same, equal markup keeps them.
+    const from = [this.state, this.state.bible, this.cast.view, box];
+    if (from.every((item, index) => item === this.castChipsFrom?.[index]) && drawsSame(this.castChipsEl, chips)) return;
+    this.castChipsFrom = from;
     this.castChipsEl.replaceChildren(...chips);
     if (focused) this.castChipsEl.querySelector(`[data-key="${focused}"]`)?.focus();
   }
@@ -1771,9 +1825,12 @@ export class TimelineEditor {
     mark.title+=guide?(frameMode?' · accepted frame':' · accepted guide'):file?' · candidate':' · add image';
   }
 
-  renderStills(span = this.span ?? this.defaultSpan()) {
-    this.stillsEl.replaceChildren();
-    const width=this.stillsEl.clientWidth||this.trackEl.clientWidth||800;
+  stillsWidth() {
+    return this.stillsEl.clientWidth||this.trackEl.clientWidth||800;
+  }
+
+  renderStills(span = this.span ?? this.defaultSpan(), width = this.stillsWidth()) {
+    const marks=[];
     let start=0;
     const clips=this.state.boxes.map((box,index)=>{
       const left=start/span*width+2,right=(start+box.frames)/span*width-2;
@@ -1835,9 +1892,10 @@ export class TimelineEditor {
           && this.frameImages.target.kind===target.kind && this.frameImages.target.shot===target.shot);
         this.fillStill(mark,box,target,`${index+1} · ${targetLabel(target)}`);
         imageDrop(mark,file=>{mark.click();this.dropGuide(file,target);});
-        this.stillsEl.append(mark);
+        marks.push(mark);
       }
     }
+    replaceChanged(this.stillsEl,marks,mark=>[mark.getAttribute('aria-label'),mark.dataset.box,mark.dataset.target].join('|'));
     this.stillsEl.style.height=`${clips.some(clip=>clip.shots.length)?146:74}px`;
     this.stillsEl.hidden=!this.state.boxes.length;
   }
@@ -2010,16 +2068,16 @@ export class TimelineEditor {
     const box = this.box();
     if (!box) return;
     const context = this.host.context();
-    this.titleEl.textContent = `Clip ${this.selected + 1} · ${model.lengthLabel(this.state, this.selected, context)}`;
-    this.clipActions.firstElementChild.textContent = `Clip ${this.selected + 1} actions`;
+    setText(this.titleEl, `Clip ${this.selected + 1} · ${model.lengthLabel(this.state, this.selected, context)}`);
+    setText(this.clipActions.firstElementChild, `Clip ${this.selected + 1} actions`);
     const info = model.describeBox(this.state, this.selected, this.connectedSets(), context);
     const spoken = this.stale ? '' : this.statusOf(box)?.dialogue_problem;
     const blocking = [...info.problems, ...(spoken ? [`${spoken.charAt(0).toUpperCase()}${spoken.slice(1)}.`] : [])];
-    this.promptProblemEl.textContent = blocking.join(' ');
+    setText(this.promptProblemEl, blocking.join(' '));
     this.promptProblemEl.hidden = !blocking.length;
     this.dialogueField.hidden = !this.state.dialogue?.cues?.length;
     this.dialogueSelect.value = box.dialogue === 'manual' ? 'manual' : 'cues';
-    this.boxRenderButton.textContent = renderLabel(this.selected + 1, this.takeCount());
+    setText(this.boxRenderButton, renderLabel(this.selected + 1, this.takeCount()));
     this.boxRenderButton.title = 'Render only this clip using its seed mode, keeping its saved prompt and neighboring videos';
     this.boxRenderButton.disabled = this.host.hasVideo?.()===false || this.queuing || blocking.length > 0 || !this.seedInput.validity.valid;
     const tags = info.tags.map((item) => `${item.tag} = ${item.name}`).join(', ');
@@ -2028,7 +2086,7 @@ export class TimelineEditor {
     const reason = this.statusOf(box)?.reason;
     const mode = box.flf_refmods && info.mode === 'FLF2VA' ? 'FLF2VA + RefMods' : info.mode;
     const carry = !info.fresh ? ` · ${this.host.context()} carried frames` : '';
-    this.modeEl.textContent = `Runs as ${mode}${carry}${tags ? `: ${tags}` : ''}${guides}${problems}${reason ? ` · Renders again: ${reason}` : ''}`;
+    setText(this.modeEl, `Runs as ${mode}${carry}${tags ? `: ${tags}` : ''}${guides}${problems}${reason ? ` · Renders again: ${reason}` : ''}`);
     this.modeEl.classList.toggle('problem', info.problems.length > 0);
     const conversion = info.mode === 'REF2VA' ? model.flfConversion(this.state, this.selected, this.connectedSets(), context) : null;
     this.convertRow.hidden = !conversion;
@@ -2036,17 +2094,16 @@ export class TimelineEditor {
       this.convertButton.disabled = !conversion.ok;
       this.convertButton.title = conversion.ok ? 'Turn on FLF2VA + cached RefMods: First/Last frames become start and end frames, '
         + 'mentioned images become cached RefMods, and audio stays an audio reference. Needs FLF2VA video model weights.' : conversion.reason;
-      this.convertHint.textContent = conversion.ok ? 'First/Last become start and end frames; images become cached RefMods; audio stays.' : conversion.reason;
+      setText(this.convertHint, conversion.ok ? 'First/Last become start and end frames; images become cached RefMods; audio stays.' : conversion.reason);
       this.convertHint.classList.toggle('problem', !conversion.ok);
     }
-    this.effectivePromptEl.replaceChildren(el('summary', null, 'Effective H3 prompt and text window'));
     this.effectivePromptEl.hidden = !this.state.timed_text;
     const status = this.stale ? null : this.statusOf(box);
     const pre = el('pre', 'h3ct-hint'); pre.style.whiteSpace = 'pre-wrap';
     pre.textContent = status?.effective_prompt != null
       ? `${status.effective_prompt}\n\nText window:\n${JSON.stringify(status.text_window, null, 2)}`
       : status?.text_note ?? 'Waiting for current render settings and status.';
-    this.effectivePromptEl.append(pre);
+    replaceChanged(this.effectivePromptEl, [el('summary', null, 'Effective H3 prompt and text window'), pre]);
     this.checks.render();
     this.bridges.render();
     this.takes.render();

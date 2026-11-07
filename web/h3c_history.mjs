@@ -43,6 +43,7 @@ export class EditHistory {
   record(value, label, group = null) {
     const text = stringifyJSON(value);
     if (text === this.entries[this.index].value) return false;
+    if (typeof label === 'function') label = label();
     const merge = group != null && group === this.group && !this.canRedo && this.canUndo
       && label === this.entries[this.index].label;
     this.entries.splice(this.index + 1);
@@ -85,7 +86,7 @@ export class TimelineHistory extends EditHistory {
     if (identity !== this.projectIdentity || (loaded && this.entries.length === 1)) {
       this.projectIdentity = identity;
       this.reset(value);
-    } else this.record(value, editLabel(this.value, value), this.groupOf());
+    } else this.record(value, () => editLabel(this.value, value), this.groupOf());
     this.notify();
   }
 

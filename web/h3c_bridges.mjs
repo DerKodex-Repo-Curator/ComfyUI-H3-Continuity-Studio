@@ -3,7 +3,7 @@
 // so the video keeps its length and recordings stay in place. Plain DOM without ComfyUI imports; the editor's host
 // queues the run, and Play asks the Studio to show a take or candidate. Every region, protection and choice comes from
 // the Timeline's status.
-import * as model from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import * as model from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 
 const STYLE_ID = 'h3cb-style';
 const CSS = `
@@ -242,7 +242,12 @@ export class BridgePanel {
     this.promptEl.setAttribute('aria-label', 'Bridge prompt');
     this.promptEl.placeholder = 'How the shot moves from the box before into this one';
     this.promptEl.title = 'Sent after the shared prompt, with no pictures or sounds: a mention reads as the described subject or sound';
-    this.promptEl.addEventListener('input', () => this.edit((bridge) => { bridge.prompt = this.promptEl.value; }, false));
+    this.promptEl.addEventListener('input', () => {
+      const bridge = model.bridgeOf(this.editor.state, this.editor.selected);
+      if (!bridge) return;
+      bridge.prompt = this.promptEl.value;
+      this.editor.typed();
+    });
     const prompt = el('div', 'h3cb-prompt');
     prompt.append(el('span', 'h3ct-label', 'Bridge prompt'), this.promptEl);
     this.stateEl = el('div', 'h3cb-state');

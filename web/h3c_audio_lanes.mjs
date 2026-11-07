@@ -1,7 +1,8 @@
-import * as model from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import * as model from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 import { importWhisper, validateTimedText, setTextSync, textClock, projectTimedText } from './h3c_timed_text.mjs?v=20261106-box-audio-1';
 import { loadAudio, loaded, beatTimes, drawWave } from './h3c_waveform.mjs?v=20261106-video-so-far-1';
 import {captureWindows,resolveWindows,unlockWindows,lockEligibility,sourceOrigin,outputWindows,equivalentWindows,timelineAudioParts} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
+import {replaceChanged, setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
 
 const node = (tag, cls, text) => {
   const item = document.createElement(tag);
@@ -150,10 +151,10 @@ export class AudioLanes {
 
   renderBeatControls() {
     const clip = this.clips.find(clip => clip.slot === this.selected) ?? this.clips[0];
-    this.beatButton.textContent = clip ? `Detect beats · @${clip.slot}` : 'Detect beats';
+    setText(this.beatButton, clip ? `Detect beats · @${clip.slot}` : 'Detect beats');
     this.beatButton.disabled = !!this.findingBeats;
     const found = this.beatMessages.get(clip?.slot);
-    this.beatMessage.textContent = found?.url === this.sourceUrl(clip) ? found?.text ?? '' : '';
+    setText(this.beatMessage, found?.url === this.sourceUrl(clip) ? found?.text ?? '' : '');
   }
 
   // Draws the waveforms decoded since the lanes were drawn (those of `url`, or every one), with their beats.
@@ -280,7 +281,7 @@ export class AudioLanes {
           }
           const direction = node('textarea', 'h3ct-text'); direction.rows = 2; direction.value = value.direction;
           direction.setAttribute('aria-label', 'Text direction'); direction.placeholder = 'Describe how these exact words appear: placement, typography, motion…';
-          direction.addEventListener('input', () => { value.direction = direction.value; this.editor.commit(false); });
+          direction.addEventListener('input', () => { value.direction = direction.value; this.editor.typed(); });
           direction.addEventListener('change', () => { value.direction = direction.value; this.editor.commit(false); });
           const treatment = node('label', 'h3ct-field', 'Text visual direction'); treatment.append(direction);
           this.textSettings.append(timing, treatment);
@@ -288,21 +289,21 @@ export class AudioLanes {
       }
       this.textSettings.append(this.textSummary);
     }
-    if (!value) { this.textSummary.textContent = ''; return; }
+    if (!value) { setText(this.textSummary, ''); return; }
     try {
       validateTimedText(value);
       const clock = textClock(value, this.clips);
-      if (!clock.resolved) { this.textSummary.textContent = `@${value.audio_slot} lane is missing. Select a lane or turn sync off.`; return; }
-      if (!value.enabled) { this.textSummary.textContent = 'Timed text is disabled.'; return; }
+      if (!clock.resolved) { setText(this.textSummary, `@${value.audio_slot} lane is missing. Select a lane or turn sync off.`); return; }
+      if (!value.enabled) { setText(this.textSummary, 'Timed text is disabled.'); return; }
       const index = this.editor.selected, box = state.boxes[index];
       const start = state.boxes.slice(0, index).reduce((sum, box) => sum + box.frames, 0) / model.FPS;
       const window = projectTimedText(value, this.clips, start, box?.frames ?? model.totalFrames(state),
         box && !model.isFresh(state, index) ? this.editor.host.context() : 0, model.resolvedAudio(state));
-      this.textSummary.textContent = (clock.box_windows?'Audio follows boxes':`Movie ${clock.start} s · source ${clock.source_start}–${clock.source_start + clock.duration} s`)
+      setText(this.textSummary, (clock.box_windows?'Audio follows boxes':`Movie ${clock.start} s · source ${clock.source_start}–${clock.source_start + clock.duration} s`)
         + `\nClip ${index + 1} source ${window.source_windows?.map(w=>`${w.source_start}–${w.source_end}`).join(', ') || `${window.source_start ?? '—'}–${window.source_end ?? '—'}`} s · replay ${window.replay_end_ms} ms`
         + `${window.direction ? `\nDirection: ${window.direction}` : ''}`
-        + (window.cues.length ? window.cues.map(cue => `\n${cue.start_ms}–${cue.end_ms} ms${cue.continuing ? ' · continuing' : ''}${cue.replay_only ? ' · replay only' : ''}\n${cue.text}`).join('') : '\nNo active phrases in this clip.');
-    } catch (error) { this.textSummary.textContent = error.message; }
+        + (window.cues.length ? window.cues.map(cue => `\n${cue.start_ms}–${cue.end_ms} ms${cue.continuing ? ' · continuing' : ''}${cue.replay_only ? ' · replay only' : ''}\n${cue.text}`).join('') : '\nNo active phrases in this clip.'));
+    } catch (error) { setText(this.textSummary, error.message); }
   }
 
   async addFile(file) {
@@ -339,25 +340,39 @@ export class AudioLanes {
     finally { this.busy = false; this.addButton.disabled = false; }
   }
 
-  render(span) {
+  width() {
+    return this.lanes.getBoundingClientRect().width;
+  }
+
+  render(span, laneWidth) {
     this.span = span;
-    this.renderLanes();
+    this.renderLanes(laneWidth);
     const connected = this.editor.host.connected().audios.filter(ref => !ref.refmod && LANE_SLOTS.includes(ref.name)
       && !this.clips.some(clip => clip.slot === ref.name));
-    this.connectedSelect.replaceChildren(node('option', null, 'Add connected audio…'));
-    this.connectedSelect.firstChild.value = '';
-    for (const ref of connected) {
+    const prompt = node('option', null, 'Add connected audio…');
+    prompt.value = '';
+    replaceChanged(this.connectedSelect, [prompt, ...connected.map(ref => {
       const option = node('option', null, `@${ref.name} · ${ref.title || ref.name}`);
-      option.value = ref.name; this.connectedSelect.append(option);
-    }
+      option.value = ref.name;
+      return option;
+    })]);
+    this.connectedSelect.value = '';
     this.connectedSelect.hidden = !connected.length;
     this.renderSettings();
   }
 
-  renderLanes() {
+  renderLanes(laneWidth = this.width()) {
     this.renderText();
+    // Drawn again only when what the lanes show changed: every redraw restyles the whole ComfyUI page.
+    const refs = this.editor.host.connected().audios;
+    const key = JSON.stringify([this.clips, this.clips.map(clip => {
+      const reference = refs.find(ref => ref.name === clip.slot);
+      return [reference?.replaced, reference?.title, this.sourceUrl(clip)];
+    }), model.audioBoxSpans(this.editor.state), this.span, laneWidth, this.editor.state.disabled_refs,
+    globalThis.devicePixelRatio]);
+    if (this.lanesState === this.editor.state && this.lanesKey === key) return;
+    this.lanesState = this.editor.state; this.lanesKey = key;
     if (this.header.parentNode === this.lanes) this.lanes.after(this.header);
-    const laneWidth = this.lanes.getBoundingClientRect().width;
     this.lanes.replaceChildren();
     this.drawings = [];
     if (!this.clips.length) {
@@ -576,7 +591,7 @@ export class AudioLanes {
     description.setAttribute('aria-label', `Audio description for @${clip.slot}`);
     description.placeholder = `Describe @${clip.slot} for H3 Story: instruments, mood, rhythm, ambience or voice. Story Text descriptions can override this.`;
     description.value = clip.description ?? '';
-    description.addEventListener('input', () => { clip.description = description.value; this.editor.commit(false); });
+    description.addEventListener('input', () => { clip.description = description.value; this.editor.typed(); });
     this.settings.append(description);
     this.renderPlayer(file, clip);
     const video = model.totalFrames(this.editor.state) / model.FPS;

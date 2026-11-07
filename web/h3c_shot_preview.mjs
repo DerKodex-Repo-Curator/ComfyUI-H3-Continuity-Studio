@@ -1,22 +1,34 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import { isFresh, globalFrame, lookAt, assemblePrompt } from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import { isFresh, globalFrame, lookAt, assemblePrompt } from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 
 import {framePrompt} from './h3c_still_scene.mjs?v=20261011-reference-preparation-1';
-import {preparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
+import {preparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=20261107-editing-lag-1';
 
 const SHOT = /^\[Shot (\d+)\]$/i;
+// Every edit and redraw reads the shots of every clip, and parsing a long prompt is slow; the text alone decides them.
+const shotTimes = new Map();
+
+function promptShotTimes(prompt) {
+  let times = shotTimes.get(prompt);
+  if (times) return times;
+  const { shots: fields } = promptShots(prompt);
+  const shots = fields.length ? fields : [{ label: '[Shot 1]', value: prompt }];
+  times = shots.map((shot) => {
+    const match = /^At (\d+):(\d+)\.(\d+),/i.exec(shot.value);
+    return { number: Number(SHOT.exec(shot.label)[1]),
+      generated: match ? Math.round((Number(match[1]) * 60 + Number(match[2]) + Number(match[3]) / 1000) * 24) : null };
+  });
+  if (shotTimes.size >= 500) shotTimes.clear();
+  shotTimes.set(prompt, times);
+  return times;
+}
 
 export function shotFrames(state, index, context) {
   const box = state.boxes[index];
-  const { shots: fields } = promptShots(box.prompt);
-  const shots = fields.length ? fields : [{ label: '[Shot 1]', value: box.prompt }];
   const carry = isFresh(state, index) ? 0 : context;
   const last = box.frames - (carry ? 0 : 1);
-  return shots.map((shot) => {
-    const match = /^At (\d+):(\d+)\.(\d+),/i.exec(shot.value);
-    const generated = match ? Math.round((Number(match[1]) * 60 + Number(match[2]) + Number(match[3]) / 1000) * 24) : 0;
-    const number = Number(SHOT.exec(shot.label)[1]);
-    const frame = number === 1 ? 0 : match ? Math.max(0, generated - (carry ? carry - 1 : 0)) : null;
+  return promptShotTimes(box.prompt).map(({ number, generated }) => {
+    const frame = number === 1 ? 0 : generated != null ? Math.max(0, generated - (carry ? carry - 1 : 0)) : null;
     return { shot: number, frame: frame != null && frame <= last ? frame : null };
   });
 }

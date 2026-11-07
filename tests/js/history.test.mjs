@@ -49,6 +49,17 @@ test('typing is grouped by field and action; blur and navigation end the group',
   assert.equal(history.jump(0).timeline.boxes[0].prompt, '');
 });
 
+test('a step is named only when the Timeline changed', () => {
+  const history = new EditHistory(state('one'));
+  let named = 0;
+  const label = () => { named++; return 'Edit clip 1 prompt'; };
+  assert.equal(history.record(state('one'), label), false);
+  assert.equal(named, 0);
+  assert.equal(history.record(state('two'), label), true);
+  assert.equal(named, 1);
+  assert.equal(history.entries[1].label, 'Edit clip 1 prompt');
+});
+
 test('100 edits are retained with a reachable base state', () => {
   const history = new EditHistory(0);
   for (let i = 1; i <= 105; i++) history.record(i, `Edit ${i}`);

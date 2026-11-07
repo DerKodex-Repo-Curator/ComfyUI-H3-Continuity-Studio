@@ -1,8 +1,9 @@
 // Dialogue cues: a recording's exact words at its own source times, mirroring h3_continuity/dialogue.py. Boxes speak
 // them as <d> lines, and replacement bridges keep the footage where someone speaks on screen. The pure helpers seed
 // cues from a transcript or a Story and compute the check key; DialoguePanel edits them on the Audio page.
-import * as model from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import * as model from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 import {resolveWindows,coalesceWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
+import {setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
 
 export const PORTRAYALS = [['on_screen', 'On screen'], ['voiceover', 'Voiceover'], ['unknown', 'Unknown']];
 const SLOTS = ['audio1', 'audio2', 'audio3'];
@@ -414,7 +415,7 @@ export class DialoguePanel {
     const state = this.editor.state, clips = this.clips();
     const cues = this.cues;
     const checked = cues.filter((cue) => this.serverCue(cue.id)?.aligned).length;
-    this.summary.textContent = `Dialogue cues${cues.length ? ` · ${cues.length}${this.editor.stale ? '' : `, ${checked} checked`}` : ''}`;
+    setText(this.summary, `Dialogue cues${cues.length ? ` · ${cues.length}${this.editor.stale ? '' : `, ${checked} checked`}` : ''}`);
     this.root.hidden = !clips.length && !cues.length;
     const signature = JSON.stringify([state.dialogue, clips.map((clip) => [clip.slot, clip.file, clip.locked, clip.box_windows]),
       state.boxes.map(box=>[box.id,box.frames]),

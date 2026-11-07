@@ -1,7 +1,10 @@
 // Just enough of the DOM for the Studio's plain-DOM panels to build, render and handle clicks under node --test.
+const dataKey = (name) => name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+
 class FakeElement {
   constructor(tag) {
     this.tagName = tag.toUpperCase();
+    this.nodeType = tag === '#text' ? 3 : 1;
     this.childNodes = [];
     this.parentNode = null;
     this.attributes = new Map();
@@ -13,6 +16,8 @@ class FakeElement {
   }
 
   get children() { return this.childNodes.filter((node) => node.tagName !== '#TEXT'); }
+  get firstChild() { return this.childNodes[0] ?? null; }
+  get lastChild() { return this.childNodes.at(-1) ?? null; }
   get firstElementChild() { return this.children[0] ?? null; }
   get options() { return this.children.filter((node) => node.tagName === 'OPTION'); }
 
@@ -51,10 +56,29 @@ class FakeElement {
 
   remove() { this.parentNode?.removeChild(this); }
 
+  replaceChild(node, old) {
+    node.parentNode?.removeChild(node);
+    this.childNodes[this.childNodes.indexOf(old)] = node;
+    node.parentNode = this;
+    old.parentNode = null;
+    this.replaced = (this.replaced ?? 0) + 1;
+  }
+
+  // Markup equality: everything this fake keeps as attributes, plus the children.
+  isEqualNode(other) {
+    const own = (node) => JSON.stringify([node.tagName, node.text, node.className, node.title, node.id, node.hidden,
+      [...node.attributes].sort(), Object.entries(node.dataset).sort(), Object.entries(node.style).sort()]);
+    return own(this) === own(other) && this.childNodes.length === other.childNodes.length
+      && this.childNodes.every((child, index) => child.isEqualNode(other.childNodes[index]));
+  }
+
   replaceChildren(...nodes) {
     for (const node of [...this.childNodes]) this.removeChild(node);
     this.append(...nodes);
   }
+
+  get data() { return this.text; }
+  set data(value) { this.text = String(value); }
 
   get textContent() { return this.text + this.childNodes.map((node) => node.textContent).join(''); }
   set textContent(value) {
@@ -62,9 +86,42 @@ class FakeElement {
     this.text = value == null ? '' : String(value);
   }
 
-  setAttribute(name, value) { this.attributes.set(name, String(value)); }
-  getAttribute(name) { return this.attributes.get(name) ?? null; }
-  removeAttribute(name) { this.attributes.delete(name); }
+  get nodeName() { return this.tagName; }
+
+  // class, title, id, hidden, style and data-* live in properties here; as attributes they read and write those.
+  getAttributeNames() {
+    const reflected = [['class', this.className], ['title', this.title], ['id', this.id], ['hidden', this.hidden],
+      ['style', Object.keys(this.style).length]].filter(([, value]) => value).map(([name]) => name);
+    return [...reflected, ...Object.keys(this.dataset).map((name) => `data-${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`),
+      ...this.attributes.keys()];
+  }
+
+  setAttribute(name, value) {
+    value = String(value);
+    if (name === 'class') this.className = value;
+    else if (name === 'title' || name === 'id') this[name] = value;
+    else if (name === 'hidden') this.hidden = true;
+    else if (name === 'style') this.style = JSON.parse(value);
+    else if (name.startsWith('data-')) this.dataset[dataKey(name)] = value;
+    else this.attributes.set(name, value);
+  }
+
+  getAttribute(name) {
+    if (name === 'class') return this.className || null;
+    if (name === 'title' || name === 'id') return this[name] || null;
+    if (name === 'hidden') return this.hidden ? '' : null;
+    if (name === 'style') return Object.keys(this.style).length ? JSON.stringify(this.style) : null;
+    if (name.startsWith('data-')) return this.dataset[dataKey(name)] ?? null;
+    return this.attributes.get(name) ?? null;
+  }
+
+  removeAttribute(name) {
+    if (name === 'class' || name === 'title' || name === 'id') this[name === 'class' ? 'className' : name] = '';
+    else if (name === 'hidden') this.hidden = false;
+    else if (name === 'style') this.style = {};
+    else if (name.startsWith('data-')) delete this.dataset[dataKey(name)];
+    else this.attributes.delete(name);
+  }
 
   addEventListener(type, listener) {
     if (!this.listeners.has(type)) this.listeners.set(type, []);
@@ -101,6 +158,7 @@ export function installDom() {
   const head = new FakeElement('head');
   const find = (node, id) => node.id === id ? node : node.children.map((child) => find(child, id)).find(Boolean) ?? null;
   globalThis.document = {head, activeElement: null, createElement: (tag) => new FakeElement(tag),
+    createTextNode: (text) => Object.assign(new FakeElement('#text'), {text: String(text)}),
     getElementById: (id) => find(head, id)};
 }
 

@@ -1,9 +1,10 @@
 import {ReferencePreparationPanel} from './h3c_reference_preparation.mjs?v=20261014-reference-thumbnails-1';
 // The Studio's Cast page: the Story bible's characters, places and props, and the boxes each appears in. Every change
 // goes through the bible route, which compiles the prompts, and lands as one Timeline edit.
-import * as model from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import * as model from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 import { fillPicturePicker, referenceChip } from './h3c_reference_pictures.mjs?v=20261010-reference-workspace-1';
 import { LONG_CLIP_SECONDS, dropVoiceClip, freeVoiceSlot, setVoiceClip, voiceClipOf } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
+import { drawsSame, setText } from './h3c_dom.mjs?v=20261107-editing-lag-1';
 
 export const BUILD_SENTENCE = 'Build bible links each clip’s subjects to characters, places and props. Nothing that renders changes.';
 const STALE = 'The Timeline changed while the bible was updating; try again.';
@@ -706,7 +707,7 @@ export class CastPage {
     const focused = active?.dataset.key ?? null;
     const range = active && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
     const bible = this.editor.state.bible ?? null;
-    this.noteEl.textContent = this.note;
+    setText(this.noteEl, this.note);
     this.noteEl.hidden = !this.note;
     this.fieldset.disabled = this.busy;
     const parts = [];
@@ -721,7 +722,14 @@ export class CastPage {
       parts.push(this.offerRow(bible), this.unlinkedList(), this.styleRow(bible), this.list(bible));
       if (selected) parts.push(this.detail(selected, bible));
     }
-    this.fieldset.replaceChildren(...parts.filter(Boolean));
+    // The controls' listeners hold the state they were drawn from; while it is the same, equal markup keeps them.
+    const drawn = parts.filter(Boolean), from = [this.editor.state, bible, this.offer, this.view];
+    if (from.every((item, index) => item === this.drawnFrom?.[index]) && drawsSame(this.fieldset, drawn)) {
+      this.editor.renderCastChips();
+      return;
+    }
+    this.drawnFrom = from;
+    this.fieldset.replaceChildren(...drawn);
     const again = focused && [...this.fieldset.querySelectorAll('[data-key]')].find((node) => node.dataset.key === focused);
     if (again && !this.busy) {
       again.focus();

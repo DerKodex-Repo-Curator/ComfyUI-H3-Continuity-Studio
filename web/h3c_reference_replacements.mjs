@@ -1,4 +1,4 @@
-import {referencePools, referenceType, referenceMediaType, setReferenceReplacement, restoreReferenceReplacement, switchReference, applyImageDescription, effectiveRefmods} from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import {referencePools, referenceType, referenceMediaType, setReferenceReplacement, restoreReferenceReplacement, switchReference, applyImageDescription, effectiveRefmods} from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 import {referenceChip} from './h3c_reference_pictures.mjs?v=20261010-reference-workspace-1';
 import {audioSourceLocked} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 
