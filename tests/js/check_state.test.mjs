@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkState } from '../../web/h3c_check.mjs?v=20261104-check-holds-1';
+import { checkState } from '../../web/h3c_check.mjs?v=c69786f95bd5';
 
 const base = {checked: '2026-11-04T07:40:00', model: null, problems: null};
 

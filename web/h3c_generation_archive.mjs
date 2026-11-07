@@ -1,5 +1,5 @@
-import {settledPreparation} from './h3c_reference_preparation.mjs?v=20261014-reference-thumbnails-1';
-import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=20261107-editing-alloc-1';
+import {settledPreparation} from './h3c_reference_preparation.mjs?v=47e1dbdd7993';
+import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=d7f26a8db663';
 function validate(archive){
  if(archive?.format!=='h3-generation'||archive.version!==1||typeof archive.timeline!=='string'||!archive.story||!Array.isArray(archive.assets))throw Error('Choose a generation export version 1.');
  const line=parseJSON(archive.timeline);if(!Array.isArray(line.boxes))throw Error('Generation Timeline is invalid.');

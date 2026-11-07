@@ -1,6 +1,6 @@
 // The Timeline face and native advanced widgets share the Studio editor's saved state.
-import {joinKind} from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
-import {setText} from './h3c_dom.mjs?v=20261107-editing-alloc-1';
+import {joinKind} from './h3c_timeline_model.mjs?v=136b17470774';
+import {setText} from './h3c_dom.mjs?v=584a9bf55653';
 export const FACE_HEIGHT = 120;
 const STYLE_ID = 'h3ct-face-style';
 const CSS = `

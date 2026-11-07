@@ -1,6 +1,6 @@
-import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
-import {splitWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
+import { promptShots } from './h3c_prompt_sections.mjs?v=b58f04f78a75';
+import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=136b17470774';
+import {splitWindows} from './h3c_audio_windows.mjs?v=cdefbd77b246';
 
 const number = (shot) => Number(/\d+/.exec(shot.label)[0]);
 // A later shot's cut time in milliseconds of generated video (replay included), or null when it has none.

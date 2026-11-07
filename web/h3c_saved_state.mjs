@@ -1,5 +1,5 @@
 // Save Timeline and Story together so a restart cannot restore prompts without their matching recovery state.
-import {setText} from './h3c_dom.mjs?v=20261107-editing-alloc-1';
+import {setText} from './h3c_dom.mjs?v=584a9bf55653';
 
 const sessions = new Map();
 const restorers = new WeakMap();
