@@ -8,7 +8,7 @@
 
 ## Open Studio does nothing, or the Studio looks old
 
-A browser can hold an older frontend module. Hard-refresh the page after updating the node pack. The Timeline node loads its current editor even when an older one is cached, but the Studio itself needs the matching frontend.
+The page is still running the frontend it loaded before the update. After updating the node pack, restart ComfyUI and refresh the page. A normal refresh is enough: an update gives every changed frontend file a new address, so the browser fetches it again instead of using a cached copy.
 
 ## A clip says it needs a render
 
