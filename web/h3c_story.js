@@ -6,21 +6,21 @@
 // panel of a story node that comes back after an undo, a tab switch or a reload follows it again. The API key only
 // ever goes to the server's key route. While base_url is linked, the host line and the key box use the base URL that
 // the last Write in this page got.
-// Share the Timeline's helper revision so cached .mjs files cannot mix frontend versions.
+// ?v= tags come from node tools/module_versions.mjs --write, so cached .mjs files cannot mix frontend versions.
 import { app } from '../../scripts/app.js';
 import { api } from '../../scripts/api.js';
-import { mountSavedState, AUTOSAVE_SETTING, autosaveEnabled } from './h3c_saved_state.mjs?v=20261107-editing-lag-1';
-import { migrateStoryDescriptionInputs, migrateSerializedStoryDescriptionInputs } from './h3c_story_inputs.mjs?v=20261003-story-inputs-2';
-import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
-import * as story from './h3c_story_model.mjs?v=20261106-box-audio-1';
-import { StoryPanel } from './h3c_story_panel.mjs?v=20261106-checkpoints-1';
-import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261106-checkpoints-1';
-import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=20261014-story-library-1';
-import { parseState, serialize } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
+import { mountSavedState, AUTOSAVE_SETTING, autosaveEnabled } from './h3c_saved_state.mjs?v=285cb0ac96bb';
+import { migrateStoryDescriptionInputs, migrateSerializedStoryDescriptionInputs } from './h3c_story_inputs.mjs?v=46d6a455ab9a';
+import { showOwnElement } from './h3c_dom_widget.mjs?v=961e6d7f3bb7';
+import * as story from './h3c_story_model.mjs?v=32dc11605e7b';
+import { StoryPanel } from './h3c_story_panel.mjs?v=3361c4324f46';
+import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=0943ccc41969';
+import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=b07a438d2dc4';
+import { parseState, serialize } from './h3c_timeline_model.mjs?v=136b17470774';
 
-import {exportGeneration,importGeneration,downloadGeneration,generationControl,setGenerationControl} from './h3c_generation_archive.mjs?v=20261014-reference-thumbnails-1';
-import {captureRecipe,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=20261107-editing-alloc-1';
-import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=20261107-editing-alloc-1';
+import {exportGeneration,importGeneration,downloadGeneration,generationControl,setGenerationControl} from './h3c_generation_archive.mjs?v=03a0f7670ac8';
+import {captureRecipe,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=bcc472928f9e';
+import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=d7f26a8db663';
 
 const NODE_TYPE = 'H3C_Story';
 const WRITE_URL = '/h3c/story/write';

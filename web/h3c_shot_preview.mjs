@@ -1,8 +1,8 @@
-import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import { isFresh, globalFrame, lookAt, assemblePrompt } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
+import { promptShots } from './h3c_prompt_sections.mjs?v=b58f04f78a75';
+import { isFresh, globalFrame, lookAt, assemblePrompt } from './h3c_timeline_model.mjs?v=136b17470774';
 
-import {framePrompt} from './h3c_still_scene.mjs?v=20261011-reference-preparation-1';
-import {preparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=20261107-editing-lag-1';
+import {framePrompt} from './h3c_still_scene.mjs?v=1ca16919a3f9';
+import {preparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=2e7e25c47bea';
 
 const SHOT = /^\[Shot (\d+)\]$/i;
 // Every edit and redraw reads the shots of every clip, and parsing a long prompt is slow; the text alone decides them.

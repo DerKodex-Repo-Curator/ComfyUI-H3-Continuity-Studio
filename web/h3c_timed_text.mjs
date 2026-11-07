@@ -1,6 +1,6 @@
 // Exact transcript import and source/movie clocks; mirrors h3_continuity/timed_text.py.
-import { FPS, resolvedAudio } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
-import {coalesceWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
+import { FPS, resolvedAudio } from './h3c_timeline_model.mjs?v=136b17470774';
+import {coalesceWindows} from './h3c_audio_windows.mjs?v=cdefbd77b246';
 
 function error(field, message) {
   return new Error(`timed_text.${field} ${message}`);

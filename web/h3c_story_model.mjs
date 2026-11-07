@@ -1,7 +1,7 @@
 // H3 Story's saved state, applying a Write result to the Timeline, and Undo. Pure: no DOM and no ComfyUI.
-import { FPS, normalize, totalFrames, resolvedAudio } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
-import { validateTimedText, textClock } from './h3c_timed_text.mjs?v=20261106-box-audio-1';
-import {pruneWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
+import { FPS, normalize, totalFrames, resolvedAudio } from './h3c_timeline_model.mjs?v=136b17470774';
+import { validateTimedText, textClock } from './h3c_timed_text.mjs?v=f8c0209aeb02';
+import {pruneWindows} from './h3c_audio_windows.mjs?v=cdefbd77b246';
 
 export const VERSION = 1;
 export const DROPPED = 'The Timeline got boxes while Write worked, so the planned boxes were dropped.';

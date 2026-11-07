@@ -4,6 +4,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.19.4] - 2026-11-07
+
+### Fixed
+
+- **A normal browser refresh now loads every updated Studio file.** ComfyUI lets the browser keep the Studio's helper files (`.mjs`) cached, so after an update a normal refresh, or a new tab, could keep running an older copy of a file that had changed, mixed with newer ones. Each file's import now carries a tag computed from its contents and everything it imports, so any change gives every file that depends on it a new address and the browser fetches it again, while unchanged files still come from the cache. `node tools/module_versions.mjs --write` stamps the tags and the test suite fails while any tag is out of date.
+
 ## [0.19.3] - 2026-11-07
 
 ### Fixed

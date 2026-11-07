@@ -1,4 +1,4 @@
-import {ImageJobClient} from './h3c_image_jobs.mjs?v=20261011-reference-preparation-1';
+import {ImageJobClient} from './h3c_image_jobs.mjs?v=441234615008';
 // h3_continuity/ph3_image_nodes.py describes the same recipe; keep the two in step.
 export const SELF_RECIPE_CLASS = 'H3C_PH3ImageStill';
 const SELF_RECIPE = {version:2, adapter:'pixels', label:'P-H3-Image', reference_limit:8, reference_label:'<Picture {index}>'};
