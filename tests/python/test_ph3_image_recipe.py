@@ -48,6 +48,18 @@ def prepare(references=(), **request):
 
 
 class PrepareTest(unittest.TestCase):
+    def test_studio_candidates_keep_the_connected_lora_stack_and_its_ancestors(self):
+        saved = workflow()
+        saved['api'][NODE]['inputs']['lora_stack'] = ['stack', 0]
+        saved['api']['stack'] = {'class_type': 'easy loraStack', 'inputs': {'optional_lora_stack': ['base', 0]}}
+        saved['api']['base'] = {'class_type': 'easy loraStack', 'inputs': {'lora_1_name': 'style.safetensors'}}
+        with mock.patch('folder_paths.get_filename_list', lambda folder: list(FILES.get(folder, []))), \
+             mock.patch.dict(nodes.NODE_CLASS_MAPPINGS, {'H3C_PH3ImageStill': ph3.H3C_PH3ImageStill}):
+            result = image_recipe.prepare(recipe(), saved, {'prompt': 'A still.'}, [])
+        self.assertEqual(result['prompt'][NODE]['inputs']['lora_stack'], ['stack', 0])
+        self.assertEqual(result['prompt']['stack'], saved['api']['stack'])
+        self.assertEqual(result['prompt']['base'], saved['api']['base'])
+
     def test_automatic_size_resolves_linked_video_dimensions_at_runtime(self):
         saved = workflow()
         saved['api'][NODE]['inputs'].update(width=['video_size', 0], height=['video_size', 1])

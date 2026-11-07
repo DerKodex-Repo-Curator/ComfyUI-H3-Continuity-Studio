@@ -112,15 +112,23 @@ class H3C_PH3StillSize(io.ComfyNode):
         return io.NodeOutput(*(max(MIN_SIZE, round(side * scale / MULTIPLE) * MULTIPLE) for side in (width, height)))
 
 
-def build(*, diffusion_model, text_encoder, vae, prompt, instruction, seed, width, height, images, prompt_upsampler=OFF):
+def build(*, diffusion_model, text_encoder, vae, prompt, instruction, seed, width, height, images, prompt_upsampler=OFF,
+          lora_stack=None):
     """(GraphBuilder, image output) of the official P-H3-Image graph. `images` maps image_N to pixels."""
     references = {name: pixels for name, pixels in sorted(images.items(), key=lambda item: int(item[0].rsplit("_", 1)[-1]))
                   if pixels is not None}
     text = prompt.strip() if not instruction.strip() else prompt.strip() + "\n\n" + instruction.strip()
     g = GraphBuilder()
     unet = g.node("UNETLoader", unet_name=diffusion_model, weight_dtype="default")
-    model = g.node("MiniMaxH3SigmaShift", model=unet.out(0), shift_video=1.0, shift_audio=1.0)
     clip = g.node("CLIPLoader", clip_name=text_encoder, type="minimax", device="default")
+    model_link, clip_link = unet.out(0), clip.out(0)
+    for lora_name, strength_model, strength_clip in lora_stack or []:
+        if not lora_name or lora_name == "None" or (strength_model == 0 and strength_clip == 0):
+            continue
+        lora = g.node("LoraLoader", model=model_link, clip=clip_link, lora_name=lora_name,
+                      strength_model=strength_model, strength_clip=strength_clip)
+        model_link, clip_link = lora.out(0), lora.out(1)
+    model = g.node("MiniMaxH3SigmaShift", model=model_link, shift_video=1.0, shift_audio=1.0)
     vae_node = g.node("VAELoader", vae_name=vae)
     positive_text = text
     if prompt_upsampler != OFF:
@@ -130,7 +138,7 @@ def build(*, diffusion_model, text_encoder, vae, prompt, instruction, seed, widt
         written = g.node(generate, clip=upsampler.out(0), prompt=f"Aspect ratio: {aspect_name(width, height)}\nRequest: {text}",
                          max_length=2048, sampling_mode="off", thinking=True, use_default_template=True, mtp="auto")
         positive_text = written.out(0)
-    conditioning = g.node("PH3ImageConditioning", clip=clip.out(0), vae=vae_node.out(0), prompt=positive_text,
+    conditioning = g.node("PH3ImageConditioning", clip=clip_link, vae=vae_node.out(0), prompt=positive_text,
                           width=width, height=height,
                           **{f"images.{name}": pixels for name, pixels in references.items()})
     guider = g.node("BasicGuider", model=model.out(0), conditioning=conditioning.out(0))
@@ -185,13 +193,15 @@ class H3C_PH3ImageStill(io.ComfyNode):
                 io.Autogrow.Input("images", optional=True, template=io.Autogrow.TemplateNames(
                     io.Image.Input("image"), names=[f"image_{i}" for i in range(1, MAX_REFERENCES + 1)], min=0),
                     tooltip="Reference images. image_1 is the picture the model edits; the Studio puts the scene first."),
+                io.Custom("LORA_STACK").Input("lora_stack", optional=True,
+                               tooltip="Optional LoRA stack (for example Easy Use): filename, model strength and CLIP strength. Applied in order to direct images and Studio stills. Use LoRAs compatible with P-H3-Image."),
             ],
             outputs=[io.Image.Output("image"), StillRecipeType.Output("still_recipe")],
         )
 
     @classmethod
     def execute(cls, diffusion_model, text_encoder, vae, prompt, instruction, seed, width, height,
-                prompt_upsampler=OFF, images=None, studio_resolution="8 MP") -> io.NodeOutput:
+                prompt_upsampler=OFF, images=None, studio_resolution="8 MP", lora_stack=None) -> io.NodeOutput:
         references = {name: pixels for name, pixels in (images or {}).items() if pixels is not None}
         require_core(prompt_upsampler != OFF)
         files = {"diffusion_model": choose("diffusion_model", diffusion_model),
@@ -206,5 +216,5 @@ class H3C_PH3ImageStill(io.ComfyNode):
         if not prompt.strip():
             raise ValueError("P-H3-Image needs a prompt.")
         g, image = build(**files, prompt=prompt, instruction=instruction, seed=seed, width=width, height=height,
-                         images=references)
+                         images=references, lora_stack=lora_stack)
         return io.NodeOutput(image, recipe(), expand=g.finalize())
