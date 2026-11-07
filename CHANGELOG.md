@@ -4,6 +4,10 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+### Removed
+
+- **`SHA256SUMS.json`.** It listed file checksums from the first published version and was never updated afterwards, so 101 of its 232 entries no longer matched the files they named, and 191 of the pack's 423 files were not listed. Nothing in the node pack read it. Each release's Git tag already identifies its exact files.
+
 ## [0.19.4] - 2026-11-07
 
 ### Fixed
