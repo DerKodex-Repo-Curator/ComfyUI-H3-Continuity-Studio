@@ -4,6 +4,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.19.3] - 2026-11-07
+
+### Fixed
+
+- **Loading a workflow no longer floods ComfyUI with still-source requests.** While a workflow with a Timeline loaded, its still panel redrew once per connection, and each redraw sent the whole Timeline to the server to list the saved continuity sources again: 44 requests of about 360 KB on an 88-clip workflow, keeping the server busy for over two seconds. A request now stops as soon as a newer redraw replaces it, so loading a workflow asks once and picking a still target asks once instead of twice. The listed sources are unchanged.
+
 ## [0.19.2] - 2026-11-07
 
 ### Fixed

@@ -229,15 +229,15 @@ export class FrameImages {
   }
   async loadSources() {
     if (!this.host.stillSources) return;
-    const box=this.boxId,target=structuredClone(this.target),stamp=key(target),{frame}=this.location(),load={},before=this.promptEl?.value,automatic=this.promptEl&&this.promptEl.value===this.prompt();
+    const box=this.boxId,target=structuredClone(this.target),stamp=key(target),{frame}=this.location(),load=new AbortController(),before=this.promptEl?.value,automatic=this.promptEl&&this.promptEl.value===this.prompt();
     const generation=this.host.referenceContext?.();
-    this.sourceLoad=load;this.sourcesFailed=false;this.sourceEl.disabled=true;
+    this.sourceLoad?.abort();this.sourceLoad=load;this.sourcesFailed=false;this.sourceEl.disabled=true;
     if(!this.sourcePins?.length) {
       const loading=el('option','Loading saved continuity sources…');loading.value='';this.sourceEl.replaceChildren(loading);this.momentEl.disabled=true;
     }
     let result;
     try {
-      result=await this.host.stillSources({box,target,frame});
+      result=await this.host.stillSources({box,target,frame},{signal:load.signal});
       if (!result.ok) throw new Error(result.error ?? 'Could not read saved continuity sources.');
     } catch(error) {
       if(generation!==this.host.referenceContext?.()||this.sourceLoad!==load||this.boxId!==box||key(this.target)!==stamp) return;

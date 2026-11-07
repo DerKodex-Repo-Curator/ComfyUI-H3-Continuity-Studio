@@ -14,13 +14,13 @@ import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_
 import { DEFAULT_AHEAD, QueueFeed, feedNote, queueAhead } from './h3c_queue_feed.mjs?v=20261105-queue-feed-1';
 import { studio } from './h3c_studio.mjs?v=20261107-editing-lag-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261107-editing-lag-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261107-editing-alloc-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261107-still-sources-1';
 import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
 import { voiceRefs } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
 import {captureRecipe,captureTimelineId,captureStillBody,stillTimelineBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput,graphWiring} from './h3c_stills.mjs?v=20261107-editing-alloc-1';
-import {boundarySnapshot} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
+import {boundarySnapshot} from './h3c_frame_images.mjs?v=20261107-still-sources-1';
 import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=20261107-editing-lag-1';
 import { TakesClient } from './h3c_takes.mjs?v=20261107-editing-alloc-1';
 import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261107-editing-alloc-1';
@@ -205,7 +205,7 @@ export class TimelineHost {
       approveReference:request=>this.approveReference(request),reuseReferenceScene:(key,source)=>this.reuseReferenceScene(key,source),
       referenceReadiness:boxId=>this.referenceReadiness(boxId),
       openReferencePreparation:keys=>this.editor.cast.preparation.open(keys),
-      stillSources: request => this.stillSources(request),
+      stillSources: (request, options) => this.stillSources(request, options),
       prepareStill: request => this.prepareStill(request),
       stillControls: () => this.stillControls(),
       prepareStillPrompts: (instructions,onProgress) => this.prepareStillPrompts(instructions,onProgress),
@@ -621,8 +621,8 @@ export class TimelineHost {
     return {file: mediaFile, title: file.name, ...await this.audioInfo(mediaFile)};
   }
 
-  async stillRequest(url,body) {
-    const response=await api.fetchApi(url,{method:'POST',headers:{'Content-Type':'application/json'},
+  async stillRequest(url,body,{signal}={}) {
+    const response=await api.fetchApi(url,{method:'POST',headers:{'Content-Type':'application/json'},signal,
       body:stringifyJSON(url==='/prompt'?{...body,client_id:api.clientId}:body)});
     return parseJSON(await response.text());
   }
@@ -815,6 +815,7 @@ export class TimelineHost {
   }
 
   // stillControls and stillSources are asked as the Studio draws a clip; the workflow is serialized after that draw shows.
+  // A sources load the panel replaced in the meantime (a graph load redraws it once per link) stops there.
   async stillControls() {
     await afterPaint();
     const snapshot=await app.graphToPrompt();
@@ -835,13 +836,15 @@ export class TimelineHost {
       this.stillTimer=setTimeout(()=>this.recoverStills(),3000);
   }
 
-  async stillSources(request) {
+  async stillSources(request,{signal}={}) {
     await afterPaint();
+    signal?.throwIfAborted();
     const snapshot=await app.graphToPrompt();
+    signal?.throwIfAborted();
     const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
     const body=stillTimelineBody(snapshot,id,request);
     if(this.project?.project) body.name=this.project.project.sequence;
-    return this.stillRequest('/h3c/stills/sources',body);
+    return this.stillRequest('/h3c/stills/sources',body,{signal});
   }
 
   async prepareStill(request) {
