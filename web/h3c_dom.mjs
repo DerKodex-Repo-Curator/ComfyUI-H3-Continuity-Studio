@@ -29,17 +29,38 @@ function sameShape(current, next) {
   return a.length === b.length && [...a].every((child, index) => sameShape(child, b[index]));
 }
 
+// An image drawn for replaceChanged names its file in data-src instead of src, and loads it once placed. A src starts
+// loading the file even when the redraw throws the new node away, and in Chrome every thrown-away image lengthens the
+// next garbage collection's pause: with a long Timeline's track and stills, by seconds.
+const deferred = node => node.nodeName === 'IMG' && node.getAttribute('data-src') != null;
+
+function load(image) {
+  const source = image.getAttribute('data-src');
+  if (image.getAttribute('src') !== source) image.setAttribute('src', source);
+}
+
+// Starts loading the deferred images of a node now in the page.
+export function showImages(node) {
+  if (node.nodeType !== 1) return;
+  if (deferred(node)) load(node);
+  for (const child of node.childNodes) showImages(child);
+}
+
 // Gives `current` the attributes and words of `next`, which has the same shape.
 function patch(current, next) {
   if (current.nodeType === TEXT_NODE) {
     if (current.data !== next.data) current.data = next.data;
     return;
   }
-  for (const name of current.getAttributeNames()) if (next.getAttribute(name) == null) current.removeAttribute(name);
+  const image = deferred(current);
+  for (const name of current.getAttributeNames()) {
+    if (next.getAttribute(name) == null && !(image && name === 'src')) current.removeAttribute(name);
+  }
   for (const name of next.getAttributeNames()) {
     const value = next.getAttribute(name);
     if (current.getAttribute(name) !== value) current.setAttribute(name, value);
   }
+  if (deferred(current)) load(current);
   [...current.childNodes].forEach((child, index) => patch(child, next.childNodes[index]));
 }
 
@@ -47,16 +68,17 @@ function patch(current, next) {
 // child keeps its listeners, so whatever they use must show in its markup (the clip number in its label, say). A node
 // that is already in the page (a playhead) is always the one placed.
 // key(node), when given, names what a child's listeners use: a child with the same key and shape as the new node takes
-// its attributes and words instead of being replaced, as when a longer clip moves every later clip along the track.
+// its attributes and words instead of being replaced, as when a longer clip moves every later clip along the track. A
+// child with deferred images never equals its new node (only the kept one has src), so it needs a key to be kept.
 export function replaceChanged(parent, nodes, key) {
   nodes.forEach((node, index) => {
     const current = parent.childNodes[index];
     if (current === node) return;
-    if (!current) parent.append(node);
+    if (!current) { parent.append(node); showImages(node); }
     else if (node.parentNode) parent.replaceChild(node, current);
     else if (current.isEqualNode(node) || sameButTitle(current, node)) return;
     else if (key && current.nodeType === 1 && key(current) === key(node) && sameShape(current, node)) patch(current, node);
-    else parent.replaceChild(node, current);
+    else { parent.replaceChild(node, current); showImages(node); }
   });
   while (parent.childNodes.length > nodes.length) parent.lastChild.remove();
 }

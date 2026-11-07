@@ -121,6 +121,34 @@ test('with a key, attributes the new child lacks are removed from the kept one',
   assert.equal(selected.getAttribute('aria-current'), null);
 });
 
+function thumbed(number, file) {
+  const node = clip(number, 4, '0%');
+  const image = document.createElement('img');
+  image.dataset.src = `/view?filename=${file}`;
+  node.prepend(image);
+  return node;
+}
+
+test('a deferred image loads once its node is placed, and never on a new node the redraw throws away', () => {
+  parent = Object.assign(document.createElement('div'), {clicked: []});
+  replaceChanged(parent, [thumbed(1, 'a.png')], label);
+  const [first] = parent.childNodes, image = first.childNodes[0];
+  assert.equal(image.getAttribute('src'), '/view?filename=a.png');
+  const same = thumbed(1, 'a.png');
+  parent.replaced = 0;
+  replaceChanged(parent, [same], label);
+  assert.equal(parent.childNodes[0], first);
+  assert.equal(parent.replaced, 0);
+  assert.equal(same.childNodes[0].getAttribute('src'), null);
+  replaceChanged(parent, [thumbed(1, 'b.png')], label);
+  assert.equal(parent.childNodes[0], first);
+  assert.equal(image.getAttribute('src'), '/view?filename=b.png');
+  const renamed = thumbed(2, 'c.png');
+  replaceChanged(parent, [renamed], label);
+  assert.equal(parent.childNodes[0], renamed);
+  assert.equal(renamed.childNodes[0].getAttribute('src'), '/view?filename=c.png');
+});
+
 test('setting the same text keeps the text node, and new words change it in place', () => {
   const label = document.createElement('span');
   label.append('Saved');

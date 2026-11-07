@@ -3,12 +3,12 @@
 // closes, opens another Timeline or the Timeline's Story changes. Its Story page edits the Story node's inputs.
 import { liveBadge, progressText } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
 import { templateRow } from './h3c_templates.mjs?v=20261005-templates-4';
-import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
+import { soundtrackLine, soundtrackSlots } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
 
 import { ideaImagesRow } from './h3c_idea_images.mjs?v=20261013-node-settings-1';
 import { partialBadge, partialTitle, previewBadge, previewLabel, previewTitle, timelineFrame, videoSeconds } from './h3c_partial_video.mjs?v=20261106-video-so-far-1';
-import {historyShortcut} from './h3c_history.mjs?v=20261107-editing-lag-1';
-import {setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
+import {historyShortcut} from './h3c_history.mjs?v=20261107-editing-alloc-1';
+import {setText} from './h3c_dom.mjs?v=20261107-editing-alloc-1';
 
 const LIBRARY = ['references', 'cast', 'story', 'pictures', 'refmods'];
 const CENTER = ['viewer', 'story', 'cast', 'pictures', 'refmods'];

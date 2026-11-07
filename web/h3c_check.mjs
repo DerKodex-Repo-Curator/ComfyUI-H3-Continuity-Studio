@@ -1,6 +1,6 @@
 // The Box page's continuity check: Check, what the last check of the box's render found, and Retake.
 // Plain DOM without ComfyUI imports; the editor's host starts a check through the linked Story.
-import {replaceChanged, setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
+import {replaceChanged, setText} from './h3c_dom.mjs?v=20261107-editing-alloc-1';
 
 const STYLE_ID = 'h3ck-style';
 const CSS = `

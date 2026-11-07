@@ -1,5 +1,5 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
+import { FPS, GRID, isFresh, limits, newId, newSeed } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
 import {splitWindows} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 
 const number = (shot) => Number(/\d+/.exec(shot.label)[0]);

@@ -1,5 +1,5 @@
 // One explicit batch owns the editable prompts; previews and render jobs do not invalidate its source.
-import {replaceChanged,setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
+import {replaceChanged,setText} from './h3c_dom.mjs?v=20261107-editing-alloc-1';
 const canonical = target => target?.kind==='shot'&&target.shot===1?{kind:'first'}:target;
 const sameTarget = (a,b) => {a=canonical(a);b=canonical(b);return a?.kind===b?.kind&&a?.shot===b?.shot;};
 const copy = value => structuredClone(value);
