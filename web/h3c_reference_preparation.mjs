@@ -1,4 +1,4 @@
-import {stringifyJSON,seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
+import {stringifyJSON,seedValue} from './h3c_project.mjs?v=20261107-editing-alloc-1';
 import {ImageJobClient} from './h3c_image_jobs.mjs?v=20261011-reference-preparation-1';
 export const REFERENCE_CATEGORIES = ['cast','locations','props'];
 

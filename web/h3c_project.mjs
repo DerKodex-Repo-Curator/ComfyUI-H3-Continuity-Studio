@@ -45,7 +45,20 @@ function editedTimeline(original,base,edited) {
   return result;
 }
 
+// Integers past 2^53 (seeds, file stamps) keep every digit as BigInt. Browsers that give a reviver each number's source
+// text and accept raw JSON (Chrome 114+) do it without rewriting the whole text; the others use a marker for each.
+const SOURCE_TEXT = (() => {
+  let source;
+  JSON.parse('1', (key, value, context) => { source = context?.source; return value; });
+  return source === '1';
+})();
+const RAW_JSON = typeof JSON.rawJSON === 'function';
+const keepInteger = (key, value, context) => typeof value === 'number' && !Number.isSafeInteger(value)
+  && /^-?\d+$/.test(context?.source ?? '') ? BigInt(context.source) : value;
+const rawInteger = (key, item) => typeof item === 'bigint' ? JSON.rawJSON(item.toString()) : item;
+
 export function parseJSON(text) {
+  if (SOURCE_TEXT) return JSON.parse(String(text), keepInteger);
   const integers = [], marker = `__h3c_int_${token()}_`;
   const source = String(text).replace(/"(?:\\.|[^"\\])*"|(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,(literal,number) => {
     if (!number || !/^-?\d+$/.test(number) || Number.isSafeInteger(Number(number))) return literal;
@@ -56,6 +69,7 @@ export function parseJSON(text) {
 }
 
 export function stringifyJSON(value) {
+  if (RAW_JSON) return JSON.stringify(value, rawInteger);
   const integers = [], marker = `__h3c_int_${token()}_`;
   const text = JSON.stringify(value,(key,item) => {
     if (typeof item !== 'bigint') return item;

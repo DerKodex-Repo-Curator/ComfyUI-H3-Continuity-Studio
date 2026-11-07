@@ -1,8 +1,8 @@
-import * as model from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
+import * as model from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
 import { importWhisper, validateTimedText, setTextSync, textClock, projectTimedText } from './h3c_timed_text.mjs?v=20261106-box-audio-1';
 import { loadAudio, loaded, beatTimes, drawWave } from './h3c_waveform.mjs?v=20261106-video-so-far-1';
 import {captureWindows,resolveWindows,unlockWindows,lockEligibility,sourceOrigin,outputWindows,equivalentWindows,timelineAudioParts} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
-import {replaceChanged, setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
+import {replaceChanged, setText} from './h3c_dom.mjs?v=20261107-editing-alloc-1';
 
 const node = (tag, cls, text) => {
   const item = document.createElement(tag);

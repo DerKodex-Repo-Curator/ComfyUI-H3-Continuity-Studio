@@ -120,6 +120,12 @@ export function captureTimelineId(snapshot, nodeId, {root = false} = {}) {
 }
 
 export function captureStillBody(snapshot, timelineId, request) {
+  return {...stillTimelineBody(snapshot,timelineId,request),
+    workflow:{ui:structuredClone(snapshot.workflow),api:structuredClone(snapshot.output),timeline_node:timelineId}};
+}
+
+// The request with the Timeline's literal name, text and context frames, without a copy of the workflow.
+export function stillTimelineBody(snapshot, timelineId, request) {
   const inputs=snapshot.output[timelineId].inputs;
   const scalar=name=>{
     const fail=()=>{throw new Error(`Still Timeline ${name} must use a literal value or a native primitive control with a literal value.`);};
@@ -133,8 +139,7 @@ export function captureStillBody(snapshot, timelineId, request) {
     return value;
   };
   const settings={context_frames:scalar('context_frames')};
-  return {...structuredClone(request),name:scalar('name'),timeline:scalar('timeline'),settings,
-    workflow:{ui:structuredClone(snapshot.workflow),api:structuredClone(snapshot.output),timeline_node:timelineId}};
+  return {...structuredClone(request),name:scalar('name'),timeline:scalar('timeline'),settings};
 }
 
 const sameTarget = (a,b) => a?.kind===b?.kind && a?.shot===b?.shot;

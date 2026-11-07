@@ -5,26 +5,26 @@ import {generationControl,setGenerationControl} from './h3c_generation_archive.m
 import { freshProject } from './h3c_new_project.mjs?v=20261007-new-project-in-place-1';
 import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261106-checkpoints-1';
 import { app } from '../../scripts/app.js';
-import {syncImageOutputs,compileImageOutputs} from './h3c_timeline_images.mjs?v=20261012-picture-outputs-1';
+import {syncImageOutputs,compileImageOutputs} from './h3c_timeline_images.mjs?v=20261107-editing-alloc-1';
 import { api } from '../../scripts/api.js';
 import { mountSavedState, autosaveEnabled } from './h3c_saved_state.mjs?v=20261107-editing-lag-1';
-import {setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
+import {setText} from './h3c_dom.mjs?v=20261107-editing-alloc-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
 import { DEFAULT_AHEAD, QueueFeed, feedNote, queueAhead } from './h3c_queue_feed.mjs?v=20261105-queue-feed-1';
 import { studio } from './h3c_studio.mjs?v=20261107-editing-lag-1';
 import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261107-editing-lag-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261107-editing-lag-1';
-import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261107-editing-alloc-1';
+import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
 import { voiceRefs } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
-import {captureRecipe,captureTimelineId,captureStillBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput,graphWiring} from './h3c_stills.mjs?v=20261107-editing-lag-1';
+import {captureRecipe,captureTimelineId,captureStillBody,stillTimelineBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput,graphWiring} from './h3c_stills.mjs?v=20261107-editing-alloc-1';
 import {boundarySnapshot} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
 import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=20261107-editing-lag-1';
-import { TakesClient } from './h3c_takes.mjs?v=20261107-editing-lag-1';
-import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
-import {TimelineHistory, editingSnapshot, withLiveReceipts} from './h3c_history.mjs?v=20261107-editing-lag-1';
+import { TakesClient } from './h3c_takes.mjs?v=20261107-editing-alloc-1';
+import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261107-editing-alloc-1';
+import {TimelineHistory, dropReceipts, withLiveReceipts} from './h3c_history.mjs?v=20261107-editing-alloc-1';
 import {confirmRegeneration} from './h3c_regeneration.mjs?v=20261106-overlap-recovery-1';
 import {startGeneration,useGeneration} from './h3c_generations.mjs?v=20261106-new-generation-1';
 
@@ -161,6 +161,7 @@ export class TimelineHost {
         return field?.matches('textarea, input[type="text"], input:not([type]), [contenteditable="true"]') ? field : null;
       },
       flush: () => { document.activeElement?.blur?.(); this.editor?.flushTyping(); },
+      fresh: true,
     });
     this.takesClient = new TakesClient(async (url, body) => {
       if (this.project) {
@@ -250,9 +251,9 @@ export class TimelineHost {
       rendered: () => this.showProgress(),
     });
     this.editor = editor;
-    this.stillClient=new StillClient({context:()=>stringifyJSON([this.node.graph?.id,findWidget(this.node,'name')?.value,this.project?.project?.sequence,!!this.removed]),capture:request=>this.prepareStill(request),read:()=>parseState(this.widget.value),
+    this.stillClient=new StillClient({context:()=>stringifyJSON([this.node.graph?.id,findWidget(this.node,'name')?.value,this.project?.project?.sequence,!!this.removed]),capture:request=>this.prepareStill(request),read:()=>this.readState(),
       write:state=>this.writeStillState(state),request:(url,body)=>this.stillRequest(url,body)});
-    this.referenceHost={referenceState:()=>this.referenceState(),referenceContext:()=>this.referenceContext(),
+    this.referenceHost={referenceState:()=>this.readState(),referenceContext:()=>this.referenceContext(),
       writeReferenceState:state=>this.writeStillState(state),referenceCatalog:()=>this.referenceCatalog(),
       prepareReference:request=>this.prepareReference(request),request:async(url,body)=>this.stillRequest(url,url==='/h3c/reference-assets/approve'?{...await this.referenceSnapshot(body.timeline),...body}:body),
       referenceChanged:()=>this.editor.cast.preparation?.refresh(),undoStep:recordStep,
@@ -495,7 +496,7 @@ export class TimelineHost {
   }
 
   historyState() {
-    return {timeline: editingSnapshot(parseJSON(serialize(parseState(this.widget.value)))),
+    return {timeline: dropReceipts(parseJSON(serialize(this.readState()))),
       settings: Object.fromEntries(SETTINGS.map(name => [name, widgetValue(this.node, name)]))};
   }
 
@@ -530,7 +531,7 @@ export class TimelineHost {
   }
 
   showProgress() {
-    syncImageOutputs(this.node, this.editor?.state);
+    syncImageOutputs(this.node, this.editor?.state, this.editor ? this.widget.value : undefined);
     if (!this.face) return;
     const editor = this.editor;
     this.face.update({
@@ -673,6 +674,12 @@ export class TimelineHost {
 
   referenceContext() {return stringifyJSON([this.node.graph?.id,findWidget(this.node,'name')?.value,this.project?.project?.sequence,!!this.removed]);}
   referenceState() {return parseState(this.widget.value);}
+  // The Timeline parsed once per text, shared by readers that never change it (they copy before editing).
+  readState() {
+    const text=this.widget.value;
+    if(this.parsed?.text!==text)this.parsed={text,state:parseState(text)};
+    return this.parsed.state;
+  }
   async referenceSnapshot(timeline=this.widget.value) {
     const snapshot=await app.graphToPrompt();
     const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
@@ -772,7 +779,7 @@ export class TimelineHost {
   async approveReference(request) {return applyReferenceApproval(this.referenceHost,request);}
   recoverImageResult(promptId) {
     if(this.removed||!promptId)return;
-    const state=this.referenceState();
+    const state=this.readState();
     const pending=receipt=>receipt.prompt_id===promptId&&!receipt.historical&&!['complete','failed','cancelled'].includes(receipt.state);
     if(preparationOf(state).requests.some(pending))this.recoverReferences();
     if((state.still_requests??[]).some(pending))this.recoverStills();
@@ -780,7 +787,7 @@ export class TimelineHost {
   async recoverReferences() {
     clearTimeout(this.referenceTimer);
     try{await this.referenceClient.recover();}catch(error){const panel=this.editor.cast.preparation;if(panel){panel.message=error.message;panel.render();}}
-    if(!this.removed&&preparationOf(this.referenceState()).requests.some(r=>!r.historical&&!['complete','failed','cancelled'].includes(r.state)))
+    if(!this.removed&&preparationOf(this.readState()).requests.some(r=>!r.historical&&!['complete','failed','cancelled'].includes(r.state)))
       this.referenceTimer=setTimeout(()=>this.recoverReferences(),3000);
   }
   async reuseReferenceScene(key,source) {
@@ -824,7 +831,7 @@ export class TimelineHost {
   async recoverStills() {
     clearTimeout(this.stillTimer);
     try {await this.stillClient.recover();} catch(error) {this.editor.frameImages.note(error.message);}
-    if(!this.removed && parseState(this.widget.value).still_requests?.some(item=>!['complete','failed','cancelled'].includes(item.state)))
+    if(!this.removed && this.readState().still_requests?.some(item=>!['complete','failed','cancelled'].includes(item.state)))
       this.stillTimer=setTimeout(()=>this.recoverStills(),3000);
   }
 
@@ -832,9 +839,8 @@ export class TimelineHost {
     await afterPaint();
     const snapshot=await app.graphToPrompt();
     const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
-    const body=captureStillBody(snapshot,id,request);
+    const body=stillTimelineBody(snapshot,id,request);
     if(this.project?.project) body.name=this.project.project.sequence;
-    delete body.workflow;
     return this.stillRequest('/h3c/stills/sources',body);
   }
 
@@ -1138,12 +1144,16 @@ export class TimelineHost {
       this.editor.setStatus(null);
       return;
     }
-    const input = () => JSON.stringify(this.requestBody());
-    const body = input();
+    const body = this.requestBody();
+    // The Timeline text is compared as it is; serializing it again copies the whole Timeline.
+    const unchanged = () => {
+      const now = this.requestBody();
+      return now.timeline === body.timeline && JSON.stringify([now.name, now.settings]) === JSON.stringify([body.name, body.settings]);
+    };
     // A status for a Timeline that changed while it was asked for leaves the drawn one, now stale, until the next.
     const show = (status) => {
       if (request !== this.request || this.removed) return;
-      if (body === input()) this.editor.setStatus(status);
+      if (unchanged()) this.editor.setStatus(status);
       else this.editor.markStale();
     };
     try {
@@ -1318,7 +1328,7 @@ app.registerExtension({
     const graphToPrompt = app.graphToPrompt;
     app.graphToPrompt = async function (...args) {
       for (const host of mounted) {
-        syncImageOutputs(host.node, host.editor.state);
+        syncImageOutputs(host.node, host.editor.state, host.widget?.value);
         host.node.properties ??= {};
         host.node.properties.h3c_image_output_box = Math.max(1, host.editor.selected + 1);
       }

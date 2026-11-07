@@ -16,11 +16,11 @@ import * as story from './h3c_story_model.mjs?v=20261106-box-audio-1';
 import { StoryPanel } from './h3c_story_panel.mjs?v=20261106-checkpoints-1';
 import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=20261106-checkpoints-1';
 import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=20261014-story-library-1';
-import { parseState, serialize } from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
+import { parseState, serialize } from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
 
 import {exportGeneration,importGeneration,downloadGeneration,generationControl,setGenerationControl} from './h3c_generation_archive.mjs?v=20261014-reference-thumbnails-1';
-import {captureRecipe,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=20261107-editing-lag-1';
-import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
+import {captureRecipe,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=20261107-editing-alloc-1';
+import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=20261107-editing-alloc-1';
 
 const NODE_TYPE = 'H3C_Story';
 const WRITE_URL = '/h3c/story/write';

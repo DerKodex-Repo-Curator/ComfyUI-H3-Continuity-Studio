@@ -1,9 +1,13 @@
 // Session-only edit snapshots. Files and running jobs are deliberately not part of an edit.
-import {parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
+import {parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261107-editing-alloc-1';
 import {preparationOf} from './h3c_reference_preparation.mjs?v=20261014-reference-thumbnails-1';
 
 export function editingSnapshot(timeline) {
-  const value = structuredClone(timeline);
+  return dropReceipts(structuredClone(timeline));
+}
+
+// editingSnapshot of a Timeline the caller owns, changed in place.
+export function dropReceipts(value) {
   delete value.still_requests;
   const preparation = value.reference_preparation;
   if (preparation) {
@@ -73,10 +77,11 @@ export class EditHistory {
 }
 
 // Connect snapshots to the editor's existing save/render paths without rebuilding the graph.
+// `fresh`: read() returns a new value on every call, so the last recorded one can be kept.
 export class TimelineHistory extends EditHistory {
-  constructor({read, identity, apply, notify, group, flush}) {
+  constructor({read, identity, apply, notify, group, flush, fresh = false}) {
     super(read());
-    Object.assign(this, {read, identity, apply, notify, groupOf: group, flush});
+    Object.assign(this, {read, identity, apply, notify, groupOf: group, flush, fresh});
     this.projectIdentity = identity();
   }
 
@@ -86,7 +91,11 @@ export class TimelineHistory extends EditHistory {
     if (identity !== this.projectIdentity || (loaded && this.entries.length === 1)) {
       this.projectIdentity = identity;
       this.reset(value);
-    } else this.record(value, () => editLabel(this.value, value), this.groupOf());
+    } else {
+      // The step's value as last read, so naming the next step doesn't parse the whole Timeline again.
+      const before = () => this.recorded?.text === this.entries[this.index].value ? this.recorded.value : this.value;
+      if (this.record(value, () => editLabel(before(), value), this.groupOf()) && this.fresh) this.recorded = {text: this.entries[this.index].value, value};
+    }
     this.notify();
   }
 
@@ -104,7 +113,7 @@ export class TimelineHistory extends EditHistory {
   redo() { this.flush(); this.restore(this.index + 1); }
 }
 
-const same = (a, b) => stringifyJSON(a) === stringifyJSON(b);
+const same = (a, b) => a === b || stringifyJSON(a) === stringifyJSON(b);
 const title = key => ({prompt: 'prompt', frames: 'length', previews: 'frame guides', bible: 'cast',
   refmods: 'RefMods', audio_clips: 'audio', timed_text: 'timed text', seed: 'seed',
   context_frames: 'context frames', carry_audio: 'carry audio'}[key] ?? key.replaceAll('_', ' '));

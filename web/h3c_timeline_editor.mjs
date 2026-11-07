@@ -2,7 +2,7 @@
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
 import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=20261107-editing-lag-1';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=20261010-reference-workspace-1';
-import * as model from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
+import * as model from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
 import {audioSourceLocked} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 import { AudioLanes } from './h3c_audio_lanes.mjs?v=20261107-editing-lag-1';
 import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=20261107-editing-lag-1';
@@ -18,8 +18,8 @@ import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=20261107-editing-la
 import { DialoguePanel } from './h3c_dialogue.mjs?v=20261107-editing-lag-1';
 import { ChainSettings } from './h3c_chain_settings.mjs?v=20261104-chain-settings-1';
 import { exportedVideo } from './h3c_partial_video.mjs?v=20261106-video-so-far-1';
-import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261107-editing-lag-1';
-import { drawsSame, replaceChanged, setText } from './h3c_dom.mjs?v=20261107-editing-lag-1';
+import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=20261107-editing-alloc-1';
+import { drawsSame, replaceChanged, setText, showImages } from './h3c_dom.mjs?v=20261107-editing-alloc-1';
 
 const STYLE_ID = 'h3ct-style';
 const PANEL_HEIGHT = 470;
@@ -1379,7 +1379,7 @@ export class TimelineEditor {
       item.style.width = percent(box.frames / span);
       if (status?.thumb) {
         const image = el('img');
-        image.src = this.host.viewUrl(status.thumb);
+        image.dataset.src = this.host.viewUrl(status.thumb);
         image.alt = '';
         image.draggable = false;
         item.append(image);
@@ -1696,6 +1696,7 @@ export class TimelineEditor {
       pick.setAttribute('aria-label',`${targetLabel(target)} image`);
       pick.setAttribute('aria-pressed',String(this.frameImages.target.kind===target.kind&&this.frameImages.target.shot===target.shot));
       this.fillStill(pick,this.box(),target,targetLabel(target));
+      showImages(pick);
       imageDrop(pick,file=>{pick.click();this.dropGuide(file,target);});
       (target.kind==='shot'?interior:endpoints).append(pick);
     }
@@ -1817,7 +1818,7 @@ export class TimelineEditor {
     if(frameMode) label=label.replace(/(First|Last)$/,'$1 frame');
     const file=guide??saved?.images?.[0]?.file??saved?.image;
     if(file) {
-      const img=el('img');img.src=this.host.viewUrl(file);img.alt='';img.draggable=false;mark.append(img);
+      const img=el('img');img.dataset.src=this.host.viewUrl(file);img.alt='';img.draggable=false;mark.append(img);
     } else mark.append(el('span','h3ct-still-empty','+'));
     const caption=el('span','h3ct-still-caption');
     caption.append(el('b',null,label),el('small',null,guide?(frameMode?'In use':'Guide'):file?'Candidate':'Add'));

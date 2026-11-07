@@ -1,7 +1,7 @@
 import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-preparation-1';
 // H3 Timeline editor model: the timeline JSON, lengths on the H3 frame grid, edits, and the rules that
 // decide how a box runs. Mirrors h3_continuity/timeline.py.
-import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
+import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261107-editing-alloc-1';
 import {imageDescriptionPrompt, imageDescriptionSource} from './h3c_image_descriptions.mjs?v=20261010-image-descriptions-1';
 import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261107-editing-lag-1';
 import {AUDIO_WINDOWS_FEATURE, pruneWindows, resolveWindows, audioSourceLocked} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
@@ -378,11 +378,17 @@ export function resolvedAudio(state) {
 }
 
 export function activeAudioClips(state, index, context = 0) {
-  const start = state.boxes.slice(0, index).reduce((sum, box) => sum + box.frames, 0) / FPS;
-  const end = start + state.boxes[index].frames / FPS;
+  let frames = 0;
+  for (let i = 0; i < index; i++) frames += state.boxes[i].frames;
+  const start = frames / FPS, end = start + state.boxes[index].frames / FPS;
   let spans;
-  return (state.audio_clips ?? []).filter(clip => referenceEnabled(state, clip.slot)
-    && resolveWindows(clip,spans??=audioBoxSpans(state)).some(w=>w.start < end && w.start+w.duration > start-(clip.box_windows && !isFresh(state,index) ? context/FPS : 0)));
+  return (state.audio_clips ?? []).filter(clip => {
+    if (!referenceEnabled(state, clip.slot)) return false;
+    const after = start - (clip.box_windows && !isFresh(state, index) ? context / FPS : 0);
+    // A clip not locked to boxes has one window, its own placement.
+    if (!Object.hasOwn(clip, 'box_windows')) return clip.start < end && clip.start + clip.duration > after;
+    return resolveWindows(clip, spans ??= audioBoxSpans(state)).some(w => w.start < end && w.start + w.duration > after);
+  });
 }
 
 export function audioBoxSpans(state) {
@@ -426,7 +432,9 @@ export function globalFrame(state, index, frame) {
 export function effectivePlates(state, index, frame = 0) {
   const result = {};
   for (let i = 0; i <= index; i++) {
-    for (const change of [...state.boxes[i].plate_changes ?? []].sort((a, b) => a.frame - b.frame)) {
+    const changes = state.boxes[i].plate_changes;
+    if (!changes?.length) continue;
+    for (const change of [...changes].sort((a, b) => a.frame - b.frame)) {
       if(state.reference_replacements?.[change.slot])continue;
       if (i === index && change.frame > frame) continue;
       if (!change.revision) { delete result[change.slot]; continue; }
@@ -709,8 +717,9 @@ export function mentionParts(text) {
 
 export function mentions(text) {
   const found = [];
-  for (const { name, kind } of mentionParts(text)) {
-    if (name && !found.some((item) => item.name === name)) found.push({ kind, name });
+  for (const match of String(text ?? '').matchAll(MENTION)) {
+    const kind = match[1].toLowerCase(), name = `${kind}${Number(match[2])}`;
+    if (!found.some((item) => item.name === name)) found.push({ kind, name });
   }
   return found;
 }
@@ -718,7 +727,7 @@ export function mentions(text) {
 export function assemblePrompt(state, index) {
   const active = activeAudioClips(state, index);
   const inactive = (state.audio_clips ?? []).filter(clip => !active.includes(clip)).map(clip => clip.slot);
-  const view = {...state, disabled_refs: [...state.disabled_refs ?? [], ...inactive]};
+  const view = {disabled_refs: [...state.disabled_refs ?? [], ...inactive]};
   const [shared, prompt] = [state.prompt, state.boxes[index].prompt].map((part) => withoutDisabledRefs((part ?? '').trim(), view));
   if (shared && /^(integrated_multimodal_description:|subject_definitions:|For the target video,|How the reference pictures align)/.test(prompt)
       && prompt.includes('\noverall_soundscape:') && prompt.includes('\nnon_diegetic_music:')

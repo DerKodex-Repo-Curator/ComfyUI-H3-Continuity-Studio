@@ -4,6 +4,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-11-07
+
+### Fixed
+
+- **No more second-long freezes after a run of edits.** On a long Timeline, a few length edits or clip selections in a row could freeze the Studio for one to two seconds while the browser cleaned up. Each redraw started loading a fresh copy of every clip thumbnail and still, even the copies it then threw away; now only the images that are shown load. Over 20 length edits on an 88-clip Timeline the longest freeze drops from about 1.6 seconds to about 0.1 second, and each edit builds about half as much temporary data.
+
 ## [0.19.1] - 2026-11-07
 
 ### Fixed

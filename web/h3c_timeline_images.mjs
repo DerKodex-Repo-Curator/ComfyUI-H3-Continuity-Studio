@@ -1,5 +1,5 @@
 // Image sockets are compiled into native image readers, keeping video preparation out of image-only graphs.
-import {assemblePrompt,describeBox,droppedFrames,effectivePlates,effectiveRefmods,isFresh,mentions,referenceEnabled,referenceTags} from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
+import {assemblePrompt,describeBox,droppedFrames,effectivePlates,effectiveRefmods,isFresh,mentions,referenceEnabled,referenceTags} from './h3c_timeline_model.mjs?v=20261107-editing-alloc-1';
 import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261107-editing-lag-1';
 const imageName = name => /^image_([1-9]\d*)$/.exec(name ?? '')?.[1];
 
@@ -35,11 +35,19 @@ function pictureTags(state, index, context) {
   return tags;
 }
 
-export function syncImageOutputs(node, state = {}) {
+// The highest <Picture N> of the last Timeline text each node counted: every redraw and every graphToPrompt asks,
+// and counting describes each clip.
+const counted = new WeakMap();
+
+// `text`, when given, is the Timeline text `state` was read from.
+export function syncImageOutputs(node, state = {}, text) {
   if (!node.addOutput) return;
   const saved = node.properties?.h3c_image_outputs ?? [];
   const context=node.widgets?.find(widget=>widget.name==='context_frames')?.value??39;
-  const maximum=Math.max(1,...(state.boxes??[]).flatMap((_,i)=>pictureTags(state,i,context).map(item=>Number(/\d+/.exec(item.tag)[0]))));
+  const last=counted.get(node);
+  const maximum=text!=null&&last?.text===text&&last.context===context?last.maximum
+    :Math.max(1,...(state.boxes??[]).flatMap((_,i)=>pictureTags(state,i,context).map(item=>Number(/\d+/.exec(item.tag)[0]))));
+  if (text!=null) counted.set(node,{text,context,maximum});
   const added=Array.from({length:maximum},(_,i)=>`image${i+1}`);
   for (const slot of [...saved, ...added]) {
     const name = `image_${slot.slice(5)}`;
