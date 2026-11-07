@@ -1,9 +1,10 @@
 // Mention highlights for the H3 Timeline's text boxes: a layer behind a textarea repeats its text with each @image
 // and @audio mention marked, and a card shows which reference the mention under the pointer is. Plain DOM without
 // ComfyUI imports.
-import { mentionParts } from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import { mentionParts } from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 
 const STYLE_ID = 'h3cm-style';
+const TEXT_NODE = 3;
 const SHOW_DELAY_MS = 150;
 const GAP = 6;
 // What decides where the textarea's lines wrap. The layer fills the same box, and with the overflow settings copied
@@ -49,6 +50,26 @@ function inside(rect, x, y) {
   return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
 }
 
+// Layers drawn since the last frame. Reading a textarea's style or scroll position after the page changed restyles
+// the whole ComfyUI page, so the layers read theirs together before the next frame, once the redraw has written all
+// of them, and share that one restyle.
+const waiting = new Set();
+
+function followWaiting() {
+  const layers = [...waiting].filter((layer) => layer.area.isConnected);
+  waiting.clear();
+  const reads = layers.map((layer) => layer.read(!layer.painted));
+  layers.forEach((layer, index) => layer.apply(reads[index]));
+}
+
+function followLater(layer) {
+  if (!waiting.size) {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(followWaiting);
+    else queueMicrotask(followWaiting);
+  }
+  waiting.add(layer);
+}
+
 export class MentionLayer {
   // area: a textarea that fills the width it's given, as the editor's do. hooks: live() -> Set of the names whose
   // reference delivers a value, onHover(part, rect) when the pointer comes onto a mention, onLeave() when it leaves it.
@@ -80,6 +101,7 @@ export class MentionLayer {
   }
 
   destroy() {
+    waiting.delete(this);
     this.observer?.disconnect();
     this.leave();
   }
@@ -87,35 +109,66 @@ export class MentionLayer {
   render() {
     this.leave();
     const live = this.live();
-    this.marks = [];
-    this.layer.textContent = '';
-    for (const part of mentionParts(this.area.value)) {
-      if (!part.name) {
-        this.layer.append(part.text);
-        continue;
-      }
-      const mark = el('span', live.has(part.name) ? 'h3cm-mark' : 'h3cm-mark missing');
-      mark.textContent = part.text;
-      this.layer.append(mark);
-      this.marks.push({ part, mark });
-    }
+    const parts = mentionParts(this.area.value);
     // a textarea shows a line after a final newline; a div only when that line holds something
-    if (this.area.value.endsWith('\n')) this.layer.append(' ');
-    this.follow();
+    if (this.area.value.endsWith('\n')) parts.push({ text: ' ' });
+    const nodes = this.layer.childNodes;
+    this.marks = [];
+    // Adding or removing nodes restyles the whole ComfyUI page, slow enough to lag each key; while the mentions stay
+    // where they are, only their text changes.
+    if (nodes.length === parts.length && parts.every((part, index) => (nodes[index].nodeType === TEXT_NODE) === !part.name)) {
+      parts.forEach((part, index) => {
+        const node = nodes[index];
+        const text = part.name ? node.firstChild : node;
+        if (text.data !== part.text) text.data = part.text;
+        if (!part.name) return;
+        const className = live.has(part.name) ? 'h3cm-mark' : 'h3cm-mark missing';
+        if (node.className !== className) node.className = className;
+        this.marks.push({ part, mark: node });
+      });
+    } else {
+      this.layer.textContent = '';
+      for (const part of parts) {
+        if (!part.name) {
+          this.layer.append(part.text);
+          continue;
+        }
+        const mark = el('span', live.has(part.name) ? 'h3cm-mark' : 'h3cm-mark missing');
+        mark.append(part.text);
+        this.layer.append(mark);
+        this.marks.push({ part, mark });
+      }
+    }
+    // The textarea's look changes only when it resizes, so once painted the layer follows only its scroll position.
+    followLater(this);
   }
 
   follow() {
-    const area = this.area;
-    if (!area.isConnected) return;
-    const style = getComputedStyle(area);
-    if (!this.painted) {
-      this.painted = true;
-      this.layer.style.backgroundColor = style.backgroundColor;
-      area.style.backgroundColor = 'transparent';
+    if (this.area.isConnected) this.apply(this.read(true));
+  }
+
+  // What the layer copies from its textarea: the look that decides where lines wrap (`look`), and the scroll position.
+  read(look) {
+    const area = this.area, style = look ? getComputedStyle(area) : null;
+    return {
+      background: style?.backgroundColor,
+      look: style && COPIED.map((name) => style[name]),
+      top: area.scrollTop,
+      left: area.scrollLeft,
+    };
+  }
+
+  apply({background, look, top, left}) {
+    if (look) {
+      if (!this.painted) {
+        this.painted = true;
+        this.layer.style.backgroundColor = background;
+        this.area.style.backgroundColor = 'transparent';
+      }
+      COPIED.forEach((name, index) => { this.layer.style[name] = look[index]; });
     }
-    for (const name of COPIED) this.layer.style[name] = style[name];
-    this.layer.scrollTop = area.scrollTop;
-    this.layer.scrollLeft = area.scrollLeft;
+    this.layer.scrollTop = top;
+    this.layer.scrollLeft = left;
   }
 
   hover(x, y) {

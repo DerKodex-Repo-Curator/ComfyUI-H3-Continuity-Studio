@@ -1,5 +1,6 @@
 // The Timeline face and native advanced widgets share the Studio editor's saved state.
-import {joinKind} from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import {joinKind} from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
+import {setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
 export const FACE_HEIGHT = 120;
 const STYLE_ID = 'h3ct-face-style';
 const CSS = `
@@ -90,7 +91,7 @@ export class TimelineFace {
 
   settings() {
     const editor = this.editor, box = editor.box(), widgets = this.controls;
-    this.generateButton.textContent = box ? `Generate clip ${editor.selected + 1}` : 'Generate clip';
+    setText(this.generateButton, box ? `Generate clip ${editor.selected + 1}` : 'Generate clip');
     this.generateButton.disabled = !box || editor.boxRenderButton.disabled || !!editor.queueBatch;
     this.seedError = box ? editor.seedInput.validationMessage : '';
     if (!widgets) return;
@@ -111,10 +112,10 @@ export class TimelineFace {
 
   update({summary, progress, allLabel, canRender}) {
     this.settings();
-    this.summaryEl.textContent = summary;
+    setText(this.summaryEl, summary);
     this.summaryEl.title = summary;
-    this.progressEl.textContent = this.seedError || progress;
-    this.allButton.textContent = allLabel;
+    setText(this.progressEl, this.seedError || progress);
+    setText(this.allButton, allLabel);
     this.nextButton.disabled = !canRender;
     this.allButton.disabled = !canRender;
   }

@@ -1,4 +1,6 @@
 // Save Timeline and Story together so a restart cannot restore prompts without their matching recovery state.
+import {setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
+
 const sessions = new Map();
 const restorers = new WeakMap();
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -154,7 +156,8 @@ export function mountSavedState(node, root, { app, api, loaded }) {
       node.setDirtyCanvas?.(true, true);
       app.extensionManager?.workflow?.activeWorkflow?.changeTracker?.checkState?.();
     },
-    status(message, conflict = false) { label.textContent = message; choices.hidden = !conflict; },
+    // Checked every second: rewriting the same words would restyle the whole page each time.
+    status(message, conflict = false) { setText(label, message); choices.hidden = !conflict; },
     // With a known `revision`, an unchanged state answers with the revision alone.
     async request(body, revision) {
       const identity = { kind: 'workflow', graph: String(node.graph?.extra?.h3c_story_id ?? node.graph?.id ?? ''), node: 'workflow' };

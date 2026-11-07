@@ -7,23 +7,24 @@ import { saveBeforeNewProject } from './h3c_story_library.mjs?v=20261106-checkpo
 import { app } from '../../scripts/app.js';
 import {syncImageOutputs,compileImageOutputs} from './h3c_timeline_images.mjs?v=20261012-picture-outputs-1';
 import { api } from '../../scripts/api.js';
-import { mountSavedState, autosaveEnabled } from './h3c_saved_state.mjs?v=20261106-checkpoints-1';
+import { mountSavedState, autosaveEnabled } from './h3c_saved_state.mjs?v=20261107-editing-lag-1';
+import {setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=20260927-7';
 import { WATCH_EVENTS, idleWatch, progressText, watchEvent } from './h3c_render_watch.mjs?v=20261105-queue-feed-1';
 import { DEFAULT_AHEAD, QueueFeed, feedNote, queueAhead } from './h3c_queue_feed.mjs?v=20261105-queue-feed-1';
-import { studio } from './h3c_studio.mjs?v=20261106-release-0170-1';
-import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261013-native-advanced-1';
-import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261106-box-audio-1';
-import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import { studio } from './h3c_studio.mjs?v=20261107-editing-lag-1';
+import { FACE_HEIGHT, TimelineFace } from './h3c_timeline_face.mjs?v=20261107-editing-lag-1';
+import { TimelineEditor } from './h3c_timeline_editor.mjs?v=20261107-editing-lag-1';
+import { referenceFile, referenceSource, referencePools, referenceType, effectiveRefmods, parseState, serialize } from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=20261019-x2-reference-source-1';
 import { pictureRefs } from './h3c_pictures.mjs?v=20261011-reference-preparation-1';
 import { voiceRefs } from './h3c_voices.mjs?v=20261011-reference-preparation-1';
-import {captureRecipe,captureTimelineId,captureStillBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=20261105-ph3-autogrow-1';
+import {captureRecipe,captureTimelineId,captureStillBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput,graphWiring} from './h3c_stills.mjs?v=20261107-editing-lag-1';
 import {boundarySnapshot} from './h3c_frame_images.mjs?v=20261105-still-quality-1';
-import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=20261012-still-prompts-2';
-import { TakesClient } from './h3c_takes.mjs?v=20261104-take-marks-2';
+import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=20261107-editing-lag-1';
+import { TakesClient } from './h3c_takes.mjs?v=20261107-editing-lag-1';
 import {ProjectSession, forkProject, parseJSON, stringifyJSON} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
-import {TimelineHistory, editingSnapshot, withLiveReceipts} from './h3c_history.mjs?v=20261104-history-1';
+import {TimelineHistory, editingSnapshot, withLiveReceipts} from './h3c_history.mjs?v=20261107-editing-lag-1';
 import {confirmRegeneration} from './h3c_regeneration.mjs?v=20261106-overlap-recovery-1';
 import {startGeneration,useGeneration} from './h3c_generations.mjs?v=20261106-new-generation-1';
 
@@ -37,6 +38,30 @@ const QUEUE_AHEAD_SETTING = 'H3C.Timeline.QueueAhead';
 const RUN_ENDS = new Set(['execution_success', 'execution_error', 'execution_interrupted']);
 const mounted = new Set();
 const projectSessions = new Map();
+
+// The Studio fills the page, so the graph canvas under it stops drawing while it is open: ComfyUI redraws the whole
+// workflow after each edit, behind the Studio, before the edit can show.
+let pausedBefore = null;
+function coverCanvas(covered) {
+  const canvas = app.canvas;
+  if (!canvas) return;
+  if (covered) {
+    pausedBefore ??= !!canvas.pause_rendering;
+    canvas.pause_rendering = true;
+  } else if (pausedBefore != null) {
+    canvas.pause_rendering = pausedBefore;
+    pausedBefore = null;
+    canvas.setDirty?.(true, true);
+  }
+}
+
+// Resolves once the next frame has painted, or after 100 ms on a page that draws no frames (one in the background).
+function afterPaint() {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 100);
+    requestAnimationFrame(() => { clearTimeout(timer); setTimeout(resolve, 0); });
+  });
+}
 // ComfyUI's render progress for the whole page; every Timeline face and the Studio read it.
 let watch = idleWatch();
 
@@ -135,7 +160,7 @@ export class TimelineHost {
         const field = document.activeElement;
         return field?.matches('textarea, input[type="text"], input:not([type]), [contenteditable="true"]') ? field : null;
       },
-      flush: () => document.activeElement?.blur?.(),
+      flush: () => { document.activeElement?.blur?.(); this.editor?.flushTyping(); },
     });
     this.takesClient = new TakesClient(async (url, body) => {
       if (this.project) {
@@ -155,9 +180,9 @@ export class TimelineHost {
     });
     const editor = new TimelineEditor({
       read: () => this.widget.value,
-      write: (text) => {
-        this.writeTimeline(text);
-        node.setDirtyCanvas?.(true, true);
+      write: (text, typing = false) => {
+        this.writeTimeline(text, typing);
+        if (!typing) node.setDirtyCanvas?.(true, true);
       },
       context: () => Number.parseInt(widgetValue(node, 'context_frames') ?? '39', 10) || 39,
       connected: () => this.connected(),
@@ -463,7 +488,9 @@ export class TimelineHost {
   }
 
   openStudio(page, options) {
-    studio().open(this, page, options);
+    const shown = studio();
+    shown.cover ??= coverCanvas;
+    shown.open(this, page, options);
     this.editor.frameImages.refreshControls();
   }
 
@@ -599,10 +626,10 @@ export class TimelineHost {
     return parseJSON(await response.text());
   }
 
-  writeTimeline(text) {
+  writeTimeline(text,typing=false) {
     setGenerationControl(generationControl(this.node,'timeline'),text);
     this.widget.value=text;
-    this.history.capture();
+    if(!typing)this.history.capture();
   }
 
   async writeStillState(state) {
@@ -611,7 +638,17 @@ export class TimelineHost {
     await this.saved.flush();
   }
 
+  // Asked by each Render button on every redraw; reading the graph's wiring is slow on a large workflow, and the graph
+  // can't change before the redraw ends.
   hasVideoOutput() {
+    if(this.videoAnswer===undefined) {
+      this.videoAnswer=this.findVideoOutput();
+      queueMicrotask(()=>{this.videoAnswer=undefined;});
+    }
+    return this.videoAnswer;
+  }
+
+  findVideoOutput() {
     const pending=[this.node],seen=new Set();let direct=false;
     while(pending.length) {
       const node=pending.pop();if(!node||seen.has(node)||node.mode===2)continue;seen.add(node);
@@ -621,18 +658,15 @@ export class TimelineHost {
         if(link)pending.push(node.graph.getNodeById(link.target_id));
       }
     }
-    const graph=app.rootGraph??app.graph,workflow=graph?.serialize?.();
-    const definitions=workflow?.definitions?.subgraphs??[],groups=new Set(definitions.map(group=>group.id));
-    if(!workflow||!(workflow.nodes??[]).some(node=>groups.has(node.type)))return direct;
-    const ports=node=>[node.id,node.type,node.mode,node.inputs?.map(port=>port.link),node.outputs?.map(port=>port.links)];
-    const signature=JSON.stringify([workflow.id,workflow.nodes.map(ports),workflow.links,definitions.map(group=>[group.id,group.nodes.map(ports),group.links])]);
+    const graph=app.rootGraph??app.graph,{nested,signature}=graphWiring(graph);
+    if(!nested)return direct;
     if(signature!==this.videoCapabilityKey&&!this.videoCapabilityPreparing) {
       this.videoCapabilityKey=signature;this.videoCapabilityPreparing=true;
       app.graphToPrompt().then(snapshot=>{
         if(this.removed)return;
         const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===graph});
-        this.videoCapability=compiledVideoOutput(snapshot,id);
-      }).catch(()=>{this.videoCapability=false;}).finally(()=>{this.videoCapabilityPreparing=false;if(!this.removed)this.editor.render();});
+        this.videoCapability=compiledVideoOutput(snapshot,id);this.videoAnswer=undefined;
+      }).catch(()=>{this.videoCapability=false;this.videoAnswer=undefined;}).finally(()=>{this.videoCapabilityPreparing=false;if(!this.removed)this.editor.render();});
     }
     return signature===this.videoCapabilityKey&&this.videoCapability!=null?this.videoCapability:direct;
   }
@@ -773,7 +807,9 @@ export class TimelineHost {
     app.canvas.deselectAllNodes();app.canvas.selectNode(node);app.canvas.centerOnNode(node);
   }
 
+  // stillControls and stillSources are asked as the Studio draws a clip; the workflow is serialized after that draw shows.
   async stillControls() {
+    await afterPaint();
     const snapshot=await app.graphToPrompt();
     const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
     const recipe=captureRecipe(snapshot,id);
@@ -793,6 +829,7 @@ export class TimelineHost {
   }
 
   async stillSources(request) {
+    await afterPaint();
     const snapshot=await app.graphToPrompt();
     const id=captureTimelineId(snapshot,this.node.id,{root:this.node.graph===(app.rootGraph??app.graph)});
     const body=captureStillBody(snapshot,id,request);
@@ -1065,7 +1102,7 @@ export class TimelineHost {
   }
 
   changed() {
-    this.editor.setStatus(null);
+    this.editor.markStale();
     this.saved.changed();
     this.schedule();
     this.showProgress();
@@ -1103,18 +1140,23 @@ export class TimelineHost {
     }
     const input = () => JSON.stringify(this.requestBody());
     const body = input();
+    // A status for a Timeline that changed while it was asked for leaves the drawn one, now stale, until the next.
+    const show = (status) => {
+      if (request !== this.request || this.removed) return;
+      if (body === input()) this.editor.setStatus(status);
+      else this.editor.markStale();
+    };
     try {
       const status = await this.takesClient.watch(api.fetchApi(STATUS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: this.takesClient.statusBody(body),
       }).then((response) => response.json()));
-      if (request === this.request && !this.removed) this.editor.setStatus(body === input() ? status : null);
+      show(status);
       // While the full video or the video so far builds in the background, check again now and then in case its event is missed.
       if ((status?.full_video_building || status?.preview_video_building) && request === this.request && !this.removed) this.schedule(15000);
     } catch (error) {
-      if (request === this.request && !this.removed) this.editor.setStatus(body === input()
-        ? { ok: false, error: `Status unavailable: ${error?.message ?? error}` } : null);
+      show({ ok: false, error: `Status unavailable: ${error?.message ?? error}` });
     }
   }
 
@@ -1155,7 +1197,7 @@ export class TimelineHost {
         node.properties.h3c_asset_bindings = structuredClone(value.assets ?? []);
         this.editor.load(); node.setDirtyCanvas?.(true, true);
       },
-      status: (message, conflict = false) => {label.textContent = message; choices.hidden = !conflict;},
+      status: (message, conflict = false) => {setText(label, message); choices.hidden = !conflict;},
       request: async (path, options = {}) => {
         if (options.method === 'PUT') await this.registerProjectFiles(options.body);
         const response = await api.fetchApi(path, {...options,

@@ -222,6 +222,18 @@ export function recipeControls(snapshot,recipe) {
   return {instruction:String(value(recipe.bindings.instruction)??''),seed:value(recipe.bindings.seed),...(recipe.version===2?{width:value(recipe.bindings.size.width.at(-1),true),height:value(recipe.bindings.size.height.at(-1),true),label:recipe.label??'Image generator',adapter:recipe.adapter??'h3',referenceLabel:recipe.reference_label}:{}),...(additionalReferences.length?{additionalReferences}:{})};
 }
 
+// The wiring a compiled prompt follows, read from the live graph: serializing the workflow instead takes several ms on
+// a large one, and the Studio asks on every redraw. nested: the graph holds a subgraph instance.
+export function graphWiring(graph){
+ const nodes=graph=>[...(graph?.nodes??graph?._nodes??[])];
+ const links=graph=>[...(graph?.links?.values?.()??Object.values(graph?.links??{}))]
+  .map(link=>Array.isArray(link)?link.slice(0,5):[link.id,link.origin_id,link.origin_slot,link.target_id,link.target_slot]);
+ const ports=node=>[node.id,node.type,node.mode,node.inputs?.map(port=>port.link),node.outputs?.map(port=>port.links)];
+ const groups=[...(graph?.subgraphs?.values?.()??[])],ids=new Set(groups.map(group=>group.id));
+ return {nested:nodes(graph).some(node=>ids.has(node.type)),
+  signature:JSON.stringify([graph?.id,nodes(graph).map(ports),links(graph),groups.map(group=>[group.id,nodes(group).map(ports),links(group)])])};
+}
+
 // Graph capability, including native nested instances after graphToPrompt compilation.
 export function hasVideoOutput({output},timelineId){
  const depends=(id,seen=new Set())=>{

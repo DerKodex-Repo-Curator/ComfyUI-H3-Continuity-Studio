@@ -3,7 +3,7 @@ import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=20261011-reference-
 // decide how a box runs. Mirrors h3_continuity/timeline.py.
 import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
 import {imageDescriptionPrompt, imageDescriptionSource} from './h3c_image_descriptions.mjs?v=20261010-image-descriptions-1';
-import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261105-still-quality-1';
+import {acceptedGuideFrames} from './h3c_shot_preview.mjs?v=20261107-editing-lag-1';
 import {AUDIO_WINDOWS_FEATURE, pruneWindows, resolveWindows, audioSourceLocked} from './h3c_audio_windows.mjs?v=20261106-box-audio-1';
 export const FPS = 24;
 export const MAX_FRAMES = 362;
@@ -380,8 +380,9 @@ export function resolvedAudio(state) {
 export function activeAudioClips(state, index, context = 0) {
   const start = state.boxes.slice(0, index).reduce((sum, box) => sum + box.frames, 0) / FPS;
   const end = start + state.boxes[index].frames / FPS;
+  let spans;
   return (state.audio_clips ?? []).filter(clip => referenceEnabled(state, clip.slot)
-    && resolveWindows(clip,audioBoxSpans(state)).some(w=>w.start < end && w.start+w.duration > start-(clip.box_windows && !isFresh(state,index) ? context/FPS : 0)));
+    && resolveWindows(clip,spans??=audioBoxSpans(state)).some(w=>w.start < end && w.start+w.duration > start-(clip.box_windows && !isFresh(state,index) ? context/FPS : 0)));
 }
 
 export function audioBoxSpans(state) {

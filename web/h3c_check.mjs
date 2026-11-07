@@ -1,5 +1,6 @@
 // The Box page's continuity check: Check, what the last check of the box's render found, and Retake.
 // Plain DOM without ComfyUI imports; the editor's host starts a check through the linked Story.
+import {replaceChanged, setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
 
 const STYLE_ID = 'h3ck-style';
 const CSS = `
@@ -17,6 +18,7 @@ const CSS = `
 .h3ck-retake { align-self: flex-start; }
 `;
 const IDLE = "Check this render against the bible with the Story's Vision model, and measure its drift";
+const STALE = "Wait for the Timeline's status to catch up with the last edit.";
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -105,8 +107,9 @@ export class CheckPanel {
   async check() {
     const box = this.editor.box();
     if (!box) return;
-    this.note = null;
+    this.note = this.editor.stale ? {box: box.id, text: STALE} : null;
     this.render();
+    if (this.note) return;
     try {
       await this.editor.host.check([box.id]);
     } catch (error) {
@@ -122,7 +125,7 @@ export class CheckPanel {
     if (!story) return 'Link an H3 Story node to check boxes.';
     if (story.job) return "Wait for the Story's job to end.";
     if (editor.queuing) return 'Wait until the box is queued.';
-    if (editor.stale) return "Wait for the Timeline's status to catch up with the last edit.";
+    if (editor.stale) return STALE;
     return '';
   }
 
@@ -138,22 +141,25 @@ export class CheckPanel {
       return index < 0 ? null : index + 1;
     };
     const {state, lines, retake} = checkState(status.check, numberOf);
-    this.stateEl.textContent = state;
+    setText(this.stateEl, state);
     const groups = status.check?.stale ? [] : checkGroups(status.check, editor.state.bible, box.schedule);
-    this.groupsEl.replaceChildren(...groups.map(({heading, items}) => {
+    replaceChanged(this.groupsEl, groups.map(({heading, items}) => {
       const group = el('div', 'h3ck-group');
       group.append(el('div', 'h3ck-heading', heading), ...items.map((text) => el('div', 'h3ck-problem', text)));
       return group;
     }));
-    this.linesEl.replaceChildren(...lines.map((text) => el('div', 'h3ck-line', text)));
+    replaceChanged(this.linesEl, lines.map((text) => el('div', 'h3ck-line', text)));
     const why = this.blocked();
-    this.checkButton.disabled = !!why;
+    // While the status catches up the button stays as the last one left it, and a press says to wait: switching it
+    // off and on for every edit restyles the whole ComfyUI page twice.
+    if (why !== STALE) this.checkButton.disabled = !!why;
     this.checkButton.title = why || IDLE;
+    if (this.note?.text === STALE && !editor.stale) this.note = null;
     this.retakeButton.hidden = !retake;
     this.retakeButton.disabled = editor.boxRenderButton.disabled;
     this.retakeButton.title = editor.boxRenderButton.title;
     const note = this.note?.box === box.id ? this.note.text : '';
-    this.noteEl.textContent = note;
+    setText(this.noteEl, note);
     this.noteEl.hidden = !note;
   }
 }

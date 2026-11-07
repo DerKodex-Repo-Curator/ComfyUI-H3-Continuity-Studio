@@ -1,8 +1,9 @@
 // The Box page's takes: the take in use and the saved takes of the selected box, then of the bridge before it, with
 // Play, Use and Delete, Delete other takes and Delete unusable takes in this sequence. Plain DOM without ComfyUI
 // imports; the editor's host sends the requests, and Play asks the Studio to show the take.
-import * as model from './h3c_timeline_model.mjs?v=20261106-box-audio-1';
+import * as model from './h3c_timeline_model.mjs?v=20261107-editing-lag-1';
 import {parseJSON, stringifyJSON, seedValue} from './h3c_project.mjs?v=20261106-overlap-recovery-1';
+import {drawsSame, setText} from './h3c_dom.mjs?v=20261107-editing-lag-1';
 
 export const MAX_TAKES = 10;
 const TAKES_URLS = {list: '/h3c/timeline/takes', use: '/h3c/timeline/takes/use', delete: '/h3c/timeline/takes/delete',
@@ -171,16 +172,19 @@ class Section {
   show(part, off) {
     this.root.hidden = !part || (!part.error && !part.in_use && !part.takes?.length && !this.note);
     if (this.root.hidden) return;
-    this.titleEl.textContent = this.bridge ? 'Bridge takes' : 'Clip takes';
-    const inUse = part.in_use;
-    this.inUseEl.replaceChildren();
+    setText(this.titleEl, this.bridge ? 'Bridge takes' : 'Clip takes');
+    const inUse = part.in_use, inUseNodes = [];
     if (inUse) {
       const from = this.bridge ? '' : fromText(inUse.carried_from, this.panel.editor.selected + 1, part.before);
-      this.inUseEl.append(`In use: rendered ${when(inUse.created)} · ${seedText(inUse.seed)}${from ? ` · ${from}` : ''} `);
-      if (this.panel.editor.host.projectAttached !== true) this.inUseEl.append(this.marks(inUse));
+      inUseNodes.push(document.createTextNode(`In use: rendered ${when(inUse.created)} · ${seedText(inUse.seed)}${from ? ` · ${from}` : ''} `));
+      if (this.panel.editor.host.projectAttached !== true) inUseNodes.push(this.marks(inUse));
     }
     this.inUseEl.hidden = !inUse;
-    this.rowsEl.replaceChildren(...(part.takes ?? []).map((take) => this.row(take, off, part.before)));
+    const rows = (part.takes ?? []).map((take) => this.row(take, off, part.before));
+    // The rows' listeners hold the list's takes; while it is the same list, equal markup keeps them.
+    if (part !== this.drawnPart || !drawsSame(this.inUseEl, inUseNodes)) this.inUseEl.replaceChildren(...inUseNodes);
+    if (part !== this.drawnPart || !drawsSame(this.rowsEl, rows)) this.rowsEl.replaceChildren(...rows);
+    this.drawnPart = part;
     this.actions.hidden = !!part.error || this.panel.editor.host.projectAttached === true;
     this.otherButton.disabled = !!off;
     this.otherButton.title = off || `Delete every saved take of this ${this.bridge ? 'bridge' : 'box'}, keeping the take in use`;
@@ -189,10 +193,10 @@ class Section {
       this.unusableButton.title = off || 'Delete every saved take in this sequence that can’t be used';
     }
     this.confirmEl.hidden = !this.confirm;
-    this.askEl.textContent = this.confirm?.text ?? '';
-    this.yesButton.textContent = this.confirm?.label ?? '';
+    setText(this.askEl, this.confirm?.text);
+    setText(this.yesButton, this.confirm?.label);
     const note = part.error ? {text: part.error, problem: true} : this.note;
-    this.noteEl.textContent = note?.text ?? '';
+    setText(this.noteEl, note?.text);
     this.noteEl.classList.toggle('problem', !!note?.problem);
     this.noteEl.hidden = !note;
   }
@@ -287,7 +291,12 @@ export class TakesPanel {
       for (const section of [this.boxSection, this.bridgeSection]) section.confirm = section.note = null;
     }
     const found = this.list?.box === box?.id ? this.list.found : null;
-    const off = editor.stale || editor.status?.ok !== true ? WAIT : found?.busy ? BUSY : '';
+    // While the status catches up, Use and the deletes stay as the last one left them and a press says to wait:
+    // switching them off and on for every edit restyles the whole ComfyUI page twice.
+    const off = editor.status?.ok !== true ? WAIT : found?.busy ? BUSY : '';
+    for (const section of [this.boxSection, this.bridgeSection]) {
+      if (section.note?.text === WAIT && !editor.stale) section.note = null;
+    }
     this.boxSection.show(found && (found.ok ? found.box : {error: found.error}), off);
     this.bridgeSection.show(found?.ok ? found.bridge : null, off);
   }
@@ -306,7 +315,14 @@ export class TakesPanel {
       detail: {box: this.list.box, bridge: section.bridge, video: take.video, label}}));
   }
 
+  // Whether a press must wait for the status, saying so.
+  waiting(section) {
+    if (this.editor.stale) this.setNote(section, this.list.box, WAIT);
+    return this.editor.stale;
+  }
+
   askUse(section, take) {
+    if (this.waiting(section)) return;
     const warnings = section.bridge ? [] : this.list.found.box.warnings ?? [];
     if (!warnings.length) return this.use(section, take);
     section.confirm = {text: warnings.join(' '), label: 'Use this take', go: () => this.use(section, take)};
@@ -348,6 +364,7 @@ export class TakesPanel {
 
   // Counts what a delete would remove, then asks before removing it.
   async remove(section, request) {
+    if (this.waiting(section)) return;
     const boxId = this.list.box;
     const body = {...request, ...(request.scope === 'other' ? {box: boxId, bridge: section.bridge} : {})};
     const found = await this.editor.host.takes('delete', {...body, apply: false});
