@@ -65,6 +65,13 @@ class NativeProjectsTest(unittest.TestCase):
         self.assertEqual(context['workflow']['ui']['id'], 'graph-a')
         self.assertEqual(context['outputs'], ['9'])
 
+    def test_video_plan_status_never_materializes_media(self):
+        before = self.registered()
+        with mock.patch('h3_continuity.timeline_node.request_status', return_value={'boxes': []}) as status:
+            context = projects.context(self.target, before['revision'], 'video_plan')
+            self.assertEqual(context['native_status'], {'boxes': []})
+            self.assertFalse(status.call_args.kwargs['materialize'])
+
     def test_stale_save_preserves_newer_seed_and_metadata(self):
         before = self.registered()
         document = json.loads(before['document_json'])

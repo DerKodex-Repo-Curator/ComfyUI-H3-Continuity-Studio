@@ -285,13 +285,18 @@ def context(target, expected_revision, operation):
         for identity, node in api.items():
             if node['class_type'] == 'H3C_SaveSegment' and depends(identity):
                 outputs.append(identity)
-        if operation == 'video' and len(outputs) != 1:
+        if operation in ('video', 'video_plan') and len(outputs) != 1:
             raise APIError('execution_snapshot_required', 'Video snapshot needs one unambiguous native Save Segment output.', status=409)
         fields = story_library._fields(ui)
-        return dict(target=target, revision=revision, name=_guard(target, ui), timeline=document['timeline'],
+        result = dict(target=target, revision=revision, name=_guard(target, ui), timeline=document['timeline'],
                     settings=document['settings'], graph=target['graph'], story=target.get('story_node'),
                     timeline_node=target['timeline_node'], workflow={'ui': ui, 'api': api, 'timeline_node': target['timeline_node']},
                     prompt=api, outputs=outputs, fields={f'{node}/{key}': value for (node, key), value in fields.items()})
+        if operation == 'video_plan':
+            from ..timeline_node import request_status
+            result['native_status'] = request_status(dict(name=result['name'], timeline=json.dumps(document['timeline']),
+                                                          settings=document['settings']), materialize=False)
+        return result
 
 
 def list_projects(cursor=None, limit=50):
