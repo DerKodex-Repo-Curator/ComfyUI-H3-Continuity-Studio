@@ -48,7 +48,7 @@ async def story_library_save(request):
         if body.get('prompt'):
             _, timeline_id, timeline = story_job.story_context.find_nodes(body['prompt'], body['story'])
             sequence = story_job.story_context.resolve_text(body['prompt'], timeline['inputs']['name'], 'Timeline name')
-        result = await asyncio.to_thread(story_library.save, body['graph'], body['story'], body['workflow'], sequence, body.get('revision'), body.get('library_revision'))
+        result = await asyncio.to_thread(story_library.save, body['graph'], body['story'], body['workflow'], sequence, body.get('revision'), body.get('library_revision'), body.get('prompt'))
         return web.json_response(result)
     except story_library.WorkflowWiringConflict as error:
         return web.json_response({'error': str(error), 'code': error.code,
@@ -452,4 +452,6 @@ def register():
     api = project_routes.runtime(instance)
     project_routes.register(instance, api)
     instance.h3c_timeline_api = api
+    from .agent_api import routes as agent_routes
+    agent_routes.register(instance)
     return True

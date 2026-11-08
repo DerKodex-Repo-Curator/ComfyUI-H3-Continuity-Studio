@@ -4,6 +4,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-08
+
+### Added
+
+- **MCP tools and the existing H3 skills for AI agents.** A standalone stdio adapter connects Codex or Claude Code to a local or remote Studio. It supports saved native and managed projects, explicit render plans, retained submission receipts, Story/still proposals, takes and library workflows. The host serves its seven canonical skills through the MCP Skills extension and ordinary resources. README and the Automation guide include separate uv/venv installation, both clients, authentication and recovery instructions; client skill activation is reported separately from tool connectivity.
+
 ## [0.19.7] - 2026-11-08
 
 ### Fixed

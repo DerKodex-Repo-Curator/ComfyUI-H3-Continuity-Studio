@@ -110,6 +110,7 @@ nav:
       - Keep the first pass: output/first-pass-cache.md
   - Automation:
       - Timeline HTTP API: automation/api.md
+      - MCP for AI agents: automation/mcp.md
   - Reference:
       - Nodes: reference/nodes.md
       - Troubleshooting and limits: reference/troubleshooting.md

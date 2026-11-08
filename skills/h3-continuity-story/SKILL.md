@@ -60,8 +60,9 @@ The bible (`timeline.bible`) lists **characters, places and props**, each with
 pictures, a description, a voice and **looks** over time. Each box records which of
 its subjects is which entity (`cast`, mapping subject labels to entity ids), its
 `schedule` (the entities in it and its place) and its `join`
-(`{kind: continue|transition|cut|new_scene, note}`). **Rendering never reads the
-bible**: the box prompts are what render.
+(`{kind: continue|transition|cut|new_scene, note}`). Box prompts provide rendered
+prose. Render-time Cast memory, current appearance pictures, voices and reference
+preparation also read the bible/schedule; keep them consistent with the prompts.
 
 - **Build bible** links each box's `<Subject N> is …` lines to entities without
   changing any prompt. Lines it can't reproduce exactly stay unlinked, with a reason.
@@ -113,3 +114,23 @@ or join. Camera, framing, motion, blur and artefacts are out of its scope.
 - **Retake** renders that box alone with a new seed, and the old take stays in
   `takes/`. The check only reads renders; nothing renders unless asked.
 - The check is a reviewer's aid, not acceptance. Watch the boxes it passes too.
+
+## Saved agent work
+
+`h3_story` exposes writing, rewriting, feedback, templates, bible transformations,
+continuity checks and still-prompt conversion. Configure provider/model widgets in
+the saved Story node; credentials stay on the server. Retired `writing_mode` and
+Guide Recheck are unavailable. Read `h3c://docs/MCP.md` for action payloads.
+
+Writing needs an explicit saved native graph/Story/Timeline and matching execution
+snapshot. Keep the request key/handle; a lost start acknowledgement reconciles
+only against matching request attribution. Poll with `h3_job_status`, retain the
+finished proposal, then explicitly save selected content with the current revision.
+A late result never overwrites a newer save. `taken` acknowledges a retained result
+without applying it. Cancel is scoped to that Story job.
+
+`h3_library` covers saved story versions, display names, deletion and named
+checkpoints. Checkpoints keep their pinned media and cannot be edited; restore
+returns an independent editable copy. Generation export/import verifies local
+installation media rather than embedding files or replaying old jobs. Browser
+Undo/Redo (including Undo last Write) is separate from saved revisions.
