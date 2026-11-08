@@ -1,6 +1,6 @@
 // Marker images own editable still prompts, candidates and the acceptance transaction. Queue recovery belongs to the host.
-import {frameTargets, buildStillPrompt, applyFrameGuide, endpointGuide} from './h3c_shot_preview.mjs?v=136b17470774';
-import {parseState, serialize} from './h3c_timeline_model.mjs?v=136b17470774';
+import {frameTargets, buildStillPrompt, applyFrameGuide, endpointGuide, endpointReference} from './h3c_shot_preview.mjs?v=4a6c521f2056';
+import {parseState, serialize} from './h3c_timeline_model.mjs?v=4a6c521f2056';
 import {StillPromptPreparation,preparedStillPrompt,setPreparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=2e7e25c47bea';
 
 import {seedValue, stringifyJSON} from './h3c_project.mjs?v=d7f26a8db663';
@@ -300,11 +300,12 @@ export class FrameImages {
     this.boundaryHintEl.textContent=paired?`Continuous boundary: using a guide also sets ${paired} while both clips are unrendered.`:'';
     this.acceptedEl.replaceChildren();this.candidatesEl.replaceChildren();
     const guide=this.currentGuide(saved)?.guide;
+    const reference=!guide?endpointReference(this.editor.state,index,this.target.kind,this.host.connected().images):null;
     const frameMode=this.target.kind!=='shot'&&!!this.editor.runsFlf?.(index);
-    const preview=guide??saved?.images?.[0]?.file??saved?.image;
-    if(preview) {
-      this.acceptedEl.append(this.image(preview,guide?(frameMode?'Accepted frame':'Accepted guide'):'Candidate'));
-      const caption=el('div',null,'h3ct-row');caption.append(el('span',guide?(frameMode?'Frame in use':'Guide in use'):'Candidate preview',guide?'h3ct-guide-status':'h3ct-hint'));
+    const preview=guide??reference?.mediaFile??saved?.images?.[0]?.file??saved?.image;
+    if(preview||reference?.preview) {
+      this.acceptedEl.append(this.image(preview,reference?`Frame @${reference.name}`:guide?(frameMode?'Accepted frame':'Accepted guide'):'Candidate',reference?.preview));
+      const caption=el('div',null,'h3ct-row');caption.append(el('span',reference?`Frame in use · @${reference.name} · Change in Settings`:guide?(frameMode?'Frame in use':'Guide in use'):'Candidate preview',guide||reference?'h3ct-guide-status':'h3ct-hint'));
       if(guide) caption.append(button(frameMode?'Remove frame':'Remove guide',()=>this.removeGuide()),button('Use as scene anchor',()=>this.useSceneAnchor(guide)));
       this.acceptedEl.append(caption);
     } else this.acceptedEl.append(el('p','No image yet. Generate candidates, upload a guide or drop an image here.','h3ct-image-empty'));
@@ -371,13 +372,13 @@ export class FrameImages {
       }
     }
   }
-  image(file,label) {
-    const img=el('img');img.src=this.host.viewUrl(file);img.alt=label;img.draggable=false;
-    const thumbnail=button('',()=>this.previewImage(file,label,thumbnail));thumbnail.classList.add('h3ct-image-thumbnail');
+  image(file,label,url) {
+    const img=el('img');img.src=url??this.host.viewUrl(file);img.alt=label;img.draggable=false;
+    const thumbnail=button('',()=>this.previewImage(file,label,thumbnail,url));thumbnail.classList.add('h3ct-image-thumbnail');
     thumbnail.setAttribute('aria-label',`Preview ${label}`);thumbnail.setAttribute('aria-haspopup','dialog');thumbnail.title=`Preview ${label}`;
     thumbnail.append(img);return thumbnail;
   }
-  previewImage(file,label,opener) {
+  previewImage(file,label,opener,url) {
     this.destroy();
     const dialog=this.previewDialog=el('dialog',null,'h3ct-image-preview');dialog.setAttribute('aria-label',`${label} preview`);
     dialog.style.cssText='width:min(1200px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:12px;box-sizing:border-box;overflow:auto;background:#15171c;color:var(--input-text,#ddd);border:1px solid #535b6c;border-radius:8px;font:14px/1.45 system-ui,sans-serif';
@@ -388,7 +389,7 @@ export class FrameImages {
     const dismiss=()=>{dialog.close();finish();};
     const head=el('div');head.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px';
     const close=button('Close',dismiss);head.append(el('strong',label),close);
-    const img=el('img');img.src=this.host.viewUrl(file);img.alt=label;
+    const img=el('img');img.src=url??this.host.viewUrl(file);img.alt=label;
     img.style.cssText='display:block;width:auto;height:auto;max-width:100%;max-height:calc(100dvh - 96px);margin:auto;object-fit:contain';
     dialog.append(head,img);
     dialog.addEventListener('keydown',event=>{event.stopPropagation();if(event.key==='Escape') {event.preventDefault();dismiss();}});
