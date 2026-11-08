@@ -35,4 +35,4 @@ Saved stories attachment/transport regression (actual frontend host methods with
 uv run --with playwright python tests/browser/saved_story_attachment.py
 ```
 
-This checks managed load/status GETs, exact Timeline content, asset bindings, conflict preservation, native imports/forks and connected text controls. It never contacts ComfyUI and does not test a full custom-node workflow import or render.
+This checks managed load/status GETs, exact Timeline content, asset bindings, recovery of previously stripped attachments, failed lookups, in-flight edits, conflict preservation, native imports/forks and connected text controls. It never contacts ComfyUI and does not test a full custom-node workflow import or render.

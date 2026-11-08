@@ -14,7 +14,7 @@ import {StoryHost} from '/web/h3c_story.js';
 import {TimelineHost} from '/web/h3c_timeline.js';
 import {parseJSON,stringifyJSON} from '/web/h3c_project.mjs';
 const assert=(ok,message)=>{if(!ok)throw Error(message);};
-const project={mode:'attached',id:'synthetic-managed',profile_sha256:'synthetic-profile',revision:1};
+const project={mode:'attached',id:'11111111-2222-4333-8444-555555555555',profile_sha256:'synthetic-profile',revision:1};
 const assets=[{asset_id:'first',bindings:[{kind:'picture',slot:'image17'}]},
  {asset_id:'last',bindings:[{kind:'picture',slot:'image18'}]}];
 const line=stringifyJSON({version:1,boxes:Array.from({length:8},(_,i)=>({id:`b${i}`,frames:105,
@@ -25,8 +25,8 @@ const storyFields={state:JSON.stringify({title:'Synthetic',timeline:'2'}),idea:'
 const serialized=(id,type,fields,properties={})=>({id,type,properties,
  inputs:Object.keys(fields).map(name=>({name,widget:{name}})),widgets_values:Object.values(fields)});
 const saved={workflow:{nodes:[serialized(1,'H3C_Story',storyFields),
- serialized(2,'H3C_Timeline',{name:'api_syntheticmanaged',timeline:line,width:512},
- {h3c_project:project,h3c_asset_bindings:assets})],links:[]},story:'1',sequence:'api_syntheticmanaged',
+ serialized(2,'H3C_Timeline',{name:'api_11111111222243338444555555555555',timeline:line,width:512},
+ {h3c_project:project,h3c_asset_bindings:assets})],links:[]},story:'1',sequence:'api_11111111222243338444555555555555',
  graph:'saved-graph',id:'saved-library',workflow_revision:4};
 window.run=async()=>{
  const calls=[];
@@ -72,6 +72,16 @@ window.run=async()=>{
   assert(graph.extra.h3c_story_id===saved.graph&&story.libraryId===saved.id,'Library identity not retained');
   assert(project.revision===1&&assets[0].bindings[0].slot==='image17','Saved snapshot mutated');
 
+  const stripped=structuredClone(saved);
+  stripped.workflow.nodes[1].properties={h3c_fork_sequence:saved.sequence};
+  await story.loadLibrary(stripped);await host.saved.ready;await host.refresh();
+  assert(node.properties.h3c_project?.id===project.id,'Previously stripped Saved story stayed detached');
+  assert(stringifyJSON(node.properties.h3c_asset_bindings)===stringifyJSON(assets),'Previously stripped bindings not recovered');
+  assert(host.editor.status?.ok&&host.editor.status.next==='b0','Recovered project status not displayed');
+  assert(stringifyJSON(parseJSON(host.widget.value))===line&&textLine.widgets[0].value===line,'Recovery replaced saved content');
+  assert(!stripped.workflow.nodes[1].properties.h3c_project,'Recovery mutated saved snapshot');
+  assert(calls.length===5,'Expected recovery lookup plus managed load/status GETs');
+
   // A differing API snapshot must offer the existing conflict choices, preserving local content/settings.
   server.timeline.boxes[0].prompt='Newer API prompt';server.settings.width=512;server.assets=[];
   await story.loadLibrary(structuredClone(saved));await host.saved.ready;
@@ -80,7 +90,7 @@ window.run=async()=>{
   assert(node.widgets[2].value===1024,'API attachment overwrote destination settings');
   assert(stringifyJSON(node.properties.h3c_asset_bindings)===stringifyJSON(assets),'API attachment overwrote saved bindings');
   let blocked=false;try{await host.project.save();}catch(error){blocked=/Resolve the project conflict/.test(error.message);}
-  assert(blocked&&calls.length===3,'Unresolved saved-story conflict wrote to API project');
+  assert(blocked&&calls.length===6,'Unresolved saved-story conflict wrote to API project');
 
   // A generation archive result deliberately has no project attachment or asset registry.
   story.applyGeneration({story:storyFields,timeline:line,sequence:'native-import'});
@@ -95,7 +105,15 @@ window.run=async()=>{
   assert(!host.project&&!node.properties.h3c_project,'Native saved fork reattached to original project');
   assert(node.properties.h3c_fork_sequence==='native-saved','Native saved sequence changed');
   assert(stringifyJSON(node.properties.h3c_asset_bindings)===stringifyJSON(assets),'Native saved bindings lost');
-  assert(calls.length===3,'Native transfers contacted managed project');
+  assert(calls.length===6,'Native transfers contacted managed project');
+  const beforeFailure=JSON.stringify(graph.serialize());
+  window.request=async path=>{calls.push([path,'GET']);return {ok:false,status:404,text:async()=>'{"error":{"message":"Project no longer exists"}}'};};
+  let failed=false;try{await story.loadLibrary(stripped);}catch(error){failed=error.message==='Project no longer exists';}
+  assert(failed&&JSON.stringify(graph.serialize())===beforeFailure,'Failed recovery changed the destination');
+  window.request=async path=>{calls.push([path,'GET']);generator.widgets[0].value=9;return {ok:true,text:async()=>stringifyJSON(server)};};
+  let changed=false;try{await story.loadLibrary(stripped);}catch(error){changed=/open story changed while loading/i.test(error.message);}
+  assert(changed&&node.properties.h3c_fork_sequence==='native-saved'&&!node.properties.h3c_project,'Recovery overwrote edits made during lookup');
+  assert(calls.length===8,'Unexpected recovery requests');
   return {managed_requests:calls,boxes:8,cues:19,native_import:true,native_saved_fork:true,text_wiring:true};
  } finally {host.saved.destroy();}
 };

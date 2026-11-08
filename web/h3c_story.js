@@ -14,7 +14,7 @@ import { migrateStoryDescriptionInputs, migrateSerializedStoryDescriptionInputs 
 import { showOwnElement } from './h3c_dom_widget.mjs?v=961e6d7f3bb7';
 import * as story from './h3c_story_model.mjs?v=13a46b322a85';
 import { StoryPanel } from './h3c_story_panel.mjs?v=3361c4324f46';
-import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=cd3feedb5571';
+import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent, recoverSavedStoryContent } from './h3c_story_library.mjs?v=17748eb8a721';
 import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=b07a438d2dc4';
 import { parseState, serialize } from './h3c_timeline_model.mjs?v=d56ec08c02a0';
 
@@ -412,7 +412,11 @@ export class StoryHost {
       return;
     }
     const graph=this.node.graph,revision=JSON.stringify(graph.serialize());
-    const content=savedStoryContent(value,graph.serialize());
+    const content=await recoverSavedStoryContent(savedStoryContent(value,graph.serialize()),async path=>{
+      const response=await api.fetchApi(path),project=parseJSON(await response.text());
+      if(!response.ok)throw Error(project.error?.message??'Could not reconnect the saved story to its managed project.');
+      return project;
+    });
     const resume=await this.saved.suspend();
     try {
       if(this.gone||graph!==(app.rootGraph??app.graph)||revision!==JSON.stringify(graph.serialize()))
