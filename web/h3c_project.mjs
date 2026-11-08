@@ -145,12 +145,18 @@ export class ProjectSession {
       assets:same(before.assets,edited.assets)?this.base.assets:edited.assets});
     this.status(`Project revision ${project.revision} saved on this server`);
   }
-  load() { return this.serial(()=>this._load()); }
-  async _load() {
-    if(this.project) return this._refresh();
+  load(options) { return this.serial(()=>this._load(options)); }
+  async _load({preserveLocal=false}={}) {
+    if(this.project&&!preserveLocal) return this._refresh();
     const before=this.value(); const project=await this.request(this.path());
-    if(!same(before,this.value())) {this.conflict=project; this.status('Local edits changed while loading; choose which edits to keep.',true); return;}
-    this.install(project); return project;
+    const local=this.value();
+    if(!preserveLocal&&!same(before,local)) {this.conflict=project; this.status('Local edits changed while loading; choose which edits to keep.',true); return;}
+    this.install(project);
+    if(preserveLocal&&!this.gone&&!same(local,this.base)) {
+      this.apply(local);this.conflict=project;
+      this.status('Saved story differs from the project; choose which edits to keep.',true);
+    }
+    return project;
   }
   save() {return this.serial(()=>this._save());}
   async _save() {

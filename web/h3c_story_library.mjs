@@ -1,6 +1,6 @@
-import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=d7f26a8db663';
-import {settledPreparation} from './h3c_reference_preparation.mjs?v=47e1dbdd7993';
-import {applyResult,parseStoryState,serializeStoryState} from './h3c_story_model.mjs?v=4e6786d0bdf6';
+import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=a95eeeccc6cf';
+import {settledPreparation} from './h3c_reference_preparation.mjs?v=5840e91777b9';
+import {applyResult,parseStoryState,serializeStoryState} from './h3c_story_model.mjs?v=13a46b322a85';
 import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=1ca16919a3f9';
 
 const CONTENT_FIELDS=new Set(['name','timeline','idea','state','idea_images','template']);
@@ -82,7 +82,9 @@ export function savedStoryContent(value,current) {
       for(const key of ['pending','job'])delete preview[key];
   }
   return {story,timeline:before===stringifyJSON(timeline)?fields.timeline:stringifyJSON(timeline),
-    sequence:value.sequence,renders:true,wiring};
+    sequence:value.sequence,renders:true,wiring,
+    project:target.properties?.h3c_project?.mode==='attached'?structuredClone(target.properties.h3c_project):undefined,
+    asset_bindings:structuredClone(target.properties?.h3c_asset_bindings)};
 }
 
 export function isWiringConflict(error) {
