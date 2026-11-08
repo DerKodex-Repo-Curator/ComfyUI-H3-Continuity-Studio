@@ -1,6 +1,6 @@
 # Studio MCP Adapter Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans for Native execution; switch to superpowers:subagent-driven-development only if the user chooses that method. Steps use checkbox (`- [ ]`) syntax for tracking. Design is approved. Native is the stated default after the optional execution-preference question; the user may steer it. README/docs installation work is explicitly authorized.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans for Native execution; switch to superpowers:subagent-driven-development only if the user chooses that method. Steps use checkbox (`- [x]`) syntax for tracking. Design is approved. Native is the stated default after the optional execution-preference question; the user may steer it. README/docs installation work is explicitly authorized.
 
 **Goal:** Deliver the standalone Studio MCP adapter, current skills and capability coverage, and tested README/guide installation instructions for Codex and Claude Code.
 
@@ -68,7 +68,7 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
 
 **Interfaces:** `resources.catalog() -> dict`; `resources.read(uri: str, digest: str|None=None) -> tuple[bytes,str]`; `routes.register(instance) -> None`. `read` is allowlist-based and never treats a URI as an arbitrary path.
 
-- [ ] Write failing tests for all seven skills, entry discoverability, full YAML frontmatter, CRLF bytes and supporting files, allowlisted guide/client resources, changed digests, duplicate/malformed names, unknown URIs, traversal and symlink escape. Assert returned manifest SHA and length equal the exact bytes read.
+- [x] Write failing tests for all seven skills, entry discoverability, full YAML frontmatter, CRLF bytes and supporting files, allowlisted guide/client resources, changed digests, duplicate/malformed names, unknown URIs, traversal and symlink escape. Assert returned manifest SHA and length equal the exact bytes read.
 
   Regression `test_catalog_manifest_matches_served_bytes`:
   ```python
@@ -78,10 +78,10 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
           self.assertEqual(len(raw), item['size'])
           self.assertEqual('sha256:' + hashlib.sha256(raw).hexdigest(), item['digest'])
   ```
-- [ ] Run `python -m unittest discover -s tests -t . -p test_agent_resources.py -v` with the normal CPU bootstrap. Confirm missing module/route failures.
-- [ ] Implement catalog/read functions using real YAML parsing and contained file resolution. Catalog optional upstream guide bodies as currently installed, without downloading material. Register HTTP catalog/resource routes on the current ComfyUI origin.
-- [ ] Add `coverage.json`: every audited feature family has source references, skill names and planned tool names or a reasoned graph/browser/unavailable classification. Cover all 17 registered nodes. Native-only operations are labeled rather than advertised for managed targets.
-- [ ] Run tests; verify no MCP import/dependency enters the host. Commit the coherent host guidance change.
+- [x] Run `python -m unittest discover -s tests -t . -p test_agent_resources.py -v` with the normal CPU bootstrap. Confirm missing module/route failures.
+- [x] Implement catalog/read functions using real YAML parsing and contained file resolution. Catalog optional upstream guide bodies as currently installed, without downloading material. Register HTTP catalog/resource routes on the current ComfyUI origin.
+- [x] Add `coverage.json`: every audited feature family has source references, skill names and planned tool names or a reasoned graph/browser/unavailable classification. Cover all 17 registered nodes. Native-only operations are labeled rather than advertised for managed targets.
+- [x] Run tests; verify no MCP import/dependency enters the host. Commit the coherent host guidance change.
 
 ## Task 2: Saved native targets and executable snapshots
 
@@ -89,8 +89,8 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
 
 **Interfaces:** `projects.list_projects(cursor=None, limit=50) -> dict`; `read(target) -> ProjectView`; `save(target, expected_revision:dict, document:dict) -> ProjectView`; `register(target, workflow_ui:dict, workflow_api:dict, expected_revision:dict|None=None) -> ProjectView`; `context(target, expected_revision:dict, operation:str) -> dict`. Context returns validated native request fields, graph, selected outputs/recipe and source revision; it does not queue work.
 
-- [ ] Write failing read/save tests based on a temporary Story library/state store and explicit Timeline-only registration. Include stale state/wiring/execution revisions, checkpoint immutability, exact uint64 seeds/opaque fields, managed-sequence rejection, missing/wrong node IDs and a new snapshot on an old graph ID.
-- [ ] Write failing execution-readiness tests: legacy UI-only story remains editable; matching API snapshot becomes runnable; changed wiring, unsupported subgraphs or computed/ambiguous bindings yield `execution_snapshot_required`/recapture error before execution. Literal widgets and supported Primitive inputs update both UI and executable values correctly.
+- [x] Write failing read/save tests based on a temporary Story library/state store and explicit Timeline-only registration. Include stale state/wiring/execution revisions, checkpoint immutability, exact uint64 seeds/opaque fields, managed-sequence rejection, missing/wrong node IDs and a new snapshot on an old graph ID.
+- [x] Write failing execution-readiness tests: legacy UI-only story remains editable; matching API snapshot becomes runnable; changed wiring, unsupported subgraphs or computed/ambiguous bindings yield `execution_snapshot_required`/recapture error before execution. Literal widgets and supported Primitive inputs update both UI and executable values correctly.
 
   Regressions `test_old_story_is_editable_without_execution_snapshot` and `test_stale_save_preserves_newer_seed` use the temporary project fixture:
   ```python
@@ -100,11 +100,11 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
   # Save once with before['revision']; a second distinct save using that revision must fail.
   self.assertEqual(projects.read(target)['document_json'], accepted['document_json'])
   ```
-- [ ] Run the tests red. Implement snapshots under the existing host user data boundary in `h3c_agent/projects/<sha256(graph)>.json`, containing graph/UI/API identities, binding map and source hashes/revisions. Use existing saved-state lock and atomic file replacement; do not invent new project IDs. Story-library save gains an optional API snapshot argument; old callers stay valid. Explicit Timeline-only registration uses the same snapshot store.
-- [ ] Resolve native authored values through the saved workflow plus current widget overlay. Validate all fields before writes. A partial filesystem failure must retain authored data and make a mismatched execution snapshot unusable; add a failure-injection regression. Never claim a multi-file save is transactional when it is not.
-- [ ] Extend the existing Story save's already captured API prompt into snapshot retention. Bind only known Timeline/Story literal/Primitive controls; complex linked inputs invalidate execution readiness rather than being overwritten. Frontend fixture asserts the saved capture matches the workflow state/revision; no polling or browser bridge is added.
-- [ ] Use existing ownership checks to reject native mutation/context access for attached managed sequences; preserve busy/checkpoint guards. Expose native read/save/register/context routes with structured errors.
-- [ ] Run targeted Python/JS tests and `node tools/module_versions.mjs --write` / `--check`. Commit the native persistence change.
+- [x] Run the tests red. Implement snapshots under the existing host user data boundary in `h3c_agent/projects/<sha256(graph)>.json`, containing graph/UI/API identities, binding map and source hashes/revisions. Use existing saved-state lock and atomic file replacement; do not invent new project IDs. Story-library save gains an optional API snapshot argument; old callers stay valid. Explicit Timeline-only registration uses the same snapshot store.
+- [x] Resolve native authored values through the saved workflow plus current widget overlay. Validate all fields before writes. A partial filesystem failure must retain authored data and make a mismatched execution snapshot unusable; add a failure-injection regression. Never claim a multi-file save is transactional when it is not.
+- [x] Extend the existing Story save's already captured API prompt into snapshot retention. Bind only known Timeline/Story literal/Primitive controls; complex linked inputs invalidate execution readiness rather than being overwritten. Frontend fixture asserts the saved capture matches the workflow state/revision; no polling or browser bridge is added.
+- [x] Use existing ownership checks to reject native mutation/context access for attached managed sequences; preserve busy/checkpoint guards. Expose native read/save/register/context routes with structured errors.
+- [x] Run targeted Python/JS tests and `node tools/module_versions.mjs --write` / `--check`. Commit the native persistence change.
 
 ## Task 3: Isolated adapter packaging and bounded HTTP transport
 
@@ -112,17 +112,17 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
 
 **Interfaces:** `StudioClient(base_url:str, token:str|None=None, timeout:float=30)` with `json(path, *, method="GET", body=None, key=None) -> dict`, `bytes(path, *, expected_digest=None, expected_size=None) -> bytes`, `upload(path:Path, kind:str) -> dict`, `download(descriptor:dict, destination:Path) -> dict`. `StudioError` retains `code`, `status`, `path`, `details`.
 
-- [ ] Write failing fixture-server tests for proxy prefixes, auth headers, query encoding, native/managed errors (including HTTP 200 `ok:false`), timeouts, malformed/oversized responses, nonfinite JSON, redirects and same-origin boundaries. Assert errors/logs never contain the bearer token.
+- [x] Write failing fixture-server tests for proxy prefixes, auth headers, query encoding, native/managed errors (including HTTP 200 `ok:false`), timeouts, malformed/oversized responses, nonfinite JSON, redirects and same-origin boundaries. Assert errors/logs never contain the bearer token.
 
   Regression `test_remote_prefix_auth_and_redirect_boundary`: fixture records a request to `/comfy/h3c/agent/catalog` with the configured bearer header; a response redirect to a second fixture yields an error, and the second fixture has zero requests. `test_failed_download_preserves_destination` asserts:
   ```python
   self.assertEqual(destination.read_bytes(), b'previous-output')
   self.assertNotIn(token, str(error))
   ```
-- [ ] Write failing streaming upload/download tests: original hashes, changed-size/hash rejection, existing destination preserved on failure, local root/symlink containment and remote-host paths. Reuse a small stdlib HTTP fixture; no ComfyUI required.
-- [ ] Implement using installed `httpx2` primitives and the existing client's boundary rules. Keep the existing example client unchanged. Pin SDK 2.3.0 and lock dependencies in the isolated project; require Python >=3.11.
-- [ ] Implement `h3c-mcp --studio-url URL --token-env NAME --workspace-root PATH --state-dir PATH`; `--check` fetches catalog/capabilities and prints a small JSON diagnostic then exits. Normal execution runs stdio and sends logging to stderr. `--token-env`, root and state directory have safe defaults where applicable; never accept a raw token argument.
-- [ ] Run adapter tests in a clean environment, check imports while ComfyUI/torch are unavailable, and verify the launcher/diagnostic with the fixture. Commit packaging/transport.
+- [x] Write failing streaming upload/download tests: original hashes, changed-size/hash rejection, existing destination preserved on failure, local root/symlink containment and remote-host paths. Reuse a small stdlib HTTP fixture; no ComfyUI required.
+- [x] Implement using installed `httpx2` primitives and the existing client's boundary rules. Keep the existing example client unchanged. Pin SDK 2.3.0 and lock dependencies in the isolated project; require Python >=3.11.
+- [x] Implement `h3c-mcp --studio-url URL --token-env NAME --workspace-root PATH --state-dir PATH`; `--check` fetches catalog/capabilities and prints a small JSON diagnostic then exits. Normal execution runs stdio and sends logging to stderr. `--token-env`, root and state directory have safe defaults where applicable; never accept a raw token argument.
+- [x] Run adapter tests in a clean environment, check imports while ComfyUI/torch are unavailable, and verify the launcher/diagnostic with the fixture. Commit packaging/transport.
 
 ## Task 4: MCP Skills, resources and saved/managed tools
 
@@ -130,7 +130,7 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
 
 **Interfaces:** `Guidance(client)` supplies `catalog()`, `get_skill(uri)`, `read(uri, digest=None)`; `SkillsExtension(guidance)` subclasses the released SDK's `Extension`, advertises `io.modelcontextprotocol/skills`, and returns `MethodBinding` entries for required methods. `create_server(client, guidance, receipts, roots) -> MCPServer` registers only typed domain tools/resources.
 
-- [ ] Write a failing SDK stdio integration: discover tools and ordinary resources; call actual `skills/list`/`skills/get` via the SDK extension method interface; verify required result/caching shapes for negotiated protocol versions, all file digests/frontmatter, unknown URI errors and no directory-read advertisement. Test a client that does not opt into Skills still reads resources/tools.
+- [x] Write a failing SDK stdio integration: discover tools and ordinary resources; call actual `skills/list`/`skills/get` via the SDK extension method interface; verify required result/caching shapes for negotiated protocol versions, all file digests/frontmatter, unknown URI errors and no directory-read advertisement. Test a client that does not opt into Skills still reads resources/tools.
 
   Regressions `test_stdio_skills_manifest_and_resources` and `test_unadvertised_directory_read_rejected` assert the wire results:
   ```python
@@ -139,11 +139,11 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
   self.assertNotIn('directoryRead', extension_settings)
   self.assertEqual(unknown_skill_error['code'], -32602)
   ```
-- [ ] Implement the two Skills bindings and Pydantic request/result models against the official specification. Use SDK `RequestParams`/pagination/base result types and capability registration; no custom JSON-RPC loop. Enforce catalog/read identity and reject content changes before returning bytes under a stale digest.
-- [ ] Register `h3_capabilities`, `h3_read_guidance`, `h3_list_projects`, `h3_get_project`, `h3_create_project`, `h3_save_project`, `h3_register_workflow`, `h3_export_workflow`, `h3_upload_asset`, `h3_download_artifact`. Project tool signatures use the Target/Revision structures above, and authored input/output uses JSON strings. List each project kind separately with its own pagination cursor.
-- [ ] Register managed `h3_plan_video`, `h3_render_video`, `h3_job_status`, `h3_cancel_job`, `h3_resume_job`, `h3_abandon_job` with explicit JobHandles and request keys. Preserve hashes/revisions/held states. Human-attested abandon requires its existing reason/prompt evidence; it is never automatic.
-- [ ] Test managed lifecycle and native read/save against the fixture, including conflict details, unsupported target operations, disconnected host errors, unchanged uint64 text, pinned profile and no native fallback. Check tool annotations accurately represent status materialization and filesystem/network effects.
-- [ ] Run tests and commit the runnable server/core tools.
+- [x] Implement the two Skills bindings and Pydantic request/result models against the official specification. Use SDK `RequestParams`/pagination/base result types and capability registration; no custom JSON-RPC loop. Enforce catalog/read identity and reject content changes before returning bytes under a stale digest.
+- [x] Register `h3_capabilities`, `h3_read_guidance`, `h3_list_projects`, `h3_get_project`, `h3_create_project`, `h3_save_project`, `h3_register_workflow`, `h3_export_workflow`, `h3_upload_asset`, `h3_download_artifact`. Project tool signatures use the Target/Revision structures above, and authored input/output uses JSON strings. List each project kind separately with its own pagination cursor.
+- [x] Register managed `h3_plan_video`, `h3_render_video`, `h3_job_status`, `h3_cancel_job`, `h3_resume_job`, `h3_abandon_job` with explicit JobHandles and request keys. Preserve hashes/revisions/held states. Human-attested abandon requires its existing reason/prompt evidence; it is never automatic.
+- [x] Test managed lifecycle and native read/save against the fixture, including conflict details, unsupported target operations, disconnected host errors, unchanged uint64 text, pinned profile and no native fallback. Check tool annotations accurately represent status materialization and filesystem/network effects.
+- [x] Run tests and commit the runnable server/core tools.
 
 ## Task 5: Recoverable native video and submission receipts
 
@@ -151,7 +151,7 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
 
 **Interfaces:** `ReceiptStore(state_dir, studio_identity).claim(request_key, request_hash)` is a context manager using an OS-released nonblocking file lock. `load`, `write` store prepared/submitting/accepted/terminal state atomically. `NativeJobs.prepare(target, revision, selection)`, `submit(prepared, request_key) -> JobHandle`, `status(handle) -> dict`, `cancel(handle) -> dict` drive one native unit per explicit submit.
 
-- [ ] Write failing cross-process/restart tests: one native submission for the same key/body; a changed body/key conflict; lost acknowledgement; no queue/history evidence; unrelated prompt evidence; process crash releases the advisory lock but retains a submitting receipt. Assert POST count never increases on ambiguous retry/status.
+- [x] Write failing cross-process/restart tests: one native submission for the same key/body; a changed body/key conflict; lost acknowledgement; no queue/history evidence; unrelated prompt evidence; process crash releases the advisory lock but retains a submitting receipt. Assert POST count never increases on ambiguous retry/status.
 
   Regression `test_lost_ack_restart_never_resubmits`: fixture accepts one prompt and drops its response; recreate the adapter against the same state directory, retry the same key, then poll. Assert:
   ```python
@@ -159,11 +159,11 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
   self.assertEqual(prompt_posts_after_retry_and_status, 1)
   self.assertIn(result['state'], ('accepted', 'queued', 'running', 'succeeded', 'failed', 'needs_reconciliation'))
   ```
-- [ ] Implement receipts with hashed origin/key paths, exact submitted body/hash and prompt/result provenance. Use `msvcrt`/`fcntl` advisory locking as appropriate so crashes do not leave permanent lock files. Do not expire uncertain submission evidence or create another sequence to recover it.
-- [ ] Obtain native context from Task 2, reuse current Timeline preparation/regeneration contracts, and submit only the chosen output closure. Mirror the existing external Timeline receipt attribution and still metadata contracts instead of adding a generic `/prompt` tool. Status reads queue/history once and validates ownership/input identity.
-- [ ] Implement native `h3_plan_video`/`h3_render_video` branches, including continuity-rebuild fingerprint/selection. One submit renders one eligible unit; skill-driven iteration handles remaining units/takes. Managed progression remains server-owned.
-- [ ] Scope cancellation to positively identified owned work. If existing host APIs cannot cancel safely, return the boundary; never call global Stop. Tests assert no unrelated queue mutation and no submission from a status read.
-- [ ] Run tests and commit native recovery support.
+- [x] Implement receipts with hashed origin/key paths, exact submitted body/hash and prompt/result provenance. Use `msvcrt`/`fcntl` advisory locking as appropriate so crashes do not leave permanent lock files. Do not expire uncertain submission evidence or create another sequence to recover it.
+- [x] Obtain native context from Task 2, reuse current Timeline preparation/regeneration contracts, and submit only the chosen output closure. Mirror the existing external Timeline receipt attribution and still metadata contracts instead of adding a generic `/prompt` tool. Status reads queue/history once and validates ownership/input identity.
+- [x] Implement native `h3_plan_video`/`h3_render_video` branches, including continuity-rebuild fingerprint/selection. One submit renders one eligible unit; skill-driven iteration handles remaining units/takes. Managed progression remains server-owned.
+- [x] Scope cancellation to positively identified owned work. If existing host APIs cannot cancel safely, return the boundary; never call global Stop. Tests assert no unrelated queue mutation and no submission from a status read.
+- [x] Run tests and commit native recovery support.
 
 ## Task 6: Story, stills, references, takes and saved-library workflows
 
@@ -171,10 +171,10 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
 
 **Interfaces:** typed tools `h3_story(action, target, arguments_json, expected_revision=None, request_key=None)`, `h3_stills(...)`, `h3_takes(...)`, `h3_library(...)`, `h3_inspect(...)` use finite action enums and validated domain payloads. They map only to allowlisted existing operations; no user-selected route strings. Publish each action's schema/required fields in tool guidance.
 
-- [ ] Write failing parameterized endpoint/ownership cases for every action in the audit: Story write/rewrite/feedback/template/check/bible; still prompts/sources/import/pin/candidate generation/recovery/reference catalog/prepare/approve; take list/use/rate/deletion preview/apply; saved library versions/rename/delete/checkpoint/restore; generation start/history/export/preflight/import; audio/image metadata and node/schema inspection.
-- [ ] Implement native context resolution and domain mappings using existing routes. Require snapshots only for actions that need execution; pure saved edits/library reads stay usable on old projects. Managed-incompatible native operations return an explicit boundary with the existing deliberate export/fork route as guidance.
-- [ ] Complete native still preparation → persisted receipt → `/prompt` → result/provenance flow; preparation alone must not be reported as generation. Story jobs use write/current/poll/taken/cancel lifecycle and stable graph/client identity. A lost Story start reply queries current/recovery before any retry; unknown outcome remains held locally.
-- [ ] Tests return finished Story/still proposals without changing saved authored state. Apply prompts/accepted guides only with an explicit `h3_save_project` or acceptance action and the expected revision. Assert a target edited during execution remains unchanged and the completed result stays retrievable.
+- [x] Write failing parameterized endpoint/ownership cases for every action in the audit: Story write/rewrite/feedback/template/check/bible; still prompts/sources/import/pin/candidate generation/recovery/reference catalog/prepare/approve; take list/use/rate/deletion preview/apply; saved library versions/rename/delete/checkpoint/restore; generation start/history/export/preflight/import; audio/image metadata and node/schema inspection.
+- [x] Implement native context resolution and domain mappings using existing routes. Require snapshots only for actions that need execution; pure saved edits/library reads stay usable on old projects. Managed-incompatible native operations return an explicit boundary with the existing deliberate export/fork route as guidance.
+- [x] Complete native still preparation → persisted receipt → `/prompt` → result/provenance flow; preparation alone must not be reported as generation. Story jobs use write/current/poll/taken/cancel lifecycle and stable graph/client identity. A lost Story start reply queries current/recovery before any retry; unknown outcome remains held locally.
+- [x] Tests return finished Story/still proposals without changing saved authored state. Apply prompts/accepted guides only with an explicit `h3_save_project` or acceptance action and the expected revision. Assert a target edited during execution remains unchanged and the completed result stays retrievable.
 
   Regressions `test_late_story_result_is_proposal_until_explicit_save` and `test_managed_take_cleanup_cannot_use_native_route` assert:
   ```python
@@ -182,8 +182,8 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
   self.assertTrue(job_result['result_available'])
   self.assertEqual(native_take_delete_requests, [])
   ```
-- [ ] Preserve source clocks, bound audio windows/dialogue, manual still prompts, acceptance state, local generation media verification, checkpoint identity and scoped take cleanup. Destructive calls retain preview/explicit action semantics; no automatic cleanup/fork/model download/key readback.
-- [ ] Test disabled replacements/retired actions are refused, and that new project/generation actions preserve the uploads/settings/history required by current behavior. Run suites and commit complete domain coverage.
+- [x] Preserve source clocks, bound audio windows/dialogue, manual still prompts, acceptance state, local generation media verification, checkpoint identity and scoped take cleanup. Destructive calls retain preview/explicit action semantics; no automatic cleanup/fork/model download/key readback.
+- [x] Test disabled replacements/retired actions are refused, and that new project/generation actions preserve the uploads/settings/history required by current behavior. Run suites and commit complete domain coverage.
 
 ## Task 7: Current skills and MCP installation documentation
 
@@ -191,20 +191,20 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
 
 **Interfaces:** all commands launch the actual Task 3 console entry point and all tool/action names match Tasks 4–6. The host catalog automatically serves edited skills; existing `skills/install.py` remains usable.
 
-- [ ] Correct the four audited stale claims: smallest-size/mixed-aspect assembly; cached FLF2VA raw audio; Shot-split frontmatter; bible's render-time Cast/reference use. Add current checkpoints/autosave, generation histories, P-H3 sizing/LoRA, audio locks/dialogue, continuity recovery, take cleanup/ratings, Disk Cache and preview guidance to the relevant existing skills.
-- [ ] Add MCP operation references alongside retained HTTP instructions. Include saved/native/managed identity, missing execution snapshots, explicit result application, revisions, native receipt progression and disabled/browser-only boundaries. Validate every tool/resource reference using catalog/registry data rather than exact prose assertions.
-- [ ] README: add a concise MCP installation section with prerequisites, isolated adapter installation/launcher, default Studio URL and links to the full guide/reference. Make clear the adapter environment is separate from ComfyUI's Python; remote Studio requires updating the host node too.
-- [ ] Published guide: provide `uv run --project <checkout>/mcp_adapter h3c-mcp ...` and isolated-venv `python -m pip install <checkout>/mcp_adapter` paths, copyable `codex mcp add ... -- <launcher>` and `claude mcp add --transport stdio ... -- <launcher>`, Windows paths containing spaces, local/remote URLs/proxy prefixes, bearer-token environment configuration, workspace roots and receipt location.
-- [ ] Include `--check`, `codex mcp list/get`, Claude `/mcp`/health checks and example first read-only requests. Explain extension discovery versus ordinary resource reading versus filesystem skill installation; do not claim both clients automatically load extension skills. Document host-version mismatch, offline host, missing model/snapshot, revision conflict and held receipt recovery.
-- [ ] Link guide under Automation, cross-link HTTP API page, and put detailed operation examples/contracts in `docs/MCP.md`. Update test instructions for the separate adapter environment and client smoke.
-- [ ] Run skill-pack/coverage tests and `uv run --with-requirements requirements-docs.txt python -m mkdocs build --strict --site-dir .tmp/mcp-docs`. Commit skills/docs together after checking all launch commands against the fixture in Task 8.
+- [x] Correct the four audited stale claims: smallest-size/mixed-aspect assembly; cached FLF2VA raw audio; Shot-split frontmatter; bible's render-time Cast/reference use. Add current checkpoints/autosave, generation histories, P-H3 sizing/LoRA, audio locks/dialogue, continuity recovery, take cleanup/ratings, Disk Cache and preview guidance to the relevant existing skills.
+- [x] Add MCP operation references alongside retained HTTP instructions. Include saved/native/managed identity, missing execution snapshots, explicit result application, revisions, native receipt progression and disabled/browser-only boundaries. Validate every tool/resource reference using catalog/registry data rather than exact prose assertions.
+- [x] README: add a concise MCP installation section with prerequisites, isolated adapter installation/launcher, default Studio URL and links to the full guide/reference. Make clear the adapter environment is separate from ComfyUI's Python; remote Studio requires updating the host node too.
+- [x] Published guide: provide `uv run --project <checkout>/mcp_adapter h3c-mcp ...` and isolated-venv `python -m pip install <checkout>/mcp_adapter` paths, copyable `codex mcp add ... -- <launcher>` and `claude mcp add --transport stdio ... -- <launcher>`, Windows paths containing spaces, local/remote URLs/proxy prefixes, bearer-token environment configuration, workspace roots and receipt location.
+- [x] Include `--check`, `codex mcp list/get`, Claude `/mcp`/health checks and example first read-only requests. Explain extension discovery versus ordinary resource reading versus filesystem skill installation; do not claim both clients automatically load extension skills. Document host-version mismatch, offline host, missing model/snapshot, revision conflict and held receipt recovery.
+- [x] Link guide under Automation, cross-link HTTP API page, and put detailed operation examples/contracts in `docs/MCP.md`. Update test instructions for the separate adapter environment and client smoke.
+- [x] Run skill-pack/coverage tests and `uv run --with-requirements requirements-docs.txt python -m mkdocs build --strict --site-dir .tmp/mcp-docs`. Commit skills/docs together after checking all launch commands against the fixture in Task 8.
 
 ## Task 8: Documented setup, client smoke and final verification
 
 **Files:** create `mcp_adapter/tests/test_stdio_workflow.py`, fixture helpers and `tools/mcp_client_smoke.py` only if needed to make client checks reproducible; update test docs, CHANGELOG and roadmap evidence.
 
-- [ ] Run the README/guide launchers from another working directory and an installation path containing spaces, both repo/uv and isolated-venv paths. Verify `--check`, stderr/stdout separation, wheel installation without the source checkout and import without host dependencies.
-- [ ] Use a real SDK stdio connection to the running fixture for tool discovery, Skills manifests/resource reads, saved read/edit/conflict, native old-snapshot readiness and exact seed/metadata round trips. Test supported legacy protocol behavior separately from modern Skills negotiation.
+- [x] Run the README/guide launchers from another working directory and an installation path containing spaces, both repo/uv and isolated-venv paths. Verify `--check`, stderr/stdout separation, wheel installation without the source checkout and import without host dependencies.
+- [x] Use a real SDK stdio connection to the running fixture for tool discovery, Skills manifests/resource reads, saved read/edit/conflict, native old-snapshot readiness and exact seed/metadata round trips. Test supported legacy protocol behavior separately from modern Skills negotiation.
 
   Regression `test_document_round_trip_through_stdio_preserves_uint64` changes one prompt in `document_json`, saves it and rereads it. Assert:
   ```python
@@ -212,10 +212,10 @@ Targeted host tests use the project's ComfyUI Python and `COMFY_ROOT`; configure
   self.assertEqual(saved_document['consumer']['opaque'], original_document['consumer']['opaque'])
   self.assertGreater(after['revision']['project'], before['revision']['project'])
   ```
-- [ ] Test installed client launch/configuration without changing the user's global setup or contacting live ComfyUI. Codex has process-local `-c` configuration and an app-server status API; inspect/generated schema for its current `mcpServerStatus/list` interface and confirm fixture server/tool discovery without a model turn. Claude supports connection health checks; use an isolated task-specific config directory. Do not set or repurpose HOME/CODEX_HOME, invoke another model, or silently broaden existing MCP configurations.
-- [ ] Record exact client versions and observed handshake/tool/extension evidence. If an actual client cannot load extension skills, verify its documented resource/filesystem fallback and state that limit. SDK extension conformance and actual client activation are separate results. If a client cannot be exercised safely, retain the unverified acceptance item rather than claiming passing.
-- [ ] Run adapter suite, `node tests/run.mjs`, strict guide build, `node tools/module_versions.mjs --check`, syntax/import checks, and `git diff --check`. Inspect changes for unintended local-file/dependency/workflow edits.
-- [ ] Obtain the execution method's required final independent review. Fix concrete findings, rerun only affected checks, then record the final capability coverage, client evidence and remaining limitations in the feature ledger/Recovery State. Commit coherent final changes; PR/release/deployment require their own existing authorization.
+- [x] Test installed client launch/configuration without changing the user's global setup or contacting live ComfyUI. Codex has process-local `-c` configuration and an app-server status API; inspect/generated schema for its current `mcpServerStatus/list` interface and confirm fixture server/tool discovery without a model turn. Claude supports connection health checks; use an isolated task-specific config directory. Do not set or repurpose HOME/CODEX_HOME, invoke another model, or silently broaden existing MCP configurations.
+- [x] Record exact client versions and observed handshake/tool/extension evidence. If an actual client cannot load extension skills, verify its documented resource/filesystem fallback and state that limit. SDK extension conformance and actual client activation are separate results. If a client cannot be exercised safely, retain the unverified acceptance item rather than claiming passing.
+- [x] Run adapter suite, `node tests/run.mjs`, strict guide build, `node tools/module_versions.mjs --check`, syntax/import checks, and `git diff --check`. Inspect changes for unintended local-file/dependency/workflow edits.
+- [x] Obtain the execution method's required final independent review. Fix concrete findings, rerun only affected checks, then record the final capability coverage, client evidence and remaining limitations in the feature ledger/Recovery State. Commit coherent final changes; PR/release/deployment require their own existing authorization.
 
 ## Self-review / spec coverage
 

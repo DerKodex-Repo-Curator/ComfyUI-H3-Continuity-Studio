@@ -1,69 +1,73 @@
-# Box audio range brainstorming
+# MCP adapter implementation
 
-**Status:** Release and local checkout updates in progress
-**Current Phase:** Box audio range design
+**Status:** MCP implementation complete
+**Current Phase:** Phase 15: durable renders and stories
 
 ## Phase Ledgers
 
-- [Box-bound audio source ranges](phases/2026-11-06-box-audio-range-lock.md)
-- [Incompatible saved overlap](phases/2026-11-06-incompatible-overlap.md)
-- [P-H3 still prompt instructions](phases/2026-11-04-ph3-still-prompts.md)
-
-Prior merged work: [P-H3 node ledger](phases/2026-11-04-ph3-image-still.md). Its inherited pre-merge recovery is superseded by this follow-up; no native generation is requested.
+- [MCP tools and skills](phases/2026-11-08-mcp-tools-skills.md)
 
 ## Recovery State
 
 ```json
 {
   "version": 1,
-  "revision": 49,
-  "phase": "Box audio range design",
-  "active_features": [
-    "BA9"
-  ],
-  "focus_feature": "BA9",
-  "goal": "Create/merge box-audio PR, publish v0.18.0 and fast-forward development/current/ComfyUI checkouts with local work preserved.",
-  "done_when": "PR merged, v0.18.0 tag and GitHub release verified at merged main, all local target HEADs fast-forwarded and existing local files preserved.",
-  "last_completed": "BA8 passed: real ComfyUI browser controls/save/reload/confirmation/mobile/media playback;83frame GPU render verified330Hz, zero-RMS silence,880Hz. Owned backend stopped and GPU released.",
-  "in_progress": "Fresh release gate passed:191JS+355Python, actual-host/native/attached browser1440/390, strict guide and diff/roadmap. v0.18.0 changelog prepared. Exact backups/hashes of three development roadmap edits and untracked inventories recorded under ignored .tmp/box-audio-release/local-preservation. No push yet.",
+  "revision": 134,
+  "phase": "Phase 15: durable renders and stories",
+  "active_features": [],
+  "focus_feature": "None",
+  "goal": "Implement the approved standalone MCP adapter and current skills with tested README/docs installation instructions for Codex and Claude Code.",
+  "done_when": "All eight implementation-plan tasks verified; host/adapter/skills/docs checks and client fixture evidence recorded; known client extension limits reported accurately.",
+  "last_completed": "MCP1 implemented and independently reviewed; all six findings reproduced and fixed in 0f2b02f. README/docs installation and canonical seven skills delivered.",
+  "in_progress": "None. Branch feat/mcp-adapter and worktree retained locally for integration.",
   "next": {
-    "action": "Commit/push release branch, create and link PR, inspect CI and merge exact verified head.",
-    "reason": "Release gates passed and local checkout preservation is prepared."
+    "action": "Keep the completed branch for the user to review/integrate; no publication or live host action is authorized.",
+    "reason": "Authorized implementation, documentation, verification and final review/fix gates are complete."
   },
   "files": [
     {
-      "path": "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
-      "state": "BA9 release and local update tracking"
+      "path": "docs/roadmap-discipline/phases/2026-11-08-mcp-tools-skills.md",
+      "state": "MCP0 and MCP1 passing; review fixes and client limits recorded"
     },
     {
-      "path": "CHANGELOG.md",
-      "state": "v0.18.0 release notes"
+      "path": "docs/superpowers/plans/2026-11-08-mcp-tools-skills.md",
+      "state": "All eight tasks and final review/fix gate checked"
     },
     {
-      "path": "docs/verification/2026-11-06-box-audio-live.md",
-      "state": "Actual browser/GPU evidence"
+      "path": "docs/superpowers/specs/2026-11-08-mcp-tools-skills-design.md",
+      "state": "Approved implemented design"
+    },
+    {
+      "path": "docs/MCP.md",
+      "state": "Complete tool/action and client compatibility reference"
+    },
+    {
+      "path": "guide/automation/mcp.md",
+      "state": "Published installation and troubleshooting instructions"
     }
   ],
   "repository": {
-    "branch": "design/box-audio-range-lock",
-    "head": "a40650f16185",
+    "branch": "feat/mcp-adapter",
+    "head": "0f2b02f10a25",
     "dirty": [
-      "CHANGELOG.md"
+      "docs/roadmap-discipline/readiness-checklist.md",
+      "docs/superpowers/plans/2026-11-08-mcp-tools-skills.md"
     ],
-    "dirty_hash": "fdb9ef76675401887b9993b9c6a444c692edc0c4c4cce115e7874488d2fdcf8a"
+    "dirty_hash": "bdc1c76ac801f3e29f4bf2f9d42d65c11b6201e2cd5c6f614fb0d0e083e590cc"
   },
   "verification": {
-    "required": "Full tests, browser smoke, strict guide; merged PR and v0.18.0 release/tag; development/worktree/ComfyUI HEADs and preserved local changes",
-    "last_run": "node tests/run.mjs; uv run --with playwright python tests/browser/box_audio_windows.py; uv run --with-requirements requirements-docs.txt mkdocs build --strict --site-dir .tmp/box-audio-release/guide; git diff --check; roadmap check",
+    "required": "uv run --project mcp_adapter python -m unittest discover -s mcp_adapter/tests -t mcp_adapter -v; node tests/run.mjs; strict guide build; module version check; Codex/Claude Code fixture connection evidence; git diff --check",
+    "last_run": "Task4 red5 missing-server failures; red1 invalid catalog regression; green20 adapter tests using SDK in-memory and real stdio transport.",
     "status": "passed",
-    "detail": "191JS+355Python zero failures/skips; native/attached and actual TimelineHost browser no page errors; strict guide0.54s; diff/roadmap clean. Existing real GPU83frame soundtrack receipt retained."
+    "detail": "Final adapter67; host229 JavaScript/393 Python; strict MkDocs; module versions; compileall/import/diff checks; uv and isolated wheel launchers with spaces; Codex0.166.0 tools21/resource1; Claude2.1.316 Connected. Automatic client Skills activation remains unverified, with tested resource/filesystem fallback. Fresh independent review findings all fixed test-first."
   },
   "blockers": [],
   "reload": [
     "docs/roadmap-discipline/features.md",
-    "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
-    "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md",
-    "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md"
+    "docs/roadmap-discipline/phases/2026-11-08-mcp-tools-skills.md",
+    "docs/superpowers/specs/2026-11-08-mcp-tools-skills-design.md",
+    "docs/superpowers/plans/2026-11-08-mcp-tools-skills.md",
+    "docs/research/2026-11-08-mcp-capability-audit.md"
   ]
 }
 ```
