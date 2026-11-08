@@ -1,9 +1,9 @@
 // Marker images own editable still prompts, candidates and the acceptance transaction. Queue recovery belongs to the host.
-import {frameTargets, buildStillPrompt, applyFrameGuide, endpointGuide, endpointReference} from './h3c_shot_preview.mjs?v=4a6c521f2056';
-import {parseState, serialize} from './h3c_timeline_model.mjs?v=4a6c521f2056';
+import {frameTargets, buildStillPrompt, applyFrameGuide, endpointGuide, endpointReference} from './h3c_shot_preview.mjs?v=d56ec08c02a0';
+import {parseState, serialize} from './h3c_timeline_model.mjs?v=d56ec08c02a0';
 import {StillPromptPreparation,preparedStillPrompt,setPreparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=2e7e25c47bea';
 
-import {seedValue, stringifyJSON} from './h3c_project.mjs?v=d7f26a8db663';
+import {seedValue, stringifyJSON} from './h3c_project.mjs?v=a95eeeccc6cf';
 
 const key = target => target.kind === 'shot' ? `shot:${target.shot}` : target.kind;
 export const targetLabel = target => target.kind === 'shot' ? `Shot ${target.shot}` : target.kind === 'last' ? 'Last' : 'First';

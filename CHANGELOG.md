@@ -4,9 +4,25 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-08
+
 ### Added
 
 - **MCP tools and the existing H3 skills for AI agents.** A standalone stdio adapter connects Codex or Claude Code to a local or remote Studio. It supports saved native and managed projects, explicit render plans, retained submission receipts, Story/still proposals, takes and library workflows. The host serves its seven canonical skills through the MCP Skills extension and ordinary resources. README and the Automation guide include separate uv/venv installation, both clients, authentication and recovery instructions; client skill activation is reported separately from tool connectivity.
+
+## [0.19.7] - 2026-11-08
+
+### Fixed
+
+- **Saved stories recover managed attachments already lost by older versions.** Opening a story whose attachment was previously stripped now verifies its reserved sequence through the project API and restores missing bindings. Local content and settings are preserved; a failed lookup leaves the destination untouched. Refresh the browser and reopen the Saved story to reconnect an already-detached workflow.
+
+## [0.19.6] - 2026-11-08
+
+### Fixed
+
+- **Manual checkpoints accept redundant identical preview records.** Repeated copies of the same First, Last or Shot preview no longer fail with “previews need unique targets.” Checkpoint copies keep one record; differing records for the same target still fail validation, and the source workflow stays unchanged.
+
+- **Saved stories reconnect to their managed API project.** Opening an attached story keeps its project identity and asset bindings, so status and rendering use the project API instead of failing the native Timeline ownership check. If the saved content or current settings differ from the API project, the existing conflict choices preserve local edits until you choose which to keep. Native imports and forks keep their existing behavior and generator wiring.
 
 ## [0.19.5] - 2026-11-08
 
