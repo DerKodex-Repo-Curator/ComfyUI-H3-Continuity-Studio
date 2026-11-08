@@ -658,16 +658,14 @@ def _preview_target(value, n):
 def _previews(value, n):
     if not isinstance(value, list) or len(value) > LONG_MAX_FRAMES:
         raise _error(f"box {n} previews must be a list of at most {LONG_MAX_FRAMES} shots")
-    shots, targets = set(), set()
+    shots, targets, previews = set(), {}, []
     for item in value:
+        duplicate = False
         if not isinstance(item, dict):
             raise _error(f"box {n} previews must be objects")
         if 'target' in item:
             item['target'] = _preview_target(item['target'], n)
             key = (item['target']['kind'], item['target'].get('shot'))
-            if key in targets:
-                raise _error(f"box {n} previews need unique targets")
-            targets.add(key)
         else:
             if type(item.get("shot")) is not int or item["shot"] < 1 or item["shot"] in shots:
                 raise _error(f"box {n} previews need unique positive shot numbers")
@@ -681,7 +679,14 @@ def _previews(value, n):
                 raise _error(f"box {n} preview images must be a list of candidates")
             for image in item['images']:
                 preview_file(image.get('file'))
-    return value
+        if 'target' in item:
+            if key in targets and json.dumps(item, sort_keys=True) != json.dumps(targets[key], sort_keys=True):
+                raise _error(f"box {n} previews need unique targets")
+            duplicate = key in targets
+            targets[key] = item
+        if not duplicate:
+            previews.append(item)
+    return previews
 
 
 def _shot_frames(prompt, carried, last):
