@@ -1,5 +1,5 @@
 import { promptShots } from './h3c_prompt_sections.mjs?v=b58f04f78a75';
-import { isFresh, globalFrame, lookAt, assemblePrompt } from './h3c_timeline_model.mjs?v=136b17470774';
+import { isFresh, globalFrame, lookAt, assemblePrompt, referenceEnabled } from './h3c_timeline_model.mjs?v=d56ec08c02a0';
 
 import {framePrompt} from './h3c_still_scene.mjs?v=1ca16919a3f9';
 import {preparedStillPrompt} from './h3c_still_prompt_preparation.mjs?v=2e7e25c47bea';
@@ -73,6 +73,14 @@ export function endpointGuide(state, index, context, kind) {
   const matches = owned.filter(p => resolved(p) === frame);
   const preview = matches.find(p => p.target) ?? matches[0];
   return preview ? {preview, guide: preview.guide} : null;
+}
+
+// Settings endpoints are reference slots, separate from generated/uploaded still guides.
+export function endpointReference(state, index, kind, images) {
+  if (!['first','last'].includes(kind) || (kind === 'first' && !isFresh(state,index))) return null;
+  const slot = state.boxes[index]?.[kind];
+  if (!slot || !referenceEnabled(state,slot)) return null;
+  return images.find(ref => ref.name === slot && !ref.refmod && !ref.problem && (ref.preview || ref.mediaFile)) ?? null;
 }
 
 // Free "Frame guide" stills on a clip's first or last frame become its First and Last stills, so converting to FLF2VA

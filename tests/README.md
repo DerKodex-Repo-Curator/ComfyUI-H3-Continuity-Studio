@@ -21,6 +21,17 @@ python -m unittest discover -s tests -t . -p test_shot_split_server.py -v
 
 These tests run on the CPU and load no models. They do not replace watching a render.
 
+## Standalone MCP adapter
+
+The adapter has its own isolated Python 3.11+ environment; do not install MCP into ComfyUI:
+
+```sh
+uv run --project mcp_adapter python -m unittest discover -s mcp_adapter/tests -t mcp_adapter -v
+uv run --with-requirements requirements-docs.txt python -m mkdocs build --strict --site-dir .tmp/mcp-docs
+```
+
+Adapter tests use an in-process HTTP fixture plus real SDK stdio subprocesses. They cover exact Skills resources, modern/legacy negotiation, uint64 JSON documents, saved revisions, native snapshots, proposal retention, receipt locks/restarts/lost replies and managed ownership. `test_agent_*.py` in the host suite verifies saved native state and catalog routes. No GPU/server restart or live media generation is required. Client smoke uses the same fixture, process-local Codex settings and an isolated Claude config directory, without a model turn or changing the user's global configuration. See [MCP evidence](../docs/roadmap-discipline/phases/2026-11-08-mcp-tools-skills.md) for observed versions and separate Skills activation results.
+
 The optional settings/browser smoke also checks native and attached new-generation host actions, the upload guard, stale history, and desktop/mobile Project settings without connecting to ComfyUI:
 
 ```sh
@@ -28,3 +39,11 @@ uv run --with playwright python tests/browser/new_generation.py
 ```
 
 It uses an installed Chrome when available (override with `PLAYWRIGHT_CHROMIUM_EXECUTABLE`), otherwise Playwright's Chromium. Screenshots go to `.tmp/`.
+
+Saved stories attachment/transport regression (actual frontend host methods with synthetic storage):
+
+```sh
+uv run --with playwright python tests/browser/saved_story_attachment.py
+```
+
+This checks managed load/status GETs, exact Timeline content, asset bindings, recovery of previously stripped attachments, failed lookups, in-flight edits, conflict preservation, native imports/forks and connected text controls. It never contacts ComfyUI and does not test a full custom-node workflow import or render.

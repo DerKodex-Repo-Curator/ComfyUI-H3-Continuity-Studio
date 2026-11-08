@@ -27,6 +27,18 @@ Model names and paths in examples are illustrative; select files available in yo
 
 Avoid installing a second copy beside an existing H3 Continuity installation: both copies register the same nodes and routes. Back up projects before replacing an existing installation. Keep ComfyUI behind your usual authenticated access boundary if you expose it remotely.
 
+## MCP for AI agents
+
+Codex and Claude Code can launch the standalone stdio adapter against a local or remote Studio. Update the node on the serving ComfyUI host first, then install the adapter with Python 3.11+ in its own environment, separate from ComfyUI:
+
+```sh
+uv run --project "/absolute/path/ComfyUI-H3-Continuity-Studio/mcp_adapter" h3c-mcp --studio-url http://127.0.0.1:8188 --check
+```
+
+The adapter exposes saved-project editing, render/Story/still tools and the existing seven skills through the MCP Skills extension and ordinary resources. Browser synchronization is not required. Client skill activation depends on extension support; ordinary guidance reads and the filesystem installer remain available.
+
+See [installation and Codex/Claude Code setup](guide/automation/mcp.md) for uv/venv launchers, Windows paths, remote URLs, bearer environment variables and diagnostics. The [MCP reference](docs/MCP.md) covers tools, snapshots, revisions and retained submission receipts.
+
 ## Documentation
 
 The full user guide, with screenshots of every feature, is at **https://kadobot.github.io/ComfyUI-H3-Continuity-Studio/**. Its source is in [`guide/`](guide/).

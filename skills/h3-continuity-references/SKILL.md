@@ -152,6 +152,7 @@ describes the bindings.
   conversion; prepare a video RefMod separately if needed. Use
   `examples/h3_timeline_flf2va_cached_refmods.json` and inspect the resolved mode,
   `tags` and effective prompt rather than inferring the mode from audio presence.
+  Do not remove a recording merely to use cached FLF2VA.
 - **Appearance plates** change what a reference slot shows partway through the film.
   `plates[]` holds accepted revisions `{id, slot, image}` (image in
   `output/h3_previews`, bound through a `plate` asset). A box's
@@ -163,3 +164,23 @@ describes the bindings.
 ## One long video across boxes
 
 To repaint or restyle a long video box by box, connect it to `video1`, add `"video_slices": ["video1"]` to the Timeline and mention `@video1` in each box. Each box then gets only its own window of the video: its Timeline start minus the frames it carries, through every frame H3 generates for it, so the reference lines up with the carried overlap. `video_audio1` is cut the same way. A video too short for a box stops that box with the frames it has and needs.
+
+## Agent still and reference workflow
+
+Use `h3_stills` for sources, import/pin, preparation, candidate generation and
+reference catalog/approval. `prepare` returns a graph; `generate` actually submits
+one owned candidate and returns a retained receipt. Poll with `h3_job_status`;
+results remain proposals even if a person edits the project while they run.
+Keep manual prompts, source frame/clock, target, seed, text contracts and candidate
+provenance. Explicitly accept/save under the current project revision. Reference
+approval returns transformed Timeline data; it does not silently save it.
+
+P-H3-Image Still is an available native recipe generator. Studio resolution uses
+the width/height aspect ratio at 8 MP by default, 4 MP for less memory, or custom
+dimensions; an explicit request size wins for that invocation. Video size stays
+independent. Its ordered `lora_stack` applies model/CLIP strengths to diffusion
+and conditioning, with compatible files; an empty stack changes nothing. Inspect
+the installed node schema with `h3_inspect` before choosing a recipe/model.
+Prepared prompts use generator-specific instructions; keep manually edited
+conversion instructions and check staleness before replacing prepared prompts.
+See `h3c://docs/MCP.md` for recipe payloads and snapshot requirements.

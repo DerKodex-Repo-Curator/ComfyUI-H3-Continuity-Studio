@@ -68,6 +68,8 @@ class Job:
     def view(self):
         view = {"state": self.state, "progress": self.progress, "notes": list(self.notes),
                 "original_text": copy.deepcopy(self.original_text)}
+        if getattr(self, 'agent_request_id', None):
+            view['request_id'] = self.agent_request_id
         if self.drafts:
             view["drafts"] = copy.deepcopy(self.drafts)
         if self.kind != 'write':
@@ -427,6 +429,7 @@ class Jobs:
         except ValueError as error:
             return {"ok": False, "error": str(error)}
         job = Job(ctx, key, client, graph)
+        job.agent_request_id = body.get('request_id')
         job.edit = edit
         story_inputs_snapshot = body["prompt"][ctx.story_id].get("inputs") or {}
         job.previous_story = story_context._saved(story_inputs_snapshot.get("state"))
@@ -462,6 +465,7 @@ class Jobs:
         except ValueError as error:
             return {"ok": False, "error": str(error)}
         job = story_check.CheckJob(ctx, client, graph)
+        job.agent_request_id = body.get('request_id')
         job.updated = lambda job: self.updated(job)
         self.take_over(job)
         job.task = asyncio.get_running_loop().create_task(story_check.run(self, job))
@@ -483,6 +487,7 @@ class Jobs:
         except ValueError as error:
             return {'ok': False, 'error': str(error)}
         job = Job(ctx, key, client, graph)
+        job.agent_request_id = body.get('request_id')
         job.kind, job.still_plan = 'still_prompts', prepared
         job.report('Preparing still prompts...')
         job.updated = self.updated
@@ -522,13 +527,15 @@ class Jobs:
                     graph or job.client == client):
                 job.client = client
                 found = {"job": job.id, "timeline": job.ctx.timeline_id}
+                if getattr(job, 'agent_request_id', None):
+                    found['request_id'] = job.agent_request_id
                 if getattr(job, "kind", "write") != "write":
                     found["kind"] = job.kind
                 return found
         if recover:
             saved = self.recovered(graph, story)
             if saved:
-                return {"job": saved["job"], "timeline": saved["timeline"]}
+                return {"job": saved["job"], "timeline": saved["timeline"], 'request_id': saved['view'].get('request_id')}
         return {"job": None}
 
     def take(self, job_id):

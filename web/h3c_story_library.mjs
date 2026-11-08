@@ -1,6 +1,6 @@
-import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=d7f26a8db663';
-import {settledPreparation} from './h3c_reference_preparation.mjs?v=47e1dbdd7993';
-import {applyResult,parseStoryState,serializeStoryState} from './h3c_story_model.mjs?v=32dc11605e7b';
+import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=a95eeeccc6cf';
+import {settledPreparation} from './h3c_reference_preparation.mjs?v=5840e91777b9';
+import {applyResult,parseStoryState,serializeStoryState} from './h3c_story_model.mjs?v=13a46b322a85';
 import {reconcileSceneAnchors} from './h3c_still_scene.mjs?v=1ca16919a3f9';
 
 const CONTENT_FIELDS=new Set(['name','timeline','idea','state','idea_images','template']);
@@ -82,11 +82,25 @@ export function savedStoryContent(value,current) {
       for(const key of ['pending','job'])delete preview[key];
   }
   return {story,timeline:before===stringifyJSON(timeline)?fields.timeline:stringifyJSON(timeline),
-    sequence:value.sequence,renders:true,wiring};
+    sequence:value.sequence,renders:true,wiring,
+    project:target.properties?.h3c_project?.mode==='attached'?structuredClone(target.properties.h3c_project):undefined,
+    asset_bindings:structuredClone(target.properties?.h3c_asset_bindings)};
 }
 
 export function isWiringConflict(error) {
   return error?.code==='h3c_story_wiring_conflict'||/Workflow wiring changed in another browser/.test(error?.message??'');
+}
+
+export async function recoverSavedStoryContent(content,request) {
+  const match=/^api_([a-f0-9]{8})([a-f0-9]{4})([a-f0-9]{4})([a-f0-9]{4})([a-f0-9]{12})$/.exec(content.sequence);
+  if(content.project||!match)return content;
+  // Records.create_project derives the public project UUID from its reserved sequence.
+  const id=match.slice(1).join('-'),project=await request(`/h3c/api/v1/projects/${id}`);
+  if(project?.id!==id||project.sequence!==content.sequence||!Number.isInteger(project.revision)||project.revision<1
+    ||typeof project.profile_sha256!=='string'||!project.profile_sha256)
+    throw Error('The managed project does not match this saved story. Its local content was kept.');
+  return {...content,project:{mode:'attached',id,revision:project.revision,profile_sha256:project.profile_sha256},
+    asset_bindings:structuredClone(content.asset_bindings??project.assets??[])};
 }
 
 // New project promises to preserve the current project before clearing it.

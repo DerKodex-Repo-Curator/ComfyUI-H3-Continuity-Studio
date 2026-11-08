@@ -1,9 +1,54 @@
 ---
 name: h3-continuity-api
-description: Use when a script or agent drives H3 Continuity Studio over HTTP, through Timeline API v1 (capabilities, profiles, asset upload and bindings, projects and revisions, plans, jobs, held jobs, cancel and abandon, artifacts, takes, workflow export) or the older graph-preparation route with the external_timeline.py receipt client. Part of the H3 Continuity pack; read h3-continuity-video first.
+description: Use when a script or agent drives H3 Continuity Studio through MCP or HTTP, including saved native workflows, Timeline API v1 profiles/projects/plans/jobs, assets, takes, Story/still proposals, held receipts and workflow export. Part of the H3 Continuity pack; read h3-continuity-video first.
 ---
 
 # Driving the host from code
+
+## MCP saved-project workflow
+
+Install the separate `mcp_adapter` environment and launch `h3c-mcp` over stdio from
+Codex or Claude Code, configured with the local/remote Studio URL. Read
+`h3c://docs/MCP.md` for installation and every action schema, then call
+`h3_capabilities`. The host's seven skills are the canonical source, exposed by
+the real Skills extension and ordinary resources; use `h3_read_guidance` when
+the client cannot activate extension skills. Filesystem installation remains
+available through `skills/install.py`.
+
+1. `h3_list_projects` selects managed IDs or saved native graph/Timeline/Story
+   identities. `h3_get_project` returns the full `document_json` string and
+   revision. Preserve exact uint64 seeds and unknown metadata when parsing it.
+2. Save a complete authored replacement using `h3_save_project` and the returned
+   revision. Reread conflicts; never automatically merge or force around busy,
+   checkpoint or render-ownership guards. There is no browser synchronization.
+3. Older native projects remain editable without an executable snapshot. Save
+   in Studio or explicitly `h3_register_workflow` with matching `{ui,api}` exports
+   before execution. Wiring/computed changes require recapture, never an invented
+   editor-to-API conversion. Managed profiles cannot use native fallbacks;
+   `h3_export_workflow` is the deliberate fork/attached export boundary.
+4. `h3_plan_video` precedes `h3_render_video`. Keep plan, exact body, permanent
+   request key and returned job handle. Native submits one eligible unit per
+   explicit call; `h3_job_status` and `h3_resume_job` never queue its next unit.
+   Managed jobs progress on the server. Held/unknown receipts must not be hidden
+   with another key/sequence. Retain the adapter state directory across restarts.
+5. `h3_story` and `h3_stills` return proposals. Preparation alone does not generate;
+   explicit generation submits a captured owned output. Poll, review and apply
+   using a deliberate save/acceptance under the current project revision.
+   Late results remain retrievable without replacing newer authored state.
+6. `h3_takes` lists/uses takes, rates native takes and previews scoped deletion
+   before applying it. `h3_library` handles saved versions/checkpoints and
+   generation history/transfer. Archives verify installation files and never
+   replay jobs. `h3_inspect` covers status, metadata, references and node schemas.
+
+Uploads read adapter-local allowed roots and send original bytes; managed artifact
+downloads verify immutable hash/size. Native file descriptors refer to the host.
+Scoped Story/managed cancellation is supported; native global Stop is not exposed.
+Only a person's explicit attestation authorizes managed `h3_abandon_job`.
+Replacement generation and retired guide split/recheck are unavailable. Browser
+layout, playback, edit history and beat analysis remain in the browser. Graph-only
+nodes are covered by schemas and guidance rather than arbitrary prompt tools.
+
+## HTTP alternatives
 
 Two routes exist. **Timeline API v1** is for a new production without a graph of your
 own: the server holds the complete configured graph, the revisions and durable jobs.

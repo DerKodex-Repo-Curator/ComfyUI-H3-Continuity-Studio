@@ -1,69 +1,116 @@
-# Box audio range brainstorming
+# MCP adapter implementation
 
-**Status:** Release and local checkout updates in progress
-**Current Phase:** Box audio range design
+**Status:** MCP implementation complete
+**Current Phase:** Phase 15: durable renders and stories
 
 ## Phase Ledgers
 
-- [Box-bound audio source ranges](phases/2026-11-06-box-audio-range-lock.md)
-- [Incompatible saved overlap](phases/2026-11-06-incompatible-overlap.md)
-- [P-H3 still prompt instructions](phases/2026-11-04-ph3-still-prompts.md)
-
-Prior merged work: [P-H3 node ledger](phases/2026-11-04-ph3-image-still.md). Its inherited pre-merge recovery is superseded by this follow-up; no native generation is requested.
+- [MCP tools and skills](phases/2026-11-08-mcp-tools-skills.md)
 
 ## Recovery State
 
 ```json
 {
   "version": 1,
-  "revision": 49,
-  "phase": "Box audio range design",
+  "revision": 135,
+  "phase": "Phase 15: durable renders and stories",
   "active_features": [
-    "BA9"
+    "MCP2"
   ],
-  "focus_feature": "BA9",
-  "goal": "Create/merge box-audio PR, publish v0.18.0 and fast-forward development/current/ComfyUI checkouts with local work preserved.",
-  "done_when": "PR merged, v0.18.0 tag and GitHub release verified at merged main, all local target HEADs fast-forwarded and existing local files preserved.",
-  "last_completed": "BA8 passed: real ComfyUI browser controls/save/reload/confirmation/mobile/media playback;83frame GPU render verified330Hz, zero-RMS silence,880Hz. Owned backend stopped and GPU released.",
-  "in_progress": "Fresh release gate passed:191JS+355Python, actual-host/native/attached browser1440/390, strict guide and diff/roadmap. v0.18.0 changelog prepared. Exact backups/hashes of three development roadmap edits and untracked inventories recorded under ignored .tmp/box-audio-release/local-preservation. No push yet.",
+  "focus_feature": "MCP2",
+  "goal": "Create and merge the MCP PR, publish v0.20.0 and fast-forward development and installed ComfyUI H3 Continuity checkouts while preserving local work.",
+  "done_when": "PR merged; release/tag verified at merged main; development and installed ComfyUI checkout HEADs fast-forwarded with local changes preserved.",
+  "last_completed": "Recovered clean ce4cf5a implementation and user authorization for PR/merge/release/update. origin/main now includes v0.19.6/0.19.7 fixes.",
+  "in_progress": "Merge origin/main in progress; sole CHANGELOG conflict resolved by retaining MCP release and both intervening releases. Preparing local-edit backups and fresh release gates.",
   "next": {
-    "action": "Commit/push release branch, create and link PR, inspect CI and merge exact verified head.",
-    "reason": "Release gates passed and local checkout preservation is prepared."
+    "action": "Verify merged tree, commit/push release preparation and create/link PR.",
+    "reason": "User authorized full integration and release; latest main must be retained."
   },
   "files": [
     {
-      "path": "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
-      "state": "BA9 release and local update tracking"
+      "path": "docs/roadmap-discipline/phases/2026-11-08-mcp-tools-skills.md",
+      "state": "MCP0 and MCP1 passing; review fixes and client limits recorded"
     },
     {
-      "path": "CHANGELOG.md",
-      "state": "v0.18.0 release notes"
+      "path": "docs/superpowers/plans/2026-11-08-mcp-tools-skills.md",
+      "state": "All eight tasks and final review/fix gate checked"
     },
     {
-      "path": "docs/verification/2026-11-06-box-audio-live.md",
-      "state": "Actual browser/GPU evidence"
+      "path": "docs/superpowers/specs/2026-11-08-mcp-tools-skills-design.md",
+      "state": "Approved implemented design"
+    },
+    {
+      "path": "docs/MCP.md",
+      "state": "Complete tool/action and client compatibility reference"
+    },
+    {
+      "path": "guide/automation/mcp.md",
+      "state": "Published installation and troubleshooting instructions"
     }
   ],
   "repository": {
-    "branch": "design/box-audio-range-lock",
-    "head": "a40650f16185",
+    "branch": "feat/mcp-adapter",
+    "head": "ce4cf5a7f46e",
     "dirty": [
-      "CHANGELOG.md"
+      "CHANGELOG.md",
+      "h3_continuity/generations.py",
+      "h3_continuity/timeline.py",
+      "tests/README.md",
+      "tests/browser/saved_story_attachment.py",
+      "tests/js/continuity_keys.test.mjs",
+      "tests/js/durable_stories.test.mjs",
+      "tests/js/emit_shot_split.mjs",
+      "tests/js/history.test.mjs",
+      "tests/js/saved_story_project.test.mjs",
+      "tests/js/saved_story_recovery.test.mjs",
+      "tests/js/shot_split.test.mjs",
+      "tests/js/story_library_groups.test.mjs",
+      "tests/js/take_marks.test.mjs",
+      "tests/test_preview_targets.py",
+      "tests/test_story_checkpoints.py",
+      "web/h3c_audio_lanes.mjs",
+      "web/h3c_bridges.mjs",
+      "web/h3c_cast.mjs",
+      "web/h3c_dialogue.mjs",
+      "web/h3c_frame_images.mjs",
+      "web/h3c_generation_archive.mjs",
+      "web/h3c_history.mjs",
+      "web/h3c_mentions.mjs",
+      "web/h3c_pictures.mjs",
+      "web/h3c_project.mjs",
+      "web/h3c_reference_preparation.mjs",
+      "web/h3c_reference_replacements.mjs",
+      "web/h3c_reference_sources.mjs",
+      "web/h3c_shot_preview.mjs",
+      "web/h3c_shot_split.mjs",
+      "web/h3c_story.js",
+      "web/h3c_story_library.mjs",
+      "web/h3c_story_model.mjs",
+      "web/h3c_studio.mjs",
+      "web/h3c_takes.mjs",
+      "web/h3c_timed_text.mjs",
+      "web/h3c_timeline.js",
+      "web/h3c_timeline_editor.mjs",
+      "web/h3c_timeline_face.mjs",
+      "web/h3c_timeline_images.mjs",
+      "web/h3c_timeline_model.mjs",
+      "web/h3c_voices.mjs"
     ],
-    "dirty_hash": "fdb9ef76675401887b9993b9c6a444c692edc0c4c4cce115e7874488d2fdcf8a"
+    "dirty_hash": "ec77df0332ee74dacb32fa1c9b933a510abb6661bb201a33c16d6d39680f9cb0"
   },
   "verification": {
-    "required": "Full tests, browser smoke, strict guide; merged PR and v0.18.0 release/tag; development/worktree/ComfyUI HEADs and preserved local changes",
-    "last_run": "node tests/run.mjs; uv run --with playwright python tests/browser/box_audio_windows.py; uv run --with-requirements requirements-docs.txt mkdocs build --strict --site-dir .tmp/box-audio-release/guide; git diff --check; roadmap check",
-    "status": "passed",
-    "detail": "191JS+355Python zero failures/skips; native/attached and actual TimelineHost browser no page errors; strict guide0.54s; diff/roadmap clean. Existing real GPU83frame soundtrack receipt retained."
+    "required": "Fresh host/adapter/docs checks; merged GitHub PR; v0.20.0 tag/release at merged main; development and ComfyUI checkout ancestry/status and local-edit preservation",
+    "last_run": "Task4 red5 missing-server failures; red1 invalid catalog regression; green20 adapter tests using SDK in-memory and real stdio transport.",
+    "status": "not_run",
+    "detail": "New release scope; implementation prior67 adapter/229JS/393Python evidence remains, merged tree gates pending."
   },
   "blockers": [],
   "reload": [
     "docs/roadmap-discipline/features.md",
-    "docs/roadmap-discipline/phases/2026-11-06-box-audio-range-lock.md",
-    "docs/superpowers/specs/2026-11-06-box-audio-range-lock-design.md",
-    "docs/superpowers/plans/2026-11-06-box-audio-range-lock.md"
+    "docs/roadmap-discipline/phases/2026-11-08-mcp-tools-skills.md",
+    "docs/superpowers/specs/2026-11-08-mcp-tools-skills-design.md",
+    "docs/superpowers/plans/2026-11-08-mcp-tools-skills.md",
+    "docs/research/2026-11-08-mcp-capability-audit.md"
   ]
 }
 ```

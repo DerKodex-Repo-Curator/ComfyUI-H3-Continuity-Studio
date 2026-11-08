@@ -12,15 +12,15 @@ import { api } from '../../scripts/api.js';
 import { mountSavedState, AUTOSAVE_SETTING, autosaveEnabled } from './h3c_saved_state.mjs?v=285cb0ac96bb';
 import { migrateStoryDescriptionInputs, migrateSerializedStoryDescriptionInputs } from './h3c_story_inputs.mjs?v=46d6a455ab9a';
 import { showOwnElement } from './h3c_dom_widget.mjs?v=961e6d7f3bb7';
-import * as story from './h3c_story_model.mjs?v=32dc11605e7b';
+import * as story from './h3c_story_model.mjs?v=13a46b322a85';
 import { StoryPanel } from './h3c_story_panel.mjs?v=3361c4324f46';
-import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent } from './h3c_story_library.mjs?v=0943ccc41969';
+import { StoryLibrary, isWiringConflict, saveBeforeNewProject, savedStoryContent, recoverSavedStoryContent } from './h3c_story_library.mjs?v=17748eb8a721';
 import { exportStory, importStory, downloadStory } from './h3c_story_archive.mjs?v=b07a438d2dc4';
-import { parseState, serialize } from './h3c_timeline_model.mjs?v=136b17470774';
+import { parseState, serialize } from './h3c_timeline_model.mjs?v=d56ec08c02a0';
 
-import {exportGeneration,importGeneration,downloadGeneration,generationControl,setGenerationControl} from './h3c_generation_archive.mjs?v=03a0f7670ac8';
+import {exportGeneration,importGeneration,downloadGeneration,generationControl,setGenerationControl} from './h3c_generation_archive.mjs?v=fcb2ee64960b';
 import {captureRecipe,hasVideoOutput as compiledVideoOutput} from './h3c_stills.mjs?v=bcc472928f9e';
-import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=d7f26a8db663';
+import {parseJSON,stringifyJSON} from './h3c_project.mjs?v=a95eeeccc6cf';
 
 const NODE_TYPE = 'H3C_Story';
 const WRITE_URL = '/h3c/story/write';
@@ -412,7 +412,11 @@ export class StoryHost {
       return;
     }
     const graph=this.node.graph,revision=JSON.stringify(graph.serialize());
-    const content=savedStoryContent(value,graph.serialize());
+    const content=await recoverSavedStoryContent(savedStoryContent(value,graph.serialize()),async path=>{
+      const response=await api.fetchApi(path),project=parseJSON(await response.text());
+      if(!response.ok)throw Error(project.error?.message??'Could not reconnect the saved story to its managed project.');
+      return project;
+    });
     const resume=await this.saved.suspend();
     try {
       if(this.gone||graph!==(app.rootGraph??app.graph)||revision!==JSON.stringify(graph.serialize()))
@@ -495,10 +499,18 @@ export class StoryHost {
     this.libraryId=libraryId??null;
     this.librarySignature=this.libraryDeleted=this.finishedJob=this.libraryConflict=this.pendingLibraryFork=null;
     this.panel.showLibraryConflict?.(false);
-    node.properties??={};node.properties.h3c_fork_sequence=result.sequence;
-    delete node.properties.h3c_project;delete node.properties.h3c_asset_bindings;
+    node.properties??={};
+    if(result.project?.mode==='attached') {
+      node.properties.h3c_project=structuredClone(result.project);
+      delete node.properties.h3c_fork_sequence;
+    } else {
+      node.properties.h3c_fork_sequence=result.sequence;
+      delete node.properties.h3c_project;
+    }
+    if(result.asset_bindings!==undefined)node.properties.h3c_asset_bindings=structuredClone(result.asset_bindings);
+    else delete node.properties.h3c_asset_bindings;
     for(const {control,value}of writes)setGenerationControl(control,value);
-    host.configureProject();host.editor.load();host.changed();this.showState();this.saved.changed();
+    host.configureProject({preserveLocal:result.project?.mode==='attached'});host.editor.load();host.changed();this.showState();this.saved.changed();
     graph.setDirtyCanvas?.(true,true);(tracker?.captureCanvasState??tracker?.checkState)?.call(tracker);
   }
 

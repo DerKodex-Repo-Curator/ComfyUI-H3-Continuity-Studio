@@ -1,24 +1,24 @@
 // The H3 Timeline editor: a track of boxes, the selected box and the shared prompt.
 // Plain DOM without ComfyUI imports; the host object connects it to the node.
-import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=1c15494d2e3f';
+import { MentionCard, MentionLayer } from './h3c_mentions.mjs?v=42fe36558e1a';
 import { promptSections, promptShots, writePromptSections } from './h3c_prompt_sections.mjs?v=b58f04f78a75';
-import * as model from './h3c_timeline_model.mjs?v=136b17470774';
+import * as model from './h3c_timeline_model.mjs?v=d56ec08c02a0';
 import {audioSourceLocked} from './h3c_audio_windows.mjs?v=cdefbd77b246';
-import { AudioLanes } from './h3c_audio_lanes.mjs?v=51e6d797e5e9';
-import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=136b17470774';
-import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=b94650a70316';
-import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=7c538eed039f';
+import { AudioLanes } from './h3c_audio_lanes.mjs?v=6383ff207982';
+import { shotFrames, frameTargets, syncTargets, acceptedGuideFrames, endpointGuide, endpointReference, adoptEndpointGuides } from './h3c_shot_preview.mjs?v=d56ec08c02a0';
+import {FrameImages, targetLabel, imageDrop} from './h3c_frame_images.mjs?v=644176c40c45';
+import { splitBox, splitTiming } from './h3c_shot_split.mjs?v=38d705dc9f62';
 import { fillReferenceSwitches } from './h3c_reference_switches.mjs?v=e94b5b02e02b';
-import { ReferenceReplacements } from './h3c_reference_replacements.mjs?v=4ada5ba76be5';
+import { ReferenceReplacements } from './h3c_reference_replacements.mjs?v=8085f6d4a45e';
 import { fillPicturePicker, mentionedReferences, referenceChip } from './h3c_reference_pictures.mjs?v=8198307be3fa';
-import { CastPage } from './h3c_cast.mjs?v=cad6fa97869c';
-import { PicturesPanel, highestSlot } from './h3c_pictures.mjs?v=9c474699fa67';
+import { CastPage } from './h3c_cast.mjs?v=0c12d244967c';
+import { PicturesPanel, highestSlot } from './h3c_pictures.mjs?v=8339fa63997c';
 import { CheckPanel } from './h3c_check.mjs?v=c69786f95bd5';
-import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=7ff5f3ef1168';
-import { DialoguePanel } from './h3c_dialogue.mjs?v=f08c535019c6';
+import { BridgePanel, bridgeLine } from './h3c_bridges.mjs?v=6d005020d0ed';
+import { DialoguePanel } from './h3c_dialogue.mjs?v=4e2d2b959012';
 import { ChainSettings } from './h3c_chain_settings.mjs?v=9f2d4061a6d6';
 import { exportedVideo } from './h3c_partial_video.mjs?v=201bf0f48645';
-import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=33ab67e6ae65';
+import { MAX_TAKES, TakesPanel, followNote, renderLabel } from './h3c_takes.mjs?v=224eadcaf18a';
 import { drawsSame, replaceChanged, setText, showImages } from './h3c_dom.mjs?v=584a9bf55653';
 
 const STYLE_ID = 'h3ct-style';
@@ -1687,6 +1687,7 @@ export class TimelineEditor {
     this.frameImages.open(this.box().id, this.frameImages.boxId === this.box().id
       ? this.frameImages.target : {kind:'shot',shot:selected.shot});
     const endpoints=el('div','h3ct-targets'),interior=el('div','h3ct-targets interior');
+    const images=this.host.connected().images;
     endpoints.setAttribute('aria-label','First and last frames');interior.setAttribute('aria-label','Interior shots');
     for(const {target,frame} of frameTargets(this.state,this.selected,this.host.context())) {
       const pick=button('',`${targetLabel(target)}, frame ${frame}`,()=>{
@@ -1695,7 +1696,7 @@ export class TimelineEditor {
       pick.dataset.target=target.kind==='shot'?`shot:${target.shot}`:target.kind;
       pick.setAttribute('aria-label',`${targetLabel(target)} image`);
       pick.setAttribute('aria-pressed',String(this.frameImages.target.kind===target.kind&&this.frameImages.target.shot===target.shot));
-      this.fillStill(pick,this.box(),target,targetLabel(target));
+      this.fillStill(pick,this.box(),target,targetLabel(target),images);
       showImages(pick);
       imageDrop(pick,file=>{pick.click();this.dropGuide(file,target);});
       (target.kind==='shot'?interior:endpoints).append(pick);
@@ -1807,23 +1808,25 @@ export class TimelineEditor {
     note.append(img,`The accepted ${kind} still is this clip's ${kind} frame. Change it in the Shots tab.`);
   }
 
-  fillStill(mark,box,target,label) {
+  fillStill(mark,box,target,label,images) {
     const index=this.state.boxes.indexOf(box),endpoint=target.kind!=='shot'&&index>=0;
     const saved=box.previews?.find(p=>p.target
       ? (p.target.kind==='shot'&&p.target.shot===1?target.kind==='first':p.target.kind===target.kind&&p.target.shot===target.shot)
       : (p.shot===1?target.kind==='first':target.kind==='shot'&&p.shot===target.shot));
     const inherited=endpoint&&!saved?.guide?endpointGuide(this.state,index,this.host.context(),target.kind):null;
     const guide=saved?.guide??inherited?.guide;
+    const reference=!guide&&endpoint?endpointReference(this.state,index,target.kind,images??this.host.connected().images):null;
     const frameMode=endpoint&&this.runsFlf(index);
     if(frameMode) label=label.replace(/(First|Last)$/,'$1 frame');
-    const file=guide??saved?.images?.[0]?.file??saved?.image;
-    if(file) {
-      const img=el('img');img.dataset.src=this.host.viewUrl(file);img.alt='';img.draggable=false;mark.append(img);
+    const file=guide??reference?.mediaFile??saved?.images?.[0]?.file??saved?.image;
+    const url=reference?.preview??(file?this.host.viewUrl(file):null);
+    if(url) {
+      const img=el('img');img.dataset.src=url;img.alt='';img.draggable=false;mark.append(img);
     } else mark.append(el('span','h3ct-still-empty','+'));
     const caption=el('span','h3ct-still-caption');
-    caption.append(el('b',null,label),el('small',null,guide?(frameMode?'In use':'Guide'):file?'Candidate':'Add'));
-    mark.append(caption);mark.classList.toggle('accepted',!!guide);
-    mark.title+=guide?(frameMode?' · accepted frame':' · accepted guide'):file?' · candidate':' · add image';
+    caption.append(el('b',null,label),el('small',null,reference?'In use':guide?(frameMode?'In use':'Guide'):file?'Candidate':'Add'));
+    mark.append(caption);mark.classList.toggle('accepted',!!(guide||reference));
+    mark.title+=reference?` · frame @${reference.name}`:guide?(frameMode?' · accepted frame':' · accepted guide'):file?' · candidate':' · add image';
   }
 
   stillsWidth() {
@@ -1832,6 +1835,7 @@ export class TimelineEditor {
 
   renderStills(span = this.span ?? this.defaultSpan(), width = this.stillsWidth()) {
     const marks=[];
+    const images=this.host.connected().images;
     let start=0;
     const clips=this.state.boxes.map((box,index)=>{
       const left=start/span*width+2,right=(start+box.frames)/span*width-2;
@@ -1891,7 +1895,7 @@ export class TimelineEditor {
         });
         mark.classList.toggle('selected',this.frameImages.boxId===box.id
           && this.frameImages.target.kind===target.kind && this.frameImages.target.shot===target.shot);
-        this.fillStill(mark,box,target,`${index+1} · ${targetLabel(target)}`);
+        this.fillStill(mark,box,target,`${index+1} · ${targetLabel(target)}`,images);
         imageDrop(mark,file=>{mark.click();this.dropGuide(file,target);});
         marks.push(mark);
       }

@@ -24,6 +24,28 @@ def workflow():
 
 
 class StoryCheckpointTest(unittest.TestCase):
+    def test_checkpoint_still_accepts_an_empty_timeline_without_a_boxes_field(self):
+        self.workflow['nodes'][1]['widgets_values'][1] = '{"version":1}'
+        checkpoint = story_library.load(self.save()['id'])
+        restored = story_library.restore_checkpoint(checkpoint['id'])
+        for value in (checkpoint, restored):
+            self.assertEqual(story_library._fields(value['workflow'])[('2', 'timeline')].get('boxes', []), [])
+
+    def test_checkpoint_repairs_identical_preview_targets_without_changing_source(self):
+        raw = json.loads(self.workflow['nodes'][1]['widgets_values'][1])
+        preview = {'target': {'kind': 'first'}, 'frame': 0, 'still_source': None}
+        raw['boxes'][0]['previews'] = [preview, copy.deepcopy(preview)]
+        self.workflow['nodes'][1]['widgets_values'][1] = json.dumps(raw)
+        before = copy.deepcopy(self.workflow)
+        saved = story_library.load(self.save()['id'])
+        restored = story_library.restore_checkpoint(saved['id'])
+        for value in (saved, restored):
+            line = story_library._fields(value['workflow'])[('2', 'timeline')]
+            self.assertEqual(line['boxes'][0], {**raw['boxes'][0], 'previews': [preview]})
+        self.assertEqual(self.workflow, before)
+        with open(os.path.join(self.root, saved['sequence'], 'video.mp4'), 'rb') as stream:
+            self.assertEqual(stream.read(), b'original video')
+
     def test_checkpoint_preserves_box_audio_bindings_and_hidden_tails(self):
         from h3_continuity import audio_windows
         raw=json.loads(self.workflow['nodes'][1]['widgets_values'][1])

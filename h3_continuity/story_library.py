@@ -62,6 +62,8 @@ def _overlay(workflow, fields):
         key = f"{node['id']}/{node['type']}/{name}"
         if key in fields:
             node['widgets_values'][index] = fields[key]
+            if 'widgets_values_named' in node:
+                node['widgets_values_named'][name] = fields[key]
     return value
 
 
@@ -91,6 +93,7 @@ def _wiring(workflow):
                 node.pop(key, None)
             if graph is value and node.get('type') in ('H3C_Story', 'H3C_Timeline'):
                 node.pop('widgets_values', None)
+                node.pop('widgets_values_named', None)
             node.get('properties', {}).pop('h3c_library_revision', None)
             if not node.get('properties'):
                 node.pop('properties', None)
@@ -103,7 +106,7 @@ def _wiring(workflow):
     return value
 
 
-def save(graph, story, workflow, sequence, revision=None, library_revision=None):
+def save(graph, story, workflow, sequence, revision=None, library_revision=None, execution=None):
     if (not isinstance(workflow, dict) or (workflow.get('extra', {}).get('h3c_story_id') or workflow.get('id')) != graph
             or not isinstance(workflow.get('nodes'), list) or not isinstance(workflow.get('links'), list)
             or not any(node.get('type') == 'H3C_Story' and str(node.get('id')) == str(story) for node in workflow['nodes'])
@@ -126,6 +129,9 @@ def save(graph, story, workflow, sequence, revision=None, library_revision=None)
             if node.get('type') == 'H3C_Story' and str(node['id']) == value['story']:
                 node.setdefault('properties', {})['h3c_library_revision'] = value['workflow_revision']
         saved_state.write('library', graph, 'library', value)
+        if execution is not None:
+            from .agent_api import projects
+            projects.capture(graph, story, value['workflow'], execution)
         return {'id': Path(saved_state.path('library', graph, 'library')).stem, 'revision': value['workflow_revision']}
 
 
@@ -311,7 +317,7 @@ def _native_usage(excluded_graph):
 
 
 def delete(identity):
-    with saved_state.LOCK, nodes.SEQUENCE_LOCK:
+    with nodes.SEQUENCE_LOCK, saved_state.LOCK:
         value = load(identity, deleting=True)
         from .timeline_api.service import authorize_sequence, sequence_identity
         authorize_sequence(value['sequence'], None, 'take_delete')
