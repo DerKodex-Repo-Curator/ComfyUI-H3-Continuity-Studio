@@ -11,8 +11,11 @@ Whisper example in `external-timeline` (`examples/whisper-source30.json`).
 ## Audio lanes
 
 An audio lane places a recording on the movie clock. Each box that the lane covers
-hears the matching window as a native audio reference, which makes it a `ref2va`
-box (see `h3-continuity-references`).
+hears the matching window as a native audio reference. This selects `ref2va` by
+default, but a qualifying box with `flf_refmods: true` stays `flf2va` while using
+that audio. Both raw audio references and existing audio RefMods work with this
+opt-in path; audio presence alone does not force REF2VA. See
+`h3-continuity-references` for First-frame, VAE and raw-video requirements.
 
 ```json
 "audio_clips": [{"slot": "audio1", "start": 0, "source_start": 30, "duration": 12,
@@ -63,7 +66,9 @@ attached to characters in the Story bible.
 - A box written by H3 Story from the bible sends the clip when the character has a
   line, voiceover included. It takes what is left of the box's three audios after
   lanes and mentioned audios, and one that doesn't fit is left out with a note.
-- A box that sends a voice is `ref2va`, so its first and last frames become guides.
+- A box that sends a voice is `ref2va` by default, so its first and last frames
+  become guides. The qualifying `flf_refmods: true` path can retain `flf2va` with
+  the voice reference, just as it can with other audio references.
 - H3 hears the whole file each time, so keep samples short (there's a note above
   30 s). Voice clips never play in the full video. Rendering needs an audio VAE.
 
