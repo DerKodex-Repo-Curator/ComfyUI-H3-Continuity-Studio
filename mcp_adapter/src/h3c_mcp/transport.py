@@ -178,7 +178,13 @@ class StudioClient:
         try:
             with os.fdopen(fd, 'wb') as stream, self.http.stream('GET', url) as response:
                 if not 200 <= response.status_code < 300:
-                    self._error(response.status_code, response.read()[:MAX_JSON])
+                    chunks, count = [], 0
+                    for chunk in response.iter_bytes():
+                        count += len(chunk)
+                        if count > MAX_JSON:
+                            raise StudioError('Studio response exceeds the adapter limit.', code='response_too_large')
+                        chunks.append(chunk)
+                    self._error(response.status_code, b''.join(chunks))
                 for chunk in response.iter_bytes():
                     count += len(chunk)
                     if count > size:

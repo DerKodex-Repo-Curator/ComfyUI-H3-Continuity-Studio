@@ -98,6 +98,13 @@ class TransportTest(unittest.TestCase):
         self.client.download(descriptor, output)
         self.assertEqual(output.read_bytes(), b'changed')
 
+    def test_download_error_body_is_bounded(self):
+        self.host.routes[('GET', '/comfy/artifact')] = (500, b'x' * 64)
+        descriptor = dict(download_url='/artifact', size=1, sha256='a'*64)
+        with mock.patch.object(transport, 'MAX_JSON', 32), self.assertRaises(transport.StudioError) as error:
+            self.client.download(descriptor, self.root / 'output')
+        self.assertEqual(error.exception.code, 'response_too_large')
+
     def test_local_files_stay_inside_roots(self):
         with self.assertRaises(transport.StudioError):
             self.client.download({}, self.root.parent / 'outside.mp4')
