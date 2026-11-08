@@ -8,9 +8,10 @@ description: Use when writing an H3 Timeline box's prompt or deciding what H3 se
 ## The mode decides how frames are used
 
 Each box runs in one native mode, decided by what it uses (`box_slots` in
-`h3_continuity/timeline.py`). Preparation and planning report it per box.
+`h3_continuity/timeline.py`). Preparation and planning report it per box. The
+`flf_refmods: true` override below takes precedence over the default reference rules.
 
-- **`ref2va`**: the box mentions any picture other than its own first and last
+- **`ref2va` by default**: the box mentions any picture other than its own first and last
   frame, any `@video` or `@video_audio`, any `@audio`, hears an audio lane or a
   voice clip, or uses a RefMod.
 - **`flf2va`**: the box has a first frame, a last frame or an endpoint guide, and
@@ -37,7 +38,8 @@ How frames are pinned differs by mode:
   new frame. An explicit guide at that frame takes precedence.
 
 So before adding audio, a reference picture or a guide to a box with endpoints,
-check which mode it will run in.
+check which mode it will run in, including the cached-RefMod override. Image or
+audio references alone do not rule out `flf2va`.
 
 ## Native prompt structure
 
@@ -133,14 +135,23 @@ describes the bindings.
 - **RefMods** are references saved as encoded H3 conditioning instead of pixels,
   made with the companion **ComfyUI-MiniMaxH3Mod** pack. They are `refmods[]`
   entries `{slot, name, kind: image|video|audio, strength 0..1, member,
-  description}` on their own slots. A RefMod makes a box `ref2va`, and a Timeline
-  picture can't share its slot.
+  description}` on their own slots. A RefMod makes a box `ref2va` by default;
+  the opt-in FLF2VA path below also accepts RefMods, including audio RefMods.
+  A Timeline picture can't share its slot.
 - **FLF2VA + cached RefMods** (`flf_refmods: true` on a box, off by default and
-  experimental): a box that continues, or has a first frame, and has no audio or
-  video converts its first, last and reference pictures into reusable RefMods and
-  stays `flf2va`, so it keeps endpoint motion while showing references. It needs
-  H3's VAE loaded from a file (VAELoader). Use it with
-  `examples/h3_timeline_flf2va_cached_refmods.json`.
+  experimental): a box that continues, or has a First picture or accepted First
+  guide, and has no raw video converts its first, last and reference pictures
+  into reusable RefMods and stays `flf2va`. It keeps endpoint motion while using
+  image references, raw audio and existing RefMods, including audio RefMods.
+  `@audioN` inputs and audio lanes keep their time-matched reference windows;
+  raw audio is encoded with the H3 audio VAE into the same reference blocks as
+  REF2VA, numbered before existing audio RefMods. It is not converted into a
+  cached image RefMod. Connect an audio VAE for raw audio, and load H3's image
+  VAE from a file (VAELoader) for cached image conversion. A fresh box without a
+  First cannot use this override. Raw `@videoN` or `@video_audioN` still prevents
+  conversion; prepare a video RefMod separately if needed. Use
+  `examples/h3_timeline_flf2va_cached_refmods.json` and inspect the resolved mode,
+  `tags` and effective prompt rather than inferring the mode from audio presence.
 - **Appearance plates** change what a reference slot shows partway through the film.
   `plates[]` holds accepted revisions `{id, slot, image}` (image in
   `output/h3_previews`, bound through a `plate` asset). A box's
