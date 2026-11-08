@@ -127,7 +127,10 @@ def _settled(line):
             receipt.pop('pending',None);receipt.pop('job',None)
     for box in value.get('boxes',[]):
         for preview in box.get('previews',[]):preview.pop('pending',None);preview.pop('job',None)
-    timeline.parse(json.dumps(value))
+    parsed = timeline.parse(json.dumps(value))
+    for box, checked in zip(value.get('boxes', []), parsed.boxes):
+        if 'previews' in box:
+            box['previews'] = checked.previews
     return value
 
 def export_generation(body):
