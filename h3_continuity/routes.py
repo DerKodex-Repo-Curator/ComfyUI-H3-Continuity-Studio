@@ -452,4 +452,6 @@ def register():
     api = project_routes.runtime(instance)
     project_routes.register(instance, api)
     instance.h3c_timeline_api = api
+    from .agent_api import routes as agent_routes
+    agent_routes.register(instance)
     return True
