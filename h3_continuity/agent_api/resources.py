@@ -2,7 +2,6 @@
 import hashlib
 import json
 import mimetypes
-import os
 import re
 from pathlib import Path
 
