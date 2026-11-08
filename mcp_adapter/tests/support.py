@@ -1,4 +1,6 @@
 import json
+import hashlib
+from urllib.parse import urlencode
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -45,3 +47,14 @@ class FixtureStudio:
         self.server.shutdown()
         self.server.server_close()
         self.thread.join()
+
+    def guidance(self):
+        raw = b'---\r\nname: h3-continuity-video\r\ndescription: H3 authoring\r\n---\r\nRead the host.\r\n'
+        uri = 'skill://h3-continuity-video/SKILL.md'
+        entry = dict(uri=uri, digest='sha256:' + hashlib.sha256(raw).hexdigest(), size=len(raw), mime_type='text/markdown')
+        self.catalog = dict(agent_api_version=1, catalog_sha256='a' * 64, skills=[dict(uri=uri,
+            frontmatter=dict(name='h3-continuity-video', description='H3 authoring'), resources=[entry])], resources=[entry], coverage={})
+        self.routes[('GET', '/h3c/agent/catalog')] = (200, self.catalog)
+        self.routes[('GET', '/h3c/agent/resource?' + urlencode({'uri': uri, 'digest': entry['digest']}))] = (200, raw)
+        self.routes[('GET', '/h3c/api/v1/capabilities')] = (200, {'profiles': [], 'operations': [], 'readiness': {}})
+        return uri, raw
