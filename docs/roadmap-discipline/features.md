@@ -12,17 +12,19 @@
 ```json
 {
   "version": 1,
-  "revision": 134,
+  "revision": 135,
   "phase": "Phase 15: durable renders and stories",
-  "active_features": [],
-  "focus_feature": "None",
-  "goal": "Implement the approved standalone MCP adapter and current skills with tested README/docs installation instructions for Codex and Claude Code.",
-  "done_when": "All eight implementation-plan tasks verified; host/adapter/skills/docs checks and client fixture evidence recorded; known client extension limits reported accurately.",
-  "last_completed": "MCP1 implemented and independently reviewed; all six findings reproduced and fixed in 0f2b02f. README/docs installation and canonical seven skills delivered.",
-  "in_progress": "None. Branch feat/mcp-adapter and worktree retained locally for integration.",
+  "active_features": [
+    "MCP2"
+  ],
+  "focus_feature": "MCP2",
+  "goal": "Create and merge the MCP PR, publish v0.20.0 and fast-forward development and installed ComfyUI H3 Continuity checkouts while preserving local work.",
+  "done_when": "PR merged; release/tag verified at merged main; development and installed ComfyUI checkout HEADs fast-forwarded with local changes preserved.",
+  "last_completed": "Recovered clean ce4cf5a implementation and user authorization for PR/merge/release/update. origin/main now includes v0.19.6/0.19.7 fixes.",
+  "in_progress": "Merge origin/main in progress; sole CHANGELOG conflict resolved by retaining MCP release and both intervening releases. Preparing local-edit backups and fresh release gates.",
   "next": {
-    "action": "Keep the completed branch for the user to review/integrate; no publication or live host action is authorized.",
-    "reason": "Authorized implementation, documentation, verification and final review/fix gates are complete."
+    "action": "Verify merged tree, commit/push release preparation and create/link PR.",
+    "reason": "User authorized full integration and release; latest main must be retained."
   },
   "files": [
     {
@@ -48,18 +50,59 @@
   ],
   "repository": {
     "branch": "feat/mcp-adapter",
-    "head": "0f2b02f10a25",
+    "head": "ce4cf5a7f46e",
     "dirty": [
-      "docs/roadmap-discipline/readiness-checklist.md",
-      "docs/superpowers/plans/2026-11-08-mcp-tools-skills.md"
+      "CHANGELOG.md",
+      "h3_continuity/generations.py",
+      "h3_continuity/timeline.py",
+      "tests/README.md",
+      "tests/browser/saved_story_attachment.py",
+      "tests/js/continuity_keys.test.mjs",
+      "tests/js/durable_stories.test.mjs",
+      "tests/js/emit_shot_split.mjs",
+      "tests/js/history.test.mjs",
+      "tests/js/saved_story_project.test.mjs",
+      "tests/js/saved_story_recovery.test.mjs",
+      "tests/js/shot_split.test.mjs",
+      "tests/js/story_library_groups.test.mjs",
+      "tests/js/take_marks.test.mjs",
+      "tests/test_preview_targets.py",
+      "tests/test_story_checkpoints.py",
+      "web/h3c_audio_lanes.mjs",
+      "web/h3c_bridges.mjs",
+      "web/h3c_cast.mjs",
+      "web/h3c_dialogue.mjs",
+      "web/h3c_frame_images.mjs",
+      "web/h3c_generation_archive.mjs",
+      "web/h3c_history.mjs",
+      "web/h3c_mentions.mjs",
+      "web/h3c_pictures.mjs",
+      "web/h3c_project.mjs",
+      "web/h3c_reference_preparation.mjs",
+      "web/h3c_reference_replacements.mjs",
+      "web/h3c_reference_sources.mjs",
+      "web/h3c_shot_preview.mjs",
+      "web/h3c_shot_split.mjs",
+      "web/h3c_story.js",
+      "web/h3c_story_library.mjs",
+      "web/h3c_story_model.mjs",
+      "web/h3c_studio.mjs",
+      "web/h3c_takes.mjs",
+      "web/h3c_timed_text.mjs",
+      "web/h3c_timeline.js",
+      "web/h3c_timeline_editor.mjs",
+      "web/h3c_timeline_face.mjs",
+      "web/h3c_timeline_images.mjs",
+      "web/h3c_timeline_model.mjs",
+      "web/h3c_voices.mjs"
     ],
-    "dirty_hash": "bdc1c76ac801f3e29f4bf2f9d42d65c11b6201e2cd5c6f614fb0d0e083e590cc"
+    "dirty_hash": "ec77df0332ee74dacb32fa1c9b933a510abb6661bb201a33c16d6d39680f9cb0"
   },
   "verification": {
-    "required": "uv run --project mcp_adapter python -m unittest discover -s mcp_adapter/tests -t mcp_adapter -v; node tests/run.mjs; strict guide build; module version check; Codex/Claude Code fixture connection evidence; git diff --check",
+    "required": "Fresh host/adapter/docs checks; merged GitHub PR; v0.20.0 tag/release at merged main; development and ComfyUI checkout ancestry/status and local-edit preservation",
     "last_run": "Task4 red5 missing-server failures; red1 invalid catalog regression; green20 adapter tests using SDK in-memory and real stdio transport.",
-    "status": "passed",
-    "detail": "Final adapter67; host229 JavaScript/393 Python; strict MkDocs; module versions; compileall/import/diff checks; uv and isolated wheel launchers with spaces; Codex0.166.0 tools21/resource1; Claude2.1.316 Connected. Automatic client Skills activation remains unverified, with tested resource/filesystem fallback. Fresh independent review findings all fixed test-first."
+    "status": "not_run",
+    "detail": "New release scope; implementation prior67 adapter/229JS/393Python evidence remains, merged tree gates pending."
   },
   "blockers": [],
   "reload": [
