@@ -61,6 +61,7 @@ def managed_view(project):
     fields = {key: project[key] for key in ('name', 'timeline', 'settings', 'assets', 'consumer', 'semantic_boxes') if key in project}
     return dict(target={'kind': 'managed', 'id': project['id']}, revision={'project': project['revision']},
                 document_json=encoded(fields).decode(), inspection_json=encoded(project.get('inspection', {})).decode(),
+                status_json=encoded(project.get('status', {})).decode(),
                 execution_ready=True, profile=project.get('profile'), profile_sha256=project.get('profile_sha256'),
                 sequence=project.get('sequence'), active_job=project.get('active_job'))
 
@@ -154,6 +155,146 @@ class StudioTools:
             from .jobs import NativeJobs
             self.jobs = NativeJobs(self.client, self.state_dir)
         return self.jobs
+
+    def _domain(self, target, revision, arguments, execution=False):
+        reserved = {'name', 'timeline', 'settings', 'workflow', 'graph', 'story', 'client', 'timeline_node', 'prompt_id'}
+        if reserved & arguments.keys():
+            raise StudioError('Project identity and saved context cannot be overridden.', code='invalid_arguments')
+        if revision is None:
+            raise StudioError('Read the current project revision first.', code='revision_conflict')
+        context = self._context(target, revision, 'domain' if execution else 'saved')
+        body = dict(name=context['name'], timeline=encoded(context['timeline']).decode(), settings=context['settings'],
+                    graph=target.graph, story=target.story_node, timeline_node=target.timeline_node,
+                    workflow=context['workflow'])
+        return context, {**body, **arguments}
+
+    @staticmethod
+    def _answer(data):
+        return {'data_json': encoded(data).decode()}
+
+    def h3_story(self, action: Literal['write', 'rewrite', 'feedback', 'check', 'still_prompts', 'templates', 'hosts', 'bible', 'taken'],
+                 target: Target, arguments_json: str = '{}', expected_revision: dict[str, StrictInt] | None = None,
+                 request_key: str | None = None) -> dict[str, Any]:
+        """Story proposals: write/rewrite {box?,rewrite_all?}, feedback {edit}, check {boxes?}, still_prompts {targets,...};
+        execution needs revision/key. Templates/hosts read configuration; bible {action:build|link|apply|status|recompile,...}
+        returns transformed data only. See h3c://docs/MCP.md for action contracts. Poll returned job; save proposals explicitly.
+        """
+        args = _object(arguments_json)
+        if action == 'taken':
+            handle = JobHandle.model_validate(args.get('job'))
+            if handle.target != target or handle.kind != 'story':
+                raise StudioError('Story acknowledgement must match its target receipt.', code='receipt_conflict')
+            return self._native_jobs().acknowledge_story(handle)
+        if action == 'templates':
+            return self._answer(self.client.json('/h3c/story/templates'))
+        if action == 'hosts':
+            return self._answer(self.client.json('/h3c/story/keys'))
+        if action == 'bible':
+            _, body = self._domain(target, expected_revision, args)
+            body['timeline'] = parse(body['timeline'])
+            return self._answer(self._post('/h3c/timeline/bible', body))
+        if action not in ('write', 'rewrite', 'feedback', 'check', 'still_prompts') or args.get('check_only') or 'writing_mode' in args:
+            raise StudioError('Unsupported or retired Story action.', code='unsupported_action')
+        return self._native_jobs().start_story(target, expected_revision, action, args, request_key)
+
+    def h3_stills(self, action: Literal['sources', 'import', 'pin', 'prepare', 'generate', 'reference_catalog', 'reference_prepare', 'reference_generate', 'reference_approve', 'prompt_instructions'],
+                  target: Target, arguments_json: str = '{}', expected_revision: dict[str, StrictInt] | None = None,
+                  request_key: str | None = None) -> dict[str, Any]:
+        """Still/reference actions return proposals. Sources {box,target?}; pin {file}; import {path} uploads original bytes.
+        Prepare/generate {box,target,prompt,seed,recipe,...}; reference variants {asset_key,prompt,seed,recipe,...}.
+        Generate needs revision/key and actually submits one candidate. reference_approve {asset_key,candidate_id,approval_revision}
+        returns proposed timeline; explicitly save with the project revision. Results never silently apply to a project.
+        """
+        args = _object(arguments_json)
+        if target.kind != 'native':
+            raise StudioError('Still operations require a deliberate native workflow export/fork.', code='unsupported_target_operation')
+        if action in ('generate', 'reference_generate'):
+            return self._native_jobs().start_still(target, expected_revision, args, request_key, reference=action.startswith('reference'))
+        routes = {'sources': '/h3c/stills/sources', 'pin': '/h3c/stills/pin', 'prepare': '/h3c/stills/prepare',
+                  'reference_catalog': '/h3c/reference-assets/catalog', 'reference_prepare': '/h3c/reference-assets/prepare',
+                  'reference_approve': '/h3c/reference-assets/approve', 'prompt_instructions': '/h3c/still-prompts/instructions'}
+        if action == 'import':
+            return self._answer(self.client.import_still(args['path']))
+        if action not in routes:
+            raise StudioError('Unsupported still action; replacements are disabled.', code='unsupported_action')
+        _, body = self._domain(target, expected_revision, args, execution=action in ('prepare', 'reference_prepare', 'reference_catalog', 'reference_approve'))
+        if action == 'reference_approve':
+            body['expected_revision'] = body.pop('approval_revision')
+        return self._answer(self._post(routes[action], body))
+
+    def h3_takes(self, action: Literal['list', 'use', 'rate', 'delete_preview', 'delete_apply'], target: Target,
+                 arguments_json: str = '{}', expected_revision: dict[str, StrictInt] | None = None) -> dict[str, Any]:
+        """List/use takes; native rate {take,rating,tags?}; deletion {scope:take|other|unusable,take?,box?,bridge?}.
+        delete_preview only counts; delete_apply explicitly removes those takes. Managed supports list {box?} and
+        use {take_id,box,kind} under its project revision; native cleanup never bypasses managed ownership.
+        """
+        args = _object(arguments_json)
+        if target.kind == 'managed':
+            if action == 'list':
+                return self._answer(self.client.json(_project_path(target, '/takes?' + urlencode(args))))
+            if action == 'use':
+                return self._answer(self._post(_project_path(target, '/takes/use'), {**args, 'expected_revision': _managed_revision(expected_revision or {})}))
+            raise StudioError('Managed take cleanup/ratings are unavailable; explicitly export/fork for native work.', code='unsupported_target_operation')
+        routes = {'list': '', 'use': '/use', 'rate': '/rate', 'delete_preview': '/delete', 'delete_apply': '/delete'}
+        if action not in routes:
+            raise StudioError('Unsupported take action.', code='unsupported_action')
+        _, body = self._domain(target, expected_revision, args)
+        if action.startswith('delete_'):
+            body['apply'] = action == 'delete_apply'
+        return self._answer(self._post('/h3c/timeline/takes' + routes[action], body))
+
+    def h3_library(self, action: Literal['list', 'load', 'rename', 'delete', 'checkpoint', 'restore', 'generation_start', 'generation_history', 'generation_export', 'generation_preflight', 'generation_import'],
+                   target: Target, arguments_json: str = '{}', expected_revision: dict[str, StrictInt] | None = None) -> dict[str, Any]:
+        """Native library: list; load/delete/restore {id}; rename {key,name}; checkpoint {name} uses saved UI.
+        Generation start/history/export use saved context; export {references?}; preflight/import {archive,request_id?}.
+        Start/import/restore return a new identity; explicitly register/save it before editing. Archives verify host-local media.
+        """
+        if target.kind != 'native':
+            raise StudioError('Library actions require a deliberate native workflow export/fork.', code='unsupported_target_operation')
+        args = _object(arguments_json)
+        if action in ('list', 'load'):
+            return self._answer(self.client.json('/h3c/stories' + ('?' + urlencode({'id': args['id']}) if action == 'load' else '')))
+        routes = {'rename': '/h3c/stories/rename', 'delete': '/h3c/stories/delete', 'checkpoint': '/h3c/stories/checkpoint',
+                  'restore': '/h3c/stories/restore', **{f'generation_{a}': f'/h3c/generations/{a}' for a in ('start', 'history', 'export', 'preflight', 'import')}}
+        if action not in routes:
+            raise StudioError('Unsupported library action.', code='unsupported_action')
+        if action in ('rename', 'delete', 'restore', 'generation_preflight', 'generation_import'):
+            body = args
+        else:
+            # Display naming is independent of the saved render identity.
+            display_name = args.pop('name', None) if action == 'checkpoint' else None
+            context, body = self._domain(target, expected_revision, args)
+            if action == 'checkpoint':
+                body.update(workflow=context['workflow']['ui'], sequence=context['name'], name=display_name)
+            elif action == 'generation_export':
+                body['story'] = {key.removeprefix(str(target.story_node) + '/'): value for key, value in context['fields'].items() if key.startswith(str(target.story_node) + '/')}
+        return self._answer(self._post(routes[action], body))
+
+    def h3_inspect(self, action: Literal['status', 'regeneration', 'audio', 'image_description', 'refmods', 'nodes'], target: Target,
+                   arguments_json: str = '{}', expected_revision: dict[str, StrictInt] | None = None) -> dict[str, Any]:
+        """Status may materialize native previews; regeneration {box} only preflights. Audio {file}; image_description
+        {action:read|resolve|edit|clear|regenerate|clear_all,...} uses existing provider/cache. Nodes {node?} gives schema;
+        refmods lists installed references. Browser playback, beat analysis, layout and Undo remain browser features.
+        """
+        args = _object(arguments_json)
+        if action == 'nodes':
+            return self._answer(self.client.json('/object_info' + ('/' + quote(args['node'], safe='') if 'node' in args else '')))
+        if action == 'refmods':
+            return self._answer(self.client.json('/h3c/refmods'))
+        if action in ('audio', 'image_description'):
+            return self._answer(self._post('/h3c/audio/info' if action == 'audio' else '/h3c/images/description', args))
+        if target.kind == 'managed':
+            if action == 'status':
+                return self.h3_get_project(target)
+            raise StudioError('Use managed h3_plan_video for regeneration preflight.', code='unsupported_target_operation')
+        if action not in ('status', 'regeneration'):
+            raise StudioError('Unsupported inspection action.', code='unsupported_action')
+        context, body = self._domain(target, expected_revision, args, execution=action == 'regeneration')
+        if action == 'regeneration':
+            body['workflow'] = context['workflow']['api']
+        else:
+            body['follow'] = False
+        return self._answer(self._post('/h3c/timeline/' + action, body))
 
     def h3_job_status(self, job: JobHandle) -> dict[str, Any]:
         """Poll once; status never submits the next native unit. Retain failed/held evidence and completed proposals."""

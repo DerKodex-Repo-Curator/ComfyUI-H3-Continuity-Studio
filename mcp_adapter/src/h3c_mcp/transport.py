@@ -160,6 +160,12 @@ class StudioClient:
             raise StudioError('Uploaded bytes do not match the original.', code='asset_hash')
         return result
 
+    def import_still(self, path):
+        path = self.local_path(path)
+        with path.open('rb') as stream:
+            return parse(self._request('/h3c/stills/import', method='POST',
+                                       files={'image': ('source.png', stream, 'application/octet-stream')}))
+
     def download(self, descriptor, destination):
         destination = self.local_path(destination)
         checksum, size = descriptor.get('sha256'), descriptor.get('size')

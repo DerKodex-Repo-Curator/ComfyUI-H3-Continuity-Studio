@@ -53,6 +53,9 @@ class NativeProjectsTest(unittest.TestCase):
         document['timeline']['boxes'][0]['prompt'] = 'Changed'
         after = projects.save(self.target, before['revision'], document)
         self.assertEqual(json.loads(after['document_json'])['timeline']['boxes'][0]['prompt'], 'Changed')
+        context = projects.context(self.target, after['revision'], 'saved')
+        self.assertEqual(context['name'], 'native-study')
+        self.assertEqual(context['workflow']['ui']['id'], 'graph-a')
 
     def test_registration_and_edits_update_execution_inputs(self):
         before = self.registered()

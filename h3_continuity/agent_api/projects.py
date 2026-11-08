@@ -268,6 +268,12 @@ def context(target, expected_revision, operation):
     with saved_state.LOCK:
         target, record, _, ui, _, revision = _current(target)
         _check_revision(expected_revision, revision)
+        if operation == 'saved':
+            document = _document(target, ui, record)
+            return dict(target=target, revision=revision, name=_guard(target, ui), timeline=document['timeline'],
+                        settings=document['settings'], graph=target['graph'], story=target.get('story_node'),
+                        timeline_node=target['timeline_node'], workflow={'ui': ui},
+                        fields={f'{node}/{key}': value for (node, key), value in story_library._fields(ui).items()})
         api, reason = _execution(record, ui)
         if api is None:
             raise APIError('execution_snapshot_required', reason, status=409)

@@ -351,6 +351,8 @@ class CheckJob:
 
     def view(self):
         view = {"state": self.state, "progress": self.progress, "notes": list(self.notes), "kind": self.kind}
+        if getattr(self, 'agent_request_id', None):
+            view['request_id'] = self.agent_request_id
         for name in ("result", "error", "vram"):
             if getattr(self, name) is not None:
                 view[name] = getattr(self, name)

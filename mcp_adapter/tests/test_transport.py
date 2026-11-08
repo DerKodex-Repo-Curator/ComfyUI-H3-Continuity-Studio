@@ -13,6 +13,18 @@ except ImportError:
 
 
 class TransportTest(unittest.TestCase):
+    def test_still_import_sends_image_multipart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            host = FixtureStudio()
+            self.addCleanup(host.close)
+            client = transport.StudioClient(host.url, roots=[Path(directory)])
+            self.addCleanup(client.close)
+            path = Path(directory) / 'picture.png'
+            path.write_bytes(b'original-image')
+            host.routes[('POST', '/h3c/stills/import')] = (200, {'ok': True, 'file': {'filename': 'stored.png'}})
+            client.import_still(str(path))
+            self.assertIn(b'name="image"', host.requests[0]['body'])
+            self.assertIn(b'original-image', host.requests[0]['body'])
     def setUp(self):
         self.assertIsNotNone(transport, 'Standalone transport must not depend on ComfyUI')
         self.host = FixtureStudio()

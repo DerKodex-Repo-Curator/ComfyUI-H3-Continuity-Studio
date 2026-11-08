@@ -3,7 +3,7 @@ import copy
 import hashlib
 import json
 import uuid
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from .receipts import ReceiptStore
 from .transport import StudioError, encoded
@@ -123,13 +123,15 @@ class NativeJobs:
                 raise StudioError('No eligible native unit remains.', code='nothing_to_render')
             return self._submit_locked(request_key, request_hash, target, 'video', graph, ui, outputs)
 
-    def _submit_locked(self, key, request_hash, target, kind, graph, ui, outputs, metadata=None):
-        identity = str(uuid.uuid4())
+    def _submit_locked(self, key, request_hash, target, kind, graph, ui, outputs, metadata=None, identity=None, result_receipt=None):
+        identity = identity or str(uuid.uuid4())
         provenance = dict(request_id=identity, graph_sha256=digest(graph), target=target.wire())
         body = dict(prompt_id=identity, prompt=graph, client_id='h3c-mcp', partial_execution_targets=outputs,
                     extra_data=dict(extra_pnginfo={'workflow': ui}, h3c_agent=provenance, **(metadata or {})))
         record = dict(request_sha256=request_hash, state='submitting', kind=kind, id=identity, target=target.wire(),
                       request_key=key, body=body, provenance=provenance)
+        if result_receipt is not None:
+            record['result_receipt'] = result_receipt
         self.store.write(key, record)
         try:
             reply = self._post('/prompt', body)
@@ -144,6 +146,7 @@ class NativeJobs:
     def _result(self, record):
         return dict(job={key: record[key] for key in ('kind', 'id', 'target', 'request_key')}, state=record['state'],
                     execution_completed=record.get('execution_completed', False),
+                    result_available=bool(record.get('result')),
                     data_json=encoded({key: value for key, value in record.items() if key != 'body'}).decode())
 
     def _owned(self, row, record):
@@ -158,6 +161,15 @@ class NativeJobs:
         if old is None or old['id'] != handle.id or old['kind'] != handle.kind or old['target'] != (handle.target.wire() if handle.target else None):
             raise StudioError('Job handle does not match its local receipt.', code='receipt_conflict')
         with self.store.claim(handle.request_key, old['request_sha256']) as record:
+            if record['kind'] == 'story':
+                return self._story_status(record)
+            if record['kind'] in ('still', 'reference'):
+                if record.get('result') is None or record['state'] not in ('complete', 'failed', 'cancelled'):
+                    path = '/h3c/reference-assets/result' if record['kind'] == 'reference' else '/h3c/stills/result'
+                    result = self._post(path, record['result_receipt'])
+                    record.update(state=result['state'], result=result)
+                    self.store.write(handle.request_key, record)
+                return self._result(record)
             if record['state'] in ('succeeded', 'failed'):
                 return self._result(record)
             history = self.client.json('/history/' + quote(handle.id, safe=''))
@@ -180,4 +192,73 @@ class NativeJobs:
             return self._result(record)
 
     def cancel(self, handle):
+        if handle.kind == 'story':
+            record = self.store.load(handle.request_key)
+            if record and record['id'] == handle.id and record.get('remote_id'):
+                return self._post('/h3c/story/cancel', {'job': record['remote_id']})
         raise StudioError('This host has no safely scoped native cancellation API; use Studio to stop the identified prompt.', code='scoped_cancellation_unavailable')
+
+    def _context(self, target, revision, args):
+        from .tools import StudioTools
+        return StudioTools(self.client, None)._domain(target, revision, args, execution=True)
+
+    def start_still(self, target, revision, args, key, reference=False):
+        request_hash = digest(dict(kind='reference' if reference else 'still', target=target.wire(), revision=revision, args=args))
+        with self.store.claim(key, request_hash) as record:
+            if record is not None:
+                return self._result(record)
+            context, body = self._context(target, revision, args)
+            body['request_id'] = str(uuid.uuid4())
+            prepared = self._post('/h3c/reference-assets/prepare' if reference else '/h3c/stills/prepare', body)
+            receipt = dict(request_id=body['request_id'], prompt_id=prepared['prompt_id'], provenance=prepared['provenance'])
+            metadata = {**receipt, 'collector': 'h3c_still_output'}
+            return self._submit_locked(key, request_hash, target, 'reference' if reference else 'still', prepared['prompt'],
+                context['workflow']['ui'], prepared['outputs'], metadata={'h3c_still': metadata},
+                identity=prepared['prompt_id'], result_receipt=receipt)
+
+    def start_story(self, target, revision, action, args, key):
+        if target.kind != 'native' or not target.story_node:
+            raise StudioError('Story execution requires a native snapshot with an explicit Story node.', code='unsupported_target_operation')
+        request_hash = digest(dict(kind='story', target=target.wire(), revision=revision, action=action, args=args))
+        with self.store.claim(key, request_hash) as record:
+            if record is not None:
+                return self._result(record)
+            context, body = self._context(target, revision, args)
+            identity = str(uuid.uuid4())
+            # Omitting workflow avoids the browser's save-on-start side effect. Only proposals are returned.
+            body.pop('workflow', None)
+            body.update(prompt=context['prompt'], story=target.story_node, client='h3c-mcp', request_id=identity)
+            if action == 'rewrite':
+                body['rewrite_all'] = True
+            record = dict(request_sha256=request_hash, state='submitting', kind='story', id=identity,
+                          target=target.wire(), request_key=key, body=body)
+            self.store.write(key, record)
+            path = {'check': '/h3c/story/check', 'still_prompts': '/h3c/still-prompts/prepare'}.get(action, '/h3c/story/write')
+            try:
+                reply = self._post(path, body)
+                record.update(state='accepted', remote_id=reply['job'])
+            except StudioError as error:
+                record.update(state='needs_reconciliation', delivery_error=error.result())
+            self.store.write(key, record)
+            return self._result(record)
+
+    def _story_status(self, record):
+        target = record['target']
+        if not record.get('remote_id'):
+            current = self.client.json('/h3c/story/current?' + urlencode(dict(client='h3c-mcp', graph=target['graph'], story=target['story_node'], recover='true')))
+            if current.get('request_id') == record['id'] and current.get('job'):
+                record['remote_id'] = current['job']
+        if record.get('remote_id') and record.get('result') is None:
+            result = self.client.json('/h3c/story/job?' + urlencode(dict(id=record['remote_id'], graph=target['graph'], story=target['story_node'])))
+            record['state'] = result['state']
+            if result['state'] not in ('running', 'unknown'):
+                record['result'] = result
+        self.store.write(record['request_key'], record)
+        return self._result(record)
+
+    def acknowledge_story(self, handle):
+        self.status(handle)
+        record = self.store.load(handle.request_key)
+        if not record.get('result') or not record.get('remote_id'):
+            raise StudioError('Retain a finished Story proposal before acknowledging it.', code='result_not_available')
+        return self._post('/h3c/story/taken', {'job': record['remote_id']})
