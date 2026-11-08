@@ -2,7 +2,7 @@
 
 Source baseline: `main` at `b5b734e` (v0.19.5), inspected 2026-11-08.
 Roadmap: [MCP0](../roadmap-discipline/phases/2026-11-08-mcp-tools-skills.md).
-Status: source audit complete; standalone adapter selected by the user. Detailed design is [drafted for review](../superpowers/specs/2026-11-08-mcp-tools-skills-design.md), not approved for implementation.
+Status: source audit complete; standalone adapter and [design](../superpowers/specs/2026-11-08-mcp-tools-skills-design.md) approved by the user. The [implementation plan](../superpowers/plans/2026-11-08-mcp-tools-skills.md) includes required README/docs installation instructions and awaits execution-method selection.
 
 ## Intent and method
 
@@ -107,7 +107,9 @@ Sources inspected on 2026-11-08:
 - [Extension repository and lifecycle](https://github.com/modelcontextprotocol/ext-skills)
 - [Client support matrix](https://modelcontextprotocol.io/extensions/client-matrix) (community-maintained; not an end-to-end compatibility test)
 - [Official Python SDK](https://github.com/modelcontextprotocol/python-sdk)
-- [Python SDK Skills extension support](https://py.sdk.modelcontextprotocol.io/advanced/skills/) (verified during design: built-in protocol support, application supplies catalogs and resource bytes)
+- [Python SDK Skills extension documentation](https://py.sdk.modelcontextprotocol.io/advanced/skills/) (documents helpers present on upstream main; actual published-package verification below supersedes the assumed release availability)
+
+Planning verified the actual `mcp==2.3.0` wheel and sdist from PyPI: neither contains the documented Skills helper modules. The release does expose public `Extension`/`MethodBinding` registration. The plan pins that release and supplies the two spec-shaped Skills methods through its supported extension interface; the SDK still owns wire/version/capability handling. No unreleased Git dependency or custom JSON-RPC server is needed. This is a corrected implementation assumption, not a reduction in requested Skills extension support.
 
 ## Selected connection approach
 
@@ -129,4 +131,4 @@ Codex and Claude Code launch the adapter locally; Studio may run locally or remo
 - With `COMFY_ROOT` set to the installed ComfyUI path, the same discovery command with `-p test_flf2va_audio.py -v`: **4 passed**, including raw-audio FLF2VA and raw-video REF2VA cases. The initial attempt stopped at bootstrap because COMFY_ROOT was missing; the corrected run passed.
 - No full suite, live API calls, browser interaction, model loading or generation was needed for this source audit. Mixed-format assertions were inspected, not rerun.
 
-Next: complete the draft design's builder check, resolve material questions and present the design for approval. The implementation plan must reconcile the four stale claims, add missing guidance and executable coverage, test skill delivery/extension contracts and tool ownership/revision/idempotency behavior, and include a maintained capability map so additions/removals trigger an exposure review.
+Next: obtain implementation-plan review and the Native versus subagent-driven execution choice, then execute the approved scope. Design approval is already granted and must not be requested again. The plan reconciles the four stale claims, missing guidance and executable coverage, Skills extension contracts, ownership/revision/idempotency behavior, and the maintained capability map.

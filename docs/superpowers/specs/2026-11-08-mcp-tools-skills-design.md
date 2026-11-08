@@ -1,6 +1,6 @@
 # MCP tools and skills for H3 Continuity Studio
 
-Status: **builder check complete; awaiting user design approval**.
+Status: **approved by the user; implementation planning in progress**. User also explicitly requires README/docs MCP installation instructions.
 
 Roadmap: [MCP0](../../roadmap-discipline/phases/2026-11-08-mcp-tools-skills.md).
 Evidence and capability inventory: [source audit](../../research/2026-11-08-mcp-capability-audit.md).
@@ -38,7 +38,7 @@ Release, merge, live installation, service restart and GPU generation are outsid
 
 ## Adapter and connection
 
-Design choice: Python adapter under `mcp_adapter/`, with its own `pyproject.toml`, package and `h3c-mcp` console command. The adapter must import and run without ComfyUI, torch or model files. Use the official Python MCP SDK, including its built-in Skills extension. Select and pin a released version with the required protocol compatibility during implementation planning; do not hand-write JSON-RPC or extension negotiation.
+Design choice: Python adapter under `mcp_adapter/`, with its own `pyproject.toml`, package and `h3c-mcp` console command. The adapter must import and run without ComfyUI, torch or model files. Use the official Python MCP SDK and its extension interface; do not hand-write JSON-RPC or extension negotiation. Dependency verification during planning found that the released `mcp==2.3.0` wheel and sdist omit the documented built-in Skills helpers, while the official repository's main branch contains them. Use the released SDK's public `Extension`/`MethodBinding` API for the two required Skills methods and ordinary resources, with conformance tests. This corrects an implementation assumption; transport and feature scope are unchanged. Pin the verified release rather than requiring an unreleased Git dependency.
 
 The launcher takes a Studio base URL with optional reverse-proxy prefix. Default is `http://127.0.0.1:8188`. Provide repo-based `uv run --project ...` and ordinary isolated-venv instructions for both clients. stdout carries MCP only; logs go to stderr. Multiple agent processes may connect to the same host; server revisions and existing job ownership arbitrate writes.
 
@@ -121,7 +121,7 @@ The running Studio host is authoritative for skill bytes. A local adapter checko
 
 Design choice: add a small host catalog/resource interface for agent guidance. Its catalog enumerates each shipped skill's frontmatter and full file manifest, alongside allowlisted guides/client references and content identity. Its resource reader serves the original file bytes under validated, contained paths. Do not derive raw-file hashes from the current normalized `read_text()` instruction bodies. Resources outside skill roots have their own explicit URIs; do not pretend `docs/...` lives inside every skill directory.
 
-The adapter maps the host catalog to `skills/list`, `skills/get` and ordinary resource reads, conventionally `skill://h3-continuity-video/SKILL.md`. Use the SDK's actual Skills extension negotiation and types. Static entries include every file exactly once with SHA-256 and byte size and all frontmatter fields. The adapter detects a catalog/read mismatch and refreshes or reports changed content; it never returns different bytes under a published digest. Unknown names/URIs and path traversal are rejected. Directory reads stay unadvertised unless supporting subdirectories actually require them.
+The adapter maps the host catalog to `skills/list`, `skills/get` and ordinary resource reads, conventionally `skill://h3-continuity-video/SKILL.md`. Use the SDK's public extension registration and request models with the specification's Skills result shapes; the SDK owns capability advertisement and wire/version handling. Static entries include every file exactly once with SHA-256 and byte size and all frontmatter fields. The adapter detects a catalog/read mismatch and refreshes or reports changed content; it never returns different bytes under a published digest. Unknown names/URIs and path traversal are rejected. Directory reads stay unadvertised unless supporting subdirectories actually require them.
 
 Resources also expose the host instruction bundle, authoritative schemas and allowlisted guides. Server instructions point first to the entry skill. A small guidance read tool supports clients whose agent cannot request resources directly; it returns the same bytes as ordinary context and does not pretend to activate a host skill. Existing filesystem skill installation remains supported. State separately whether each client loaded extension skills, read ordinary resources or used the installed pack.
 
@@ -143,6 +143,8 @@ Implementation checks must include:
 8. Actual Codex and Claude Code connection smoke against an isolated host fixture: discover tools, read guidance/skill, read/edit saved data and receive a revision conflict. Record exact client versions. Test real extension loading if the installed client exposes it; otherwise report it unverified/unsupported and verify the documented fallback. Do not infer client extension support from SDK conformance alone.
 
 Deliver the adapter, minimal host additions, corrected skills, coverage map and setup/usage guide together. An existing host without the supporting agent/snapshot API gets an explicit version/capability error and upgrade guidance; no silent host/check-out mismatch. No live workflow changes or GPU model runs are necessary to establish this contract.
+
+User documentation requirement: README installation/discovery section plus a published guide page with isolated adapter installation, copyable Codex and Claude Code configuration commands, Windows path quoting and normal venv alternatives, local/remote Studio URLs with proxy prefixes and bearer environment configuration, connection verification, snapshot/conflict/recovery behavior, and the Skills-extension versus filesystem-pack compatibility path. Validate the documented launchers and link the page from the Automation navigation.
 
 ## Left to the builder
 
