@@ -4,6 +4,10 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+### Fixed
+
+- **Saved stories reconnect to their managed API project.** Opening an attached story keeps its project identity and asset bindings, so status and rendering use the project API instead of failing the native Timeline ownership check. If the saved content or current settings differ from the API project, the existing conflict choices preserve local edits until you choose which to keep. Native imports and forks keep their existing behavior and generator wiring.
+
 ## [0.19.5] - 2026-11-08
 
 ### Fixed

@@ -28,3 +28,11 @@ uv run --with playwright python tests/browser/new_generation.py
 ```
 
 It uses an installed Chrome when available (override with `PLAYWRIGHT_CHROMIUM_EXECUTABLE`), otherwise Playwright's Chromium. Screenshots go to `.tmp/`.
+
+Saved stories attachment/transport regression (actual frontend host methods with synthetic storage):
+
+```sh
+uv run --with playwright python tests/browser/saved_story_attachment.py
+```
+
+This checks managed load/status GETs, exact Timeline content, asset bindings, conflict preservation, native imports/forks and connected text controls. It never contacts ComfyUI and does not test a full custom-node workflow import or render.

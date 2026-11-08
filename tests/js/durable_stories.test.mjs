@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {savedStoryContent} from '../../web/h3c_story_library.mjs?v=16d811db1e6e';
+import {savedStoryContent} from '../../web/h3c_story_library.mjs?v=cd3feedb5571';
 import {groupStories, versionLabel} from '../../web/h3c_story_groups.mjs?v=734f66b40a7e';
 
 const workflow = (extra = {}) => ({
@@ -31,6 +31,37 @@ test('the same wiring keeps everything', () => {
   const content = savedStoryContent(value, workflow());
   assert.equal(content.wiring, true);
   assert.equal(JSON.parse(content.timeline).boxes[0].previews[0].job, 'j1');
+});
+
+test('Saved stories carry the linked Timeline attachment and bindings without sharing the saved snapshot', () => {
+  const saved = workflow();
+  const project = {mode: 'attached', id: 'managed-project', revision: 1, profile_sha256: 'profile'};
+  const assets = [{asset_id: 'endpoint', bindings: [{kind: 'picture', slot: 'image17'}]}];
+  saved.nodes[1].properties = {h3c_project: project, h3c_asset_bindings: assets};
+  // Another Timeline must not supply this Story's attachment.
+  saved.nodes.unshift({id: 3, type: 'H3C_Timeline', properties: {h3c_project: {mode: 'attached', id: 'other'}}});
+  const value = {workflow: saved, story: '1', sequence: 'api_managedproject'};
+  for (const current of [saved, workflow({width: 1024})]) {
+    const content = savedStoryContent(value, current);
+    assert.deepEqual(content.project, project);
+    assert.deepEqual(content.asset_bindings, assets);
+    assert.equal(content.sequence, value.sequence);
+    content.project.revision = 99;
+    content.asset_bindings[0].bindings[0].slot = 'image18';
+    assert.equal(project.revision, 1);
+    assert.equal(assets[0].bindings[0].slot, 'image17');
+  }
+});
+
+test('native Saved stories keep bindings and never reconnect a fork export to its source project', () => {
+  for (const project of [undefined, {mode: 'fork', id: 'original-project'}]) {
+    const saved = workflow();
+    saved.nodes[1].properties = {h3c_project: project, h3c_asset_bindings: []};
+    const content = savedStoryContent({workflow: saved, story: '1', sequence: 'native-copy'}, workflow());
+    assert.equal(content.project, undefined);
+    assert.deepEqual(content.asset_bindings, []);
+    assert.equal(content.sequence, 'native-copy');
+  }
 });
 
 const row = (id, title, sequence, updated, rendered = 0) => ({id, title, sequence, updated, boxes: 88, status: 'saved', rendered});
