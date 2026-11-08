@@ -4,6 +4,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.19.7] - 2026-11-08
+
+### Fixed
+
+- **Saved stories recover managed attachments already lost by older versions.** Opening a story whose attachment was previously stripped now verifies its reserved sequence through the project API and restores missing bindings. Local content and settings are preserved; a failed lookup leaves the destination untouched. Refresh the browser and reopen the Saved story to reconnect an already-detached workflow.
+
 ## [0.19.6] - 2026-11-08
 
 ### Fixed

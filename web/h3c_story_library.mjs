@@ -91,6 +91,18 @@ export function isWiringConflict(error) {
   return error?.code==='h3c_story_wiring_conflict'||/Workflow wiring changed in another browser/.test(error?.message??'');
 }
 
+export async function recoverSavedStoryContent(content,request) {
+  const match=/^api_([a-f0-9]{8})([a-f0-9]{4})([a-f0-9]{4})([a-f0-9]{4})([a-f0-9]{12})$/.exec(content.sequence);
+  if(content.project||!match)return content;
+  // Records.create_project derives the public project UUID from its reserved sequence.
+  const id=match.slice(1).join('-'),project=await request(`/h3c/api/v1/projects/${id}`);
+  if(project?.id!==id||project.sequence!==content.sequence||!Number.isInteger(project.revision)||project.revision<1
+    ||typeof project.profile_sha256!=='string'||!project.profile_sha256)
+    throw Error('The managed project does not match this saved story. Its local content was kept.');
+  return {...content,project:{mode:'attached',id,revision:project.revision,profile_sha256:project.profile_sha256},
+    asset_bindings:structuredClone(content.asset_bindings??project.assets??[])};
+}
+
 // New project promises to preserve the current project before clearing it.
 // A stale imported workflow must save an independent copy, never replace the
 // other browser's wiring or discard the local prompts to load that snapshot.
