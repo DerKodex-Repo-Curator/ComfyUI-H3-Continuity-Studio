@@ -51,6 +51,22 @@ class TransportTest(unittest.TestCase):
         self.assertNotIn('secret-token', str(raised.exception))
         self.assertNotIn('secret-token', repr(raised.exception.details))
 
+    def test_preparation_errors_keep_paths_messages_and_top_level_details(self):
+        errors = [dict(path='timeline.timed_text.audio_sha256', message='secret-token source mismatch')]
+        self.host.routes[('POST', '/comfy/prepare')] = (400, dict(ok=False, errors=errors))
+        with self.assertRaises(transport.StudioError) as raised:
+            self.client.json('/prepare', method='POST', body={})
+        self.assertEqual(raised.exception.path, errors[0]['path'])
+        self.assertIn('source mismatch', str(raised.exception))
+        self.assertEqual(raised.exception.details['errors'][0]['message'], '[redacted] source mismatch')
+        self.assertNotIn('secret-token', str(raised.exception))
+        self.assertNotIn('secret-token', repr(raised.exception.details))
+        self.host.routes[('POST', '/comfy/prepare')] = (409, dict(error='Wiring changed', code='workflow_wiring_conflict', library_revision=4))
+        with self.assertRaises(transport.StudioError) as raised:
+            self.client.json('/prepare', method='POST', body={})
+        self.assertEqual(raised.exception.code, 'workflow_wiring_conflict')
+        self.assertEqual(raised.exception.details['library_revision'], 4)
+
     def test_native_http_200_failure_is_an_error(self):
         self.host.routes[('GET', '/comfy/native')] = (200, {'ok': False, 'error': 'no snapshot'})
         with self.assertRaisesRegex(transport.StudioError, 'no snapshot'):

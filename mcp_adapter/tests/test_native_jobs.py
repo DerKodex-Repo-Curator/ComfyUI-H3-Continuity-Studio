@@ -136,3 +136,11 @@ class NativeJobsTest(unittest.TestCase):
         self.api['other'] = dict(class_type='UnrelatedOutput', inputs={})
         self.render()
         self.assertNotIn('other', self.submitted['prompt'])
+
+    def test_native_preparation_carries_host_verified_audio_bindings(self):
+        assets = [dict(file=dict(filename='recording.wav', type='input', subfolder=''), sha256='a'*64,
+                       bindings=[dict(kind='loader', node='audio', input='audio', slot='audio1')])]
+        self.context['assets'] = assets
+        self.plan()
+        request = next(r for r in self.host.requests if r['path'] == '/h3c/timeline/prepare')
+        self.assertEqual(json.loads(request['body'])['assets'], assets)

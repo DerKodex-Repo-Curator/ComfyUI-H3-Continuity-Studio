@@ -175,7 +175,7 @@ class StudioTools:
     def h3_story(self, action: Literal['write', 'rewrite', 'feedback', 'check', 'still_prompts', 'templates', 'hosts', 'bible', 'taken'],
                  target: Target, arguments_json: str = '{}', expected_revision: dict[str, StrictInt] | None = None,
                  request_key: str | None = None) -> dict[str, Any]:
-        """Story proposals: write/rewrite {box?,rewrite_all?}, feedback {edit}, check {boxes?}, still_prompts {targets,...};
+        """Story proposals: write/rewrite {box?,rewrite_all?}, feedback {edit}, check {boxes?}, still_prompts {instructions?,source?};
         execution needs revision/key. Templates/hosts read configuration; bible {action:build|link|apply|status|recompile,...}
         returns transformed data only. See h3c://docs/MCP.md for action contracts. Poll returned job; save proposals explicitly.
         """
@@ -201,7 +201,7 @@ class StudioTools:
                   target: Target, arguments_json: str = '{}', expected_revision: dict[str, StrictInt] | None = None,
                   request_key: str | None = None) -> dict[str, Any]:
         """Still/reference actions return proposals. Sources {box,target?}; pin {file}; import {path} uploads original bytes.
-        Prepare/generate {box,target,prompt,seed,recipe,...}; reference variants {asset_key,prompt,seed,recipe,...}.
+        Prepare/generate {box,target,prompt,seed,recipe,...}; reference variants {asset_key,input_fingerprint,prompt,seed,recipe,...}.
         Generate needs revision/key and actually submits one candidate. reference_approve {asset_key,candidate_id,approval_revision}
         returns proposed timeline; explicitly save with the project revision. Results never silently apply to a project.
         """
@@ -224,7 +224,7 @@ class StudioTools:
 
     def h3_takes(self, action: Literal['list', 'use', 'rate', 'delete_preview', 'delete_apply'], target: Target,
                  arguments_json: str = '{}', expected_revision: dict[str, StrictInt] | None = None) -> dict[str, Any]:
-        """List/use takes; native rate {take,rating,tags?}; deletion {scope:take|other|unusable,take?,box?,bridge?}.
+        """List/use takes; native rate {created,rating,tag?}; deletion {scope:take|other|unusable,take?,box?,bridge?}.
         delete_preview only counts; delete_apply explicitly removes those takes. Managed supports list {box?} and
         use {take_id,box,kind} under its project revision; native cleanup never bypasses managed ownership.
         """
@@ -238,6 +238,9 @@ class StudioTools:
         routes = {'list': '', 'use': '/use', 'rate': '/rate', 'delete_preview': '/delete', 'delete_apply': '/delete'}
         if action not in routes:
             raise StudioError('Unsupported take action.', code='unsupported_action')
+        if action == 'rate' and (not isinstance(args.get('created'), str) or type(args.get('rating')) is not int
+                                 or not 0 <= args['rating'] <= 5 or not isinstance(args.get('tag', ''), str)):
+            raise StudioError('Rate a listed render using created, integer rating 0..5 and optional tag text.', code='invalid_arguments')
         _, body = self._domain(target, expected_revision, args)
         if action.startswith('delete_'):
             body['apply'] = action == 'delete_apply'

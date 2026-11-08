@@ -62,6 +62,8 @@ def _overlay(workflow, fields):
         key = f"{node['id']}/{node['type']}/{name}"
         if key in fields:
             node['widgets_values'][index] = fields[key]
+            if 'widgets_values_named' in node:
+                node['widgets_values_named'][name] = fields[key]
     return value
 
 
@@ -91,6 +93,7 @@ def _wiring(workflow):
                 node.pop(key, None)
             if graph is value and node.get('type') in ('H3C_Story', 'H3C_Timeline'):
                 node.pop('widgets_values', None)
+                node.pop('widgets_values_named', None)
             node.get('properties', {}).pop('h3c_library_revision', None)
             if not node.get('properties'):
                 node.pop('properties', None)
@@ -314,7 +317,7 @@ def _native_usage(excluded_graph):
 
 
 def delete(identity):
-    with saved_state.LOCK, nodes.SEQUENCE_LOCK:
+    with nodes.SEQUENCE_LOCK, saved_state.LOCK:
         value = load(identity, deleting=True)
         from .timeline_api.service import authorize_sequence, sequence_identity
         authorize_sequence(value['sequence'], None, 'take_delete')

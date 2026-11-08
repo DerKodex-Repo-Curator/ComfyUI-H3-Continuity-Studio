@@ -8,9 +8,11 @@ Managed target: `{"kind":"managed","id":"<project UUID>"}`. Native target: `{"ki
 
 `h3_get_project` returns `document_json`, a JSON **string**, and `revision`. Managed revisions are `{"project":N}`; native revisions contain separate `state`, `workflow` and `execution` integers. Pass the entire revision unchanged. Parse/edit/stringify authored documents with arbitrary-precision integers: seeds can be `18446744073709551615`. Preserve unknown creative/consumer fields and nested metadata. Inspection, plans and domain results use JSON strings too. Typed IDs/counters outside those strings are safe small metadata.
 
-Native document shape: `{timeline,settings,story?,extra_widgets,...}`. Story contains saved Story widget data; `extra_widgets` uses `node_id/widget_name` keys. Managed document fields are `{name,timeline,settings,assets,consumer,semantic_boxes?}`. Creation also needs an available `profile`; capabilities supplies its schema/readiness. Existing projects retain their pinned profile/digest.
+Native document shape: `{timeline,settings,story?,extra_widgets,...}`. Story contains the saved Story state object; other Story widget inputs are in `extra_widgets`, using `node_id/type/widget_name` keys (for example `1/H3C_Story/idea`). Keep the exact keys returned by the read. Managed document fields are `{name,timeline,settings,assets,consumer,semantic_boxes?}`. Creation also needs an available `profile`; capabilities supplies its schema/readiness. Existing projects retain their pinned profile/digest.
 
 An executable native snapshot is `{ui:<editor workflow>,api:<ComfyUI API prompt>}` with matching saved graph/node identities. `h3_register_workflow` requires the current revision when replacing an existing snapshot. Supported literal/Primitive widget bindings are updated without detaching links; computed or changed wiring requires recapture. No editor-to-API compiler is provided. Snapshot registration, project saves and checkpoint guards are host operations; adapter receipt storage is separate.
+
+An explicit recapture replaces the authoritative saved library workflow and its widget overlay. Linked Primitive numeric/text controls are updated in both the saved editor and API graph; an edit that would change an unedited shared consumer is refused. For timed text with `audio_sha256`, native planning derives a verified asset binding from the saved file-backed audio clip or a direct literal LoadAudio source. Existing preparation rechecks the bytes and transcript audio hash; computed audio needs an explicit supported source rather than bypassing verification.
 
 ## Core tools
 
@@ -63,7 +65,7 @@ Write/rewrite/feedback/check/still_prompts require an executable snapshot, expli
 | `pin` | Host `file` descriptor; returns a pinned hash. |
 | `prepare` / `generate` | `box`, `target?`, `prompt`, `seed?`, compiled `recipe`, `size?`, `source?`. |
 | `reference_catalog` | Enumerate Cast/appearance preparation requirements. |
-| `reference_prepare` / `reference_generate` | `asset_key`, `prompt`, `seed?`, compiled `recipe` and generator options. |
+| `reference_prepare` / `reference_generate` | `asset_key`, current catalog `input_fingerprint`, `prompt`, `seed?`, compiled `recipe` and generator options. |
 | `reference_approve` | `asset_key`, `candidate_id`, `approval_revision` (the approval record's revision, distinct from project revision). Returns proposed Timeline. |
 | `prompt_instructions` | Reads installed generator conversion guidance. |
 

@@ -58,7 +58,7 @@ class NativeJobs:
         validation = copy.deepcopy(api)
         validation[node]['inputs'].update(name=context['name'], timeline=encoded(context['timeline']).decode())
         prepared = self._post('/h3c/timeline/prepare', dict(version=1, name=context['name'], timeline=context['timeline'],
-            settings=context['settings'], workflow=dict(api=validation, timeline_node=node), assets=[]))
+            settings=context['settings'], workflow=dict(api=validation, timeline_node=node), assets=context.get('assets', [])))
         line = copy.deepcopy(prepared['timeline'])
         kind = selection.get('kind', 'all')
         ids = selection.get('ids', [])

@@ -90,8 +90,14 @@ class StudioClient:
             if not isinstance(detail, dict):
                 detail = {'message': str(detail)}
             detail = self._redact(detail)
+            if isinstance(result, dict):
+                detail = {**self._redact({key: result[key] for key in ('code', 'message', 'path') if key in result}), **detail}
+            diagnostics = self._redact({key: value for key, value in result.items() if key not in ('ok', 'error')}) if isinstance(result, dict) else {}
+            failures = diagnostics.get('errors')
+            if isinstance(failures, list) and failures and isinstance(failures[0], dict):
+                detail = {**failures[0], **detail}
             raise StudioError(detail.get('message') or f'Studio HTTP {status}', code=detail.get('code', 'studio_error'),
-                              status=status, path=detail.get('path', ''), details=detail.get('details'))
+                              status=status, path=detail.get('path', ''), details={**diagnostics, **(detail.get('details') or {})})
 
     def _request(self, path, *, method='GET', body=None, key=None, files=None, data=None):
         headers = {'Accept': 'application/json'}

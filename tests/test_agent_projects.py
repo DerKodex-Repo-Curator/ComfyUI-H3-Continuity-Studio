@@ -1,6 +1,8 @@
 import copy
+import hashlib
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -86,19 +88,17 @@ class NativeProjectsTest(unittest.TestCase):
         self.assertEqual(json.loads(accepted['document_json'])['timeline']['opaque'], {'keep': True})
 
     def test_primitive_binding_is_updated_without_changing_link(self):
-        self.api['width'] = dict(class_type='PrimitiveInt', inputs={'value': 768})
-        self.api['2']['inputs']['width'] = ['width', 0]
+        self.linked()
         before = self.registered()
         document = json.loads(before['document_json'])
         document['settings']['width'] = 1024
         after = projects.save(self.target, before['revision'], document)
         api = projects.context(self.target, after['revision'], 'video')['workflow']['api']
-        self.assertEqual(api['width']['inputs']['value'], 1024)
-        self.assertEqual(api['2']['inputs']['width'], ['width', 0])
+        self.assertEqual(api['source']['inputs']['value'], 1024)
+        self.assertEqual(api['2']['inputs']['width'], ['source', 0])
 
     def test_computed_binding_remains_editable_but_requires_recapture(self):
-        self.api['width'] = dict(class_type='SomeComputedWidth', inputs={})
-        self.api['2']['inputs']['width'] = ['width', 0]
+        self.linked(kind='SomeComputedWidth')
         before = self.registered()
         document = json.loads(before['document_json'])
         document['settings']['width'] = 1024
@@ -186,6 +186,156 @@ class NativeProjectsTest(unittest.TestCase):
         self.target['timeline_node'] = 'unrelated'
         with self.assertRaisesRegex(ValueError, 'Timeline'):
             self.registered()
+
+    def test_recapture_replaces_authoritative_library_and_old_overlay(self):
+        before = self.registered()
+        document = json.loads(before['document_json'])
+        document['settings']['width'] = 1024
+        before = projects.save(self.target, before['revision'], document)
+        # An explicit recapture must replace both wiring and previously saved values.
+        ui, api = fixture()
+        ui['nodes'].append(dict(id=10, type='NewNode', inputs=[], widgets_values=[]))
+        api['10'] = dict(class_type='NewNode', inputs={})
+        after = projects.register(self.target, ui, api, before['revision'])
+        self.assertTrue(after['execution_ready'])
+        context = projects.context(self.target, after['revision'], 'video')
+        self.assertEqual(context['settings']['width'], 768)
+        self.assertIn('10', context['workflow']['api'])
+        library = saved_state.read('library', 'graph-a', 'library')['value']
+        self.assertTrue(any(str(n['id']) == '10' for n in library['workflow']['nodes']))
+        self.assertGreater(after['revision']['workflow'], before['revision']['workflow'])
+
+    def linked(self, widget='width', value=768, kind='PrimitiveInt'):
+        node = self.ui['nodes'][1 if widget == 'width' else 0]
+        index = next(i for i, port in enumerate(node['inputs']) if port['name'] == widget)
+        node['inputs'][index]['link'] = 1
+        self.ui['links'].append([1, 'source', 0, node['id'], index, 'INT' if kind == 'PrimitiveInt' else 'STRING'])
+        self.ui['nodes'].append(dict(id='source', type=kind, inputs=[], outputs=[{'links': [1]}], widgets_values=[value], widgets_values_named={'value': value}))
+        self.api['source'] = dict(class_type=kind, inputs={'value': value})
+        self.api[str(node['id'])]['inputs'][widget] = ['source', 0]
+
+    def test_linked_controls_survive_browser_reopen_and_recapture(self):
+        for widget, old, new, kind in [('width', 768, 1024, 'PrimitiveInt'), ('idea', 'A study', 'New idea', 'PrimitiveString')]:
+            with self.subTest(widget=widget):
+                self.ui, self.api = fixture()
+                self.target['graph'] = self.ui['id'] = 'linked-' + widget
+                self.linked(widget, old, kind)
+                for node in self.ui['nodes'][:2]:
+                    node['widgets_values_named'] = {port['widget']['name']: value for port, value in zip(node['inputs'], node['widgets_values'])}
+                before = self.registered()
+                document = json.loads(before['document_json'])
+                if widget == 'width':
+                    document['settings']['width'] = new
+                else:
+                    document['extra_widgets']['1/H3C_Story/idea'] = new
+                after = projects.save(self.target, before['revision'], document)
+                context = projects.context(self.target, after['revision'], 'video')
+                source = next(n for n in context['workflow']['ui']['nodes'] if n['id'] == 'source')
+                self.assertEqual(source['widgets_values'][0], new)
+                self.assertEqual(source['widgets_values_named']['value'], new)
+                self.assertEqual(context['workflow']['api']['source']['inputs']['value'], new)
+                owner = context['workflow']['ui']['nodes'][1 if widget == 'width' else 0]
+                self.assertEqual(owner['widgets_values_named'][widget], new)
+                recaptured = projects.register(self.target, context['workflow']['ui'], context['workflow']['api'], after['revision'])
+                self.assertTrue(recaptured['execution_ready'])
+
+    def test_capture_reads_effective_primitive_control_instead_of_stale_h3_widget(self):
+        self.linked()
+        self.ui['nodes'][-1]['widgets_values'][0] = 1024
+        self.api['source']['inputs']['value'] = 1024
+        before = self.registered()
+        self.assertTrue(before['execution_ready'])
+        self.assertEqual(json.loads(before['document_json'])['settings']['width'], 1024)
+
+    def test_capture_rejects_ui_and_api_binding_disagreement(self):
+        self.linked()
+        self.api['2']['inputs']['width'] = 768
+        with self.assertRaisesRegex(ValueError, 'connection'):
+            self.registered()
+
+    def test_shared_primitive_cannot_silently_change_an_unedited_consumer(self):
+        self.linked()
+        self.api['shared'] = dict(class_type='OtherNode', inputs={'setting': ['source', 0]})
+        before = self.registered()
+        document = json.loads(before['document_json'])
+        document['settings']['width'] = 1024
+        with self.assertRaisesRegex(ValueError, 'shared'):
+            projects.save(self.target, before['revision'], document)
+        self.assertEqual(projects.read(self.target)['revision'], before['revision'])
+
+    def test_native_operations_never_hold_state_while_waiting_for_render_lock(self):
+        before = self.registered()
+        real_sequence = projects.nodes.SEQUENCE_LOCK
+        attempted = threading.Event()
+        class ObservedLock:
+            def __enter__(self):
+                attempted.set()
+                real_sequence.acquire()
+                return self
+            def __exit__(self, *args):
+                real_sequence.release()
+        operations = [lambda: projects.save(self.target, projects.read(self.target)['revision'], json.loads(projects.read(self.target)['document_json'])),
+                      lambda: projects.register(self.target, self.ui, self.api, projects.read(self.target)['revision']),
+                      lambda: projects.context(self.target, projects.read(self.target)['revision'], 'video_plan')]
+        for operation in operations:
+            errors = []
+            def run():
+                try:
+                    operation()
+                except Exception as error:
+                    errors.append(error)
+            attempted.clear()
+            real_sequence.acquire()
+            with mock.patch.object(projects.nodes, 'SEQUENCE_LOCK', ObservedLock()):
+                worker = threading.Thread(target=run, daemon=True)
+                worker.start()
+                try:
+                    self.assertTrue(attempted.wait(2), 'operation must reach the render lock')
+                    acquired = saved_state.LOCK.acquire(blocking=False)
+                    if acquired:
+                        saved_state.LOCK.release()
+                    self.assertTrue(acquired, 'render completion must be able to take the state lock')
+                finally:
+                    real_sequence.release()
+                    worker.join(5)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(errors, [])
+
+    def test_video_context_verifies_timed_text_audio_against_real_preparation(self):
+        from h3_continuity import timed_text, timeline_prepare
+        root = Path(self.directory.name) / 'input'
+        root.mkdir()
+        audio = root / 'recording.wav'
+        audio.write_bytes(b'original recording bytes')
+        checksum = hashlib.sha256(audio.read_bytes()).hexdigest()
+        mock.patch('folder_paths.get_directory_by_type', return_value=str(root)).start()
+        for file_backed in (False, True):
+            with self.subTest(file_backed=file_backed):
+                self.ui, self.api = fixture()
+                self.target['graph'] = self.ui['id'] = 'audio-' + str(file_backed)
+                line = json.loads(self.api['2']['inputs']['timeline'])
+                text = timed_text.import_whisper([dict(start=0, end=.2, text=' exact words')], 'words.json', 'b'*64)
+                text['audio_sha256'] = checksum
+                line['timed_text'] = text
+                if file_backed:
+                    line['audio_clips'] = [dict(slot='audio1', start=0, source_start=0, duration=1,
+                                               file=dict(filename=audio.name, subfolder='', type='input'))]
+                else:
+                    self.api['audio'] = dict(class_type='LoadAudio', inputs={'audio': audio.name})
+                    self.api['2']['inputs']['audios.audio1'] = ['audio', 0]
+                self.api['2']['inputs']['timeline'] = json.dumps(line)
+                self.ui['nodes'][1]['widgets_values'][1] = json.dumps(line)
+                view = self.registered()
+                context = projects.context(self.target, view['revision'], 'video_plan')
+                self.assertEqual(context['assets'][0]['sha256'], checksum)
+                prepared = timeline_prepare.prepare(dict(version=1, name=context['name'], timeline=context['timeline'],
+                    settings=context['settings'], workflow=dict(api=context['workflow']['api'], timeline_node='2'), assets=context['assets']))
+                self.assertTrue(prepared['ok'], prepared)
+                bad = copy.deepcopy(context['assets'])
+                bad[0]['sha256'] = 'c'*64
+                rejected = timeline_prepare.prepare(dict(version=1, name=context['name'], timeline=context['timeline'],
+                    settings=context['settings'], workflow=dict(api=context['workflow']['api'], timeline_node='2'), assets=bad))
+                self.assertFalse(rejected['ok'])
 
 
 if __name__ == '__main__':

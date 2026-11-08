@@ -3,6 +3,7 @@ import copy
 import hashlib
 import json
 import os
+import posixpath
 import tempfile
 from pathlib import Path
 
@@ -56,6 +57,29 @@ def _widgets(ui):
             for node, index, name in story_library._widgets(ui)}
 
 
+def _effective_controls(ui):
+    """Read supported connected UI scalars without executing or compiling a graph."""
+    ui = copy.deepcopy(ui)
+    for node, index, name in story_library._widgets(ui):
+        ports = [port for port in node.get('inputs', []) if port.get('widget')]
+        pointer = ports[index].get('link')
+        if pointer is None:
+            continue
+        links = [row for row in ui['links'] if isinstance(row, list) and len(row) == 6 and row[0] == pointer]
+        if len(links) != 1 or links[0][2] != 0:
+            continue
+        sources = [source for source in ui['nodes'] if str(source['id']) == str(links[0][1]) and source.get('type') in PRIMITIVES]
+        if len(sources) != 1 or not sources[0].get('widgets_values'):
+            continue
+        source = sources[0]
+        controls = [port for port in source.get('inputs', []) if port.get('widget')]
+        selected = next((i for i, port in enumerate(controls) if port['widget']['name'] == 'value'), 0)
+        node['widgets_values'][index] = source['widgets_values'][selected]
+        if 'widgets_values_named' in node:
+            node['widgets_values_named'][name] = node['widgets_values'][index]
+    return ui
+
+
 def _guard(target, ui):
     if (not isinstance(ui, dict) or not isinstance(ui.get('nodes'), list) or not isinstance(ui.get('links'), list)
             or (ui.get('extra', {}).get('h3c_story_id') or ui.get('id')) != target['graph']):
@@ -86,6 +110,7 @@ def _current(target):
         raise APIError('project_not_found', 'Native project is not saved or registered.', status=404)
     state = saved_state.read('workflow', graph, 'workflow')
     ui = copy.deepcopy(ui) if library.get('checkpoint_name') else story_library._overlay(ui, state.get('value') or {})
+    ui = _effective_controls(ui)
     _guard(target, ui)
     revision = dict(state=state['revision'], workflow=library.get('workflow_revision', record.get('workflow_revision', 0)),
                     execution=record.get('revision', 0))
@@ -166,7 +191,8 @@ def read(target):
                     capabilities={'saved_edit': not bool(library.get('checkpoint_name')), 'execution': api is not None})
 
 
-def _capture(target, ui, api, record):
+def _capture(target, ui, api, record, *, persist=True):
+    ui = _effective_controls(ui)
     _guard(target, ui)
     if api is not None:
         if (not isinstance(api, dict) or api.get(target['timeline_node'], {}).get('class_type') != 'H3C_Timeline'
@@ -175,6 +201,11 @@ def _capture(target, ui, api, record):
         for _, (node, index, name) in _widgets(ui).items():
             if name not in api.get(str(node['id']), {}).get('inputs', {}):
                 continue
+            from ..timeline_prepare import ui_connections
+            try:
+                ui_connections(ui, node, api, [name])
+            except ValueError as error:
+                raise APIError('invalid_snapshot', f'Captured API/UI connection differs: {error}') from error
             try:
                 identity, port = _binding(api, str(node['id']), name)
             except ValueError:
@@ -184,7 +215,9 @@ def _capture(target, ui, api, record):
     value = {**record, 'target': target, 'workflow_ui': copy.deepcopy(ui), 'workflow_api': copy.deepcopy(api),
              'revision': record.get('revision', 0) + 1}
     value.pop('execution_error', None)
-    _write(target['graph'], value)
+    if persist:
+        _write(target['graph'], value)
+    return value
 
 
 def capture(graph, story, ui, api):
@@ -202,7 +235,7 @@ def capture(graph, story, ui, api):
 
 def register(target, workflow_ui, workflow_api, expected_revision=None):
     target = _target(target)
-    with saved_state.LOCK, nodes.SEQUENCE_LOCK:
+    with nodes.SEQUENCE_LOCK, saved_state.LOCK:
         name = _guard(target, workflow_ui)
         if name and takes.busy(os.path.join(nodes.sequences_root(), name)):
             raise APIError('project_busy', 'Native sequence is busy; finish rendering before replacing its snapshot.', status=409)
@@ -213,14 +246,58 @@ def register(target, workflow_ui, workflow_api, expected_revision=None):
             _check_revision(expected_revision, current['revision'])
             if current['checkpoint']:
                 raise APIError('checkpoint_immutable', 'Open an editable checkpoint copy first.', status=409)
-        _capture(target, workflow_ui, workflow_api, existing)
-        if target.get('story_node') and not library:
-            story_library.save(target['graph'], target['story_node'], workflow_ui, name)
+        value = _capture(target, workflow_ui, workflow_api, existing, persist=False)
+        workflow_ui = value['workflow_ui']
+        value['workflow_revision'] = existing.get('workflow_revision', 0) + 1
+        # Explicit recapture replaces the authoritative library and its old widget overlay too.
+        if target.get('story_node'):
+            story_library.save(target['graph'], target['story_node'], workflow_ui, name,
+                               library_revision=library.get('workflow_revision') if library else None)
+        state = saved_state.read('workflow', target['graph'], 'workflow')
+        fields = {key: node['widgets_values'][index] for key, (node, index, _) in _widgets(workflow_ui).items()}
+        saved_state.write('workflow', target['graph'], 'workflow', fields, state['revision'])
+        _write(target['graph'], value)
         return read(target)
 
 
+def _sync_controls(record, ui, api):
+    """Persist editable Primitive sources as well as their connected H3 widgets."""
+    before = record.get('workflow_api') or {}
+    widgets = _widgets(ui)
+    changed = {}
+    owned = {(str(node['id']), name): node['widgets_values'][index] for node, index, name in widgets.values()}
+    for (identity, name), value in owned.items():
+        try:
+            source, port = _binding(api, identity, name)
+        except ValueError:
+            continue
+        if source == identity or api[source]['inputs'][port] == before.get(source, {}).get('inputs', {}).get(port):
+            continue
+        changed[(source, port)] = api[source]['inputs'][port]
+    for (source, port), value in changed.items():
+        for identity, node in api.items():
+            for name in node.get('inputs', {}):
+                try:
+                    binding = _binding(api, identity, name)
+                except ValueError:
+                    continue
+                if binding != (source, port) or identity == source:
+                    continue
+                if (identity, name) not in owned or owned[(identity, name)] != value:
+                    raise APIError('shared_control', 'A shared Primitive would change another consumer; edit all bound controls consistently or recapture separate controls.')
+        matches = [node for node in ui['nodes'] if str(node['id']) == source and node.get('type') in PRIMITIVES]
+        if len(matches) != 1 or not isinstance(matches[0].get('widgets_values'), list) or not matches[0]['widgets_values']:
+            raise APIError('execution_snapshot_required', 'The linked Primitive needs its matching editable UI control.')
+        node = matches[0]
+        ports = [p for p in node.get('inputs', []) if p.get('widget')]
+        index = next((i for i, p in enumerate(ports) if p['widget']['name'] == port), 0)
+        node['widgets_values'][index] = value
+        if 'widgets_values_named' in node:
+            node['widgets_values_named'][port] = value
+
+
 def save(target, expected_revision, document):
-    with saved_state.LOCK, nodes.SEQUENCE_LOCK:
+    with nodes.SEQUENCE_LOCK, saved_state.LOCK:
         target, record, library, ui, state, revision = _current(target)
         _check_revision(expected_revision, revision)
         if library.get('checkpoint_name'):
@@ -248,6 +325,8 @@ def save(target, expected_revision, document):
         updated = story_library._overlay(ui, changes)
         _guard(target, updated)
         api, reason = _execution(record, updated)
+        if api is not None:
+            _sync_controls(record, updated, api)
         new_state = saved_state.write('workflow', target['graph'], 'workflow', {**(state['value'] or {}), **changes}, state['revision'])
         if library:
             reply = story_library.save(target['graph'], library['story'], updated,
@@ -265,7 +344,7 @@ def save(target, expected_revision, document):
 
 
 def context(target, expected_revision, operation):
-    with saved_state.LOCK:
+    with nodes.SEQUENCE_LOCK, saved_state.LOCK:
         target, record, _, ui, _, revision = _current(target)
         _check_revision(expected_revision, revision)
         if operation == 'saved':
@@ -300,9 +379,44 @@ def context(target, expected_revision, operation):
                     prompt=api, outputs=outputs, fields={f'{node}/{key}': value for (node, key), value in fields.items()})
         if operation == 'video_plan':
             from ..timeline_node import request_status
+            result['assets'] = _text_audio_assets(document['timeline'], api, target['timeline_node'])
             result['native_status'] = request_status(dict(name=result['name'], timeline=json.dumps(document['timeline']),
                                                           settings=document['settings']), materialize=False)
         return result
+
+
+def _text_audio_assets(line, api, timeline_node):
+    """Pin the actual saved timed-text audio source using preparation's existing byte verifier."""
+    from .. import timeline_prepare
+    attachment = line.get('timed_text') or {}
+    if 'audio_sha256' not in attachment:
+        return []
+    slot = attachment['audio_slot']
+    clip = next((clip for clip in line.get('audio_clips', []) if clip['slot'] == slot), {})
+    if clip.get('file'):
+        file = copy.deepcopy(clip['file'])
+        binding = dict(kind='audio_clip', slot=slot)
+    else:
+        link = api[timeline_node]['inputs'].get('audios.' + slot)
+        source = api.get(str(link[0]), {}) if isinstance(link, list) and len(link) == 2 and link[1] == 0 else {}
+        name = source.get('inputs', {}).get('audio')
+        if source.get('class_type') != 'LoadAudio' or not isinstance(name, str):
+            raise APIError('unverified_audio_source', 'Timed text needs a file-backed audio clip or direct literal LoadAudio source for byte verification.', status=422)
+        kind = 'input'
+        for candidate in ('input', 'output', 'temp'):
+            if name.endswith('[' + candidate + ']'):
+                kind, name = candidate, name[:-(len(candidate) + 2)].rstrip()
+                break
+        subfolder, filename = posixpath.split(name.replace('\\', '/'))
+        file = dict(filename=filename, subfolder=subfolder, type=kind)
+        binding = dict(kind='loader', node=str(link[0]), input='audio', slot=slot)
+    try:
+        path = timeline_prepare.descriptor(file, 'timeline.timed_text.audio_sha256')
+        with open(path, 'rb') as stream:
+            checksum = hashlib.file_digest(stream, 'sha256').hexdigest()
+    except (ValueError, OSError) as error:
+        raise APIError('unverified_audio_source', str(error), status=422) from error
+    return [dict(file=file, sha256=checksum, bindings=[binding])]
 
 
 def list_projects(cursor=None, limit=50):

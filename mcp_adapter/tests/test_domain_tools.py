@@ -38,7 +38,7 @@ class DomainTest(unittest.TestCase):
             ('h3_stills', 'prompt_instructions', 'POST', '/h3c/still-prompts/instructions', {}),
             ('h3_takes', 'list', 'POST', '/h3c/timeline/takes', {'box': 'a'}),
             ('h3_takes', 'use', 'POST', '/h3c/timeline/takes/use', {'take': 'takes/x'}),
-            ('h3_takes', 'rate', 'POST', '/h3c/timeline/takes/rate', {'take': 'takes/x', 'rating': 2}),
+            ('h3_takes', 'rate', 'POST', '/h3c/timeline/takes/rate', {'created': '2026-11-08T10:00:00', 'rating': 2, 'tag': 'keeper'}),
             ('h3_takes', 'delete_preview', 'POST', '/h3c/timeline/takes/delete', {'scope': 'other', 'box': 'a', 'apply': True}),
             ('h3_takes', 'delete_apply', 'POST', '/h3c/timeline/takes/delete', {'scope': 'take', 'take': 'takes/x'}),
             ('h3_library', 'list', 'GET', '/h3c/stories', {}),
@@ -87,3 +87,8 @@ class DomainTest(unittest.TestCase):
             self.tools.h3_stills('replacement_generate', self.target, '{}', self.rev)
         with self.assertRaises(StudioError):
             self.tools.h3_story('write', self.target, '{"check_only":true}', self.rev, 'key')
+
+    def test_rating_requires_created_identity_instead_of_take_path(self):
+        with self.assertRaisesRegex(StudioError, 'created'):
+            self.tools.h3_takes('rate', self.target, '{"take":"takes/x","rating":2}', self.rev)
+        self.assertEqual(self.host.requests, [])
