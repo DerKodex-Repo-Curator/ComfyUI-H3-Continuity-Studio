@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 .tmp/
+mcp_adapter/.venv/
+*.egg-info/
+build/
+dist/
