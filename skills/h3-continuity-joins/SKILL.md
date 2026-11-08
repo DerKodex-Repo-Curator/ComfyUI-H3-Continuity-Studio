@@ -1,6 +1,6 @@
 ---
 name: h3-continuity-joins
-description: Use when deciding how an H3 Timeline box meets the one before it, through continue, cut, new scene, a transition generated inside H3, visual memory (scene, selected, cast, off), a bridge, or splitting a box at a guide, and whenever people, clothes or places must survive a cut. Part of the H3 Continuity pack; read h3-continuity-video first.
+description: Use when deciding how an H3 Timeline box meets the one before it, through continue, cut, new scene, a transition generated inside H3, visual memory (scene, selected, cast, off), an insertion bridge, or splitting at a timed Shot boundary, and whenever people, clothes or places must survive a cut. Part of the H3 Continuity pack; read h3-continuity-video first.
 ---
 
 # Joins, visual memory and bridges
@@ -143,3 +143,12 @@ Neither box renders again, and every box keeps its Timeline time.
   the whole-shot prompt in a second box can restart its opening action.
 - Existing saved boxes keep their prompts, paired guides and joins, including
   Continue joins created by earlier guide splits.
+
+Through MCP, edit joins/memory in the exact saved document with `h3_save_project`.
+Inspect dependencies using `h3_plan_video` and overlap effects through
+`h3_inspect` regeneration. If a replacement take requires rebuilding continuity,
+review the affected clips/takes and submit its exact preflight fingerprint as
+`selection_json.rebuild_continuity`; never invent consent or delete dependent takes.
+Each native `h3_render_video` submits one box or insertion bridge; status does not
+queue the next. Replacement bridge generation is disabled, and split-at-guide and
+Guide Recheck are retired. Keep insertion bridges separate from those old records.

@@ -15,6 +15,12 @@ how to build a shot.
 
 ## Read the host first
 
+Over MCP, call `h3_capabilities`, then `h3_read_guidance` for this skill and
+`h3c://docs/MCP.md`. Load the scoped skills through their `skill://` resources.
+The server's Skills extension advertises the same canonical files; resource
+reading alone does not activate a client's skill. See `h3-continuity-api` for saved
+targets, exact JSON documents, receipts and installation.
+
 On the ComfyUI host you'll render on, read `GET /h3c/timeline/instructions` before
 authoring. It is a self-contained bundle:
 
@@ -84,13 +90,28 @@ texts are under `docs/` and the user guide is under `guide/`.
 - **Full video.** Once every box has a take, `<name>_full.mp4` is assembled in
   the background from the box videos in Timeline order (status reports
   `full_video_building` meanwhile). Clips may differ in frame rate, HDR or size
-  but not aspect ratio: the join uses the highest rate, HDR when any clip is HDR
-  and the largest size. It plays rendered
+  and aspect ratio: the join uses the highest rate, HDR when any clip is HDR
+  and the dimensions of the smallest clip by pixel count. Larger clips resize to
+  that width and height even across aspect ratios, which can stretch them. It plays rendered
   bridges on their joins, and the uploaded recording instead of H3's audio when
   a clip is marked `in_full_video` (see `h3-continuity-sound`). Each box saves its
   MP4 without carried frames, its latents (`.safetensors`) and a last-frame PNG
   under `output/h3_sequences/<name>/`. Keep the folder together, because the
   latents are what continuation, memory and bridges read.
+
+Saved projects and generations are separate identities. `h3_library` lists saved
+versions/checkpoints and earlier generations; a fresh generation keeps earlier
+outputs. Named checkpoints are immutable; restore opens an independent editable
+copy. Autosave preferences and browser Undo belong to the browser; explicit agent
+saves use server revisions. No browser synchronization is required, and unsaved
+browser edits are invisible. A stale save may overwrite newer work where existing
+guards permit it; reread on a revision conflict and never silently merge.
+
+Status distinguishes full video, video so far and source-backed partial previews,
+including build progress/errors. `h3_inspect` status may build native previews;
+`h3_plan_video` is read-only. A preview is not proof that every box is current.
+Takes have ratings (0–5) and a tag; `h3_takes` previews scoped deletion before an
+explicit delete action. Keep better takes instead of automatically cleaning them.
 
 ## Box lengths belong to the author
 

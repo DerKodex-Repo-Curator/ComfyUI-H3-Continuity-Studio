@@ -100,3 +100,19 @@ for pictures and guides, and the "Long edits" section of `external-timeline`.
   each carried stretch once. Noise it with a sampler `denoise` below 1 and sample it
   through H3 Context Windows. It refuses a chain that crosses a cut or a segment that
   dropped frames. The refined latent is not saved back as segments.
+
+## First-pass cache and saved execution
+
+H3 Disk Cache goes after the first-pass sampler; downstream decode, Save Segment
+and second pass read its result. Key the Timeline positive, latent and seed.
+Connect the first-pass 24 fps decode to Save Segment `guide_frames`, so later
+second-pass changes do not alter the next clip's first-pass guide. Cache modes
+are use, refresh and off; namespaces live under `output/h3c_cache`. Prompt,
+reference, seed, LoRA or first-pass changes invalidate it. CPU scheduler behavior
+is tested; full GPU rendering remains a separate validation boundary.
+
+Disk Cache, Context Windows, Join Chain and Save Segment codec/colour are graph
+configuration, discoverable with `h3_inspect` nodes. Capture a matching execution
+snapshot after wiring changes. MCP timing edits use `h3_get_project` and
+`h3_save_project`; preserve exact lengths and unknown metadata, then inspect the
+new `h3_plan_video` before explicitly submitting work.

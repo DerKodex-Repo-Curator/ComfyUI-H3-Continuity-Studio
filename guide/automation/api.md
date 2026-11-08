@@ -1,5 +1,7 @@
 # Timeline HTTP API
 
+For Codex or Claude Code, the [standalone MCP adapter](mcp.md) exposes these managed operations and saved native Story/still workflows through typed tools and the existing skill pack. Direct HTTP clients remain supported.
+
 A script or agent can author and render a native Timeline over **HTTP alone**. The server supplies the complete configured ComfyUI graph, manages revisions and queues native H3 work; the caller owns prompts, references, timing and creative review. Use the serving ComfyUI origin, including any reverse-proxy prefix. The API uses ComfyUI's existing security boundary, so expose it only through your authenticated proxy.
 
 !!! info "Reference"

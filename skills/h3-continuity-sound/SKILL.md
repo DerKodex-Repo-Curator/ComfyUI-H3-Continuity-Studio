@@ -67,6 +67,32 @@ attached to characters in the Story bible.
 - H3 hears the whole file each time, so keep samples short (there's a note above
   30 s). Voice clips never play in the full video. Rendering needs an audio VAE.
 
+## Recording ownership and dialogue
+
+`audio_clips[].box_windows` binds source windows to stable box IDs. Preserve the
+captured source, placement and `by_box` mapping: moving a box moves its assigned
+recording window; duplicated/new boxes receive none. Splits preserve ownership.
+Unlock windows before changing the recording or placement. Keep original source
+timestamps rather than rewriting them onto the movie clock.
+
+Dialogue cues hold exact recorded words, source times, speaker, portrayal and
+checked source identity. A clip chooses cue dialogue or typed `<d>` lines;
+conflicting sources stop it rather than silently doubling speech. Source/word/time
+edits invalidate the check. A cue crossing a cut remains one spoken line, with
+carried time accounted for. Never claim a cue was checked without listening.
+
+A recording locked to the sequence clock must remain `in_full_video`; insertion
+bridges inside it shift picture against the recording. `timing_conflicts` warns
+but does not prevent rendering, so remove the bridge deliberately if the audio
+must stay locked. Replacement bridges are unavailable. Box-window ownership is
+independent of this sequence-clock lock.
+
+Use `h3_upload_asset`, `h3_get_project`/`h3_save_project` and `h3_inspect` audio/status
+for MCP authoring and metadata. Keep uint64 seeds, exact transcript bytes, source
+clocks and opaque audio ownership fields intact. Waveform/beat analysis, snap and
+playback are browser features, not server tools. Read `h3c://docs/MCP.md` and the
+host audio guide for full payloads.
+
 ## Timed text
 
 Attach a Whisper-style transcript and H3 is asked to show those exact phrases as
