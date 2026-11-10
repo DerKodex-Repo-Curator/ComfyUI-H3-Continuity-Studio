@@ -2,6 +2,8 @@ import {ImageJobClient} from './h3c_image_jobs.mjs?v=441234615008';
 // h3_continuity/ph3_image_nodes.py describes the same recipe; keep the two in step.
 export const SELF_RECIPE_CLASS = 'H3C_PH3ImageStill';
 const SELF_RECIPE = {version:2, adapter:'pixels', label:'P-H3-Image', reference_limit:8, reference_label:'<Picture {index}>'};
+const SELF_RECIPES = {[SELF_RECIPE_CLASS]:SELF_RECIPE,
+  H3C_MiniMaxH3ImageStill:{...SELF_RECIPE,label:'MiniMax H3 Image'}};
 // Resolve explicit local locators against this snapshot, never against saved execution IDs.
 export function captureRecipe({workflow, output}, timelineId) {
   const fail = message => {throw new Error(`Still recipe: ${message}`);};
@@ -22,11 +24,12 @@ export function captureRecipe({workflow, output}, timelineId) {
     if (typeof selected!=='boolean') fail('recipe switch must use a literal boolean or native PrimitiveBoolean control');
     link=inputs[selected?'on_true':'on_false'];
   }
-  // The P-H3-Image node is its own generator: its still_recipe output (slot 1) addresses its own inputs.
-  const own = Array.isArray(link) && link.length===2 && typeof link[0]==='string' && link[1]===1 && output[link[0]]?.class_type===SELF_RECIPE_CLASS;
-  if (!own && (!Array.isArray(link) || link.length!==2 || typeof link[0]!=='string' || link[1]!==0)) fail('still_recipe must connect to H3 Still Recipe or P-H3-Image Still');
+  // Ready-made image nodes expose their own recipe at slot 1.
+  const selfRecipe = SELF_RECIPES[output[link?.[0]]?.class_type];
+  const own = Array.isArray(link) && link.length===2 && typeof link[0]==='string' && link[1]===1 && !!selfRecipe;
+  if (!own && (!Array.isArray(link) || link.length!==2 || typeof link[0]!=='string' || link[1]!==0)) fail('still_recipe must connect to H3 Still Recipe or P-H3-Image Still or MiniMax H3 Image Still');
   const adapter = output[link[0]];
-  if (!own && adapter?.class_type !== 'H3C_StillRecipe') fail('still_recipe must connect to H3 Still Recipe or P-H3-Image Still');
+  if (!own && adapter?.class_type !== 'H3C_StillRecipe') fail('still_recipe must connect to H3 Still Recipe or P-H3-Image Still or MiniMax H3 Image Still');
   const image = own ? [link[0], 0] : adapter.inputs.image;
   if (!Array.isArray(image) || image.length!==2 || typeof image[0]!=='string' || !Number.isInteger(image[1]) || image[1]<0 || !output[image[0]]) fail('image output is missing or muted');
   const definitions = new Map((workflow.definitions?.subgraphs ?? []).map(g=>[g.id,g]));
@@ -67,7 +70,7 @@ export function captureRecipe({workflow, output}, timelineId) {
   let bindings;
   if (own) {
     const self = {node:[originPath.at(-1)]}, at = input => ({...self, input});
-    bindings = {...SELF_RECIPE, prompt:at('prompt'), instruction:at('instruction'), seed:at('seed'),
+    bindings = {...selfRecipe, prompt:at('prompt'), instruction:at('instruction'), seed:at('seed'),
       size:{width:[at('width')], height:[at('height')]},
       references:Array.from({length:SELF_RECIPE.reference_limit}, (_, i)=>at(`images.image_${i+1}`))};
   } else try {bindings=JSON.parse(adapter.inputs.bindings);} catch {fail('bindings must be valid JSON');}

@@ -4,6 +4,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-10
+
+### Added
+
+- **MiniMax H3 Image Still.** A ready-made node connects the official MiniMax H3 Image model directly to the Timeline's `still_recipe` input. It uses the native six-step image workflow, preserves scene and character reference roles, and supports Studio candidates and standalone images. A wired example and installation guide cover the model, shared Qwen3-VL text encoder and separate image VAE. ComfyUI must include `MiniMaxH3ImageConditioning` (native support added November 10, 2026); an older core reports how to update before loading weights.
+
 ## [0.20.0] - 2026-11-08
 
 ### Added

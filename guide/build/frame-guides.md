@@ -47,6 +47,7 @@ Still generation needs a **still recipe**: connect a native image-generator subg
 | `examples/qwen_story_studio_turbo.json` | Qwen Image 2.1 Turbo, the faster alternative. |
 | `examples/h3_story_studio_qwen_references.json` | H3 video with Qwen images attached. |
 | `examples/ph3_image_story_studio.json` | P-H3-Image, with one ready-made node and no recipe to build. See [Stills with P-H3-Image](p-h3-image-stills.md). |
+| `examples/minimax_h3_image_story_studio.json` | Official MiniMax H3 Image, with one ready-made node. See [Stills with MiniMax H3 Image](minimax-h3-image-stills.md). |
 
 Select models you have installed; nothing is downloaded. Other pixel generators can be connected by declaring where their prompt, seed, size and reference inputs are. This is the **Still Recipe** node's `bindings` input; see the Qwen Story Studio notes in the repository for the schema.
 

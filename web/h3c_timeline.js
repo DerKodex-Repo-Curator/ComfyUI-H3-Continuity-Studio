@@ -19,7 +19,7 @@ import { referenceFile, referenceSource, referencePools, referenceType, effectiv
 import {referenceImageFile} from './h3c_reference_sources.mjs?v=195ba60268f6';
 import { pictureRefs } from './h3c_pictures.mjs?v=8339fa63997c';
 import { voiceRefs } from './h3c_voices.mjs?v=0fbce8e24aba';
-import {captureRecipe,captureTimelineId,captureStillBody,stillTimelineBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput,graphWiring} from './h3c_stills.mjs?v=bcc472928f9e';
+import {captureRecipe,captureTimelineId,captureStillBody,stillTimelineBody,recipeControls,StillClient,isolateVideoPrompt,videoOutputs,hasVideoOutput as compiledVideoOutput,graphWiring} from './h3c_stills.mjs?v=df999ecd2dcd';
 import {boundarySnapshot} from './h3c_frame_images.mjs?v=644176c40c45';
 import {stillPromptSource,sameStillPromptSource} from './h3c_still_prompt_preparation.mjs?v=2e7e25c47bea';
 import { TakesClient } from './h3c_takes.mjs?v=224eadcaf18a';

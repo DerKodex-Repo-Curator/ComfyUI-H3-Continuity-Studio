@@ -85,6 +85,7 @@ For [long clips](../build/long-clips.md). **Context Windows** wraps ComfyUI's Mi
 | Node | Purpose |
 | --- | --- |
 | **Still Recipe** | Wraps a native image generator's `IMAGE` output with `bindings` that say where its prompt, seed, size and references are. Connect it to the Timeline's `still_recipe`. |
+| **MiniMax H3 Image Still** | Generates images with the official MiniMax H3 Image model in six steps. Connects directly to Timeline `still_recipe`; see [installation and connections](../build/minimax-h3-image-stills.md). |
 | **H3 Still Conditioning** | Adapts a still generator invocation for pinned-source and reference presentation. Used inside the supplied H3 still examples. |
 | **Still Image Source** | Supplies source pixels to a still request. |
 | **H3 Timeline Image** | Resolved pixels for `<Picture N>` in the selected clip. |

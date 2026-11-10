@@ -8,6 +8,7 @@ import uuid
 from . import timeline as rules, timeline_prepare
 
 PH3_IMAGE_CLASS = 'H3C_PH3ImageStill'
+MINIMAX_IMAGE_CLASS = 'H3C_MiniMaxH3ImageStill'
 
 REFERENCE_USE = {
     'identity': 'Use this for the named person identity only; ignore its background and clothing unless requested.',
@@ -171,12 +172,13 @@ def prepare(recipe, workflow, request, references):
         raise ValueError(f'Still reference capacity {limit} cannot fit {len(unique)} required references: '+', '.join('/'.join(ref['roles']) for ref in unique))
     qwen = any(graph[loc['node']]['class_type'] == 'TextEncodeQwenImage21' for loc in ports)
     ph3 = any(graph[loc['node']]['class_type'] == PH3_IMAGE_CLASS for loc in ports)
-    scene = qwen or ph3
+    minimax = any(graph[loc['node']]['class_type'] == MINIMAX_IMAGE_CLASS for loc in ports)
+    scene = qwen or ph3 or minimax
     canvas = None
     if scene:
-        owner = 'Qwen' if qwen else 'P-H3-Image'
+        owner = 'Qwen' if qwen else 'MiniMax H3 Image' if minimax else 'P-H3-Image'
         if len({loc['node'] for loc in ports}) != 1:
-            raise ValueError(owner + ' scene references must bind directly to one ' + ('TextEncodeQwenImage21' if qwen else PH3_IMAGE_CLASS) + ' node')
+            raise ValueError(owner + ' scene references must bind directly to one ' + ('TextEncodeQwenImage21' if qwen else MINIMAX_IMAGE_CLASS if minimax else PH3_IMAGE_CLASS) + ' node')
         undeclared = [name for name, value in graph[ports[0]['node']]['inputs'].items()
                       if name.startswith('images.image_') and value is not None]
         if undeclared:
@@ -215,7 +217,7 @@ def prepare(recipe, workflow, request, references):
             source=copy.deepcopy(ref)
             inputs={'source':json.dumps(source)}
             # Keep calculated dimensions in native inputs so the scheduler evaluates their ancestry.
-            if at==0 and not ph3: inputs.update(width=copy.deepcopy(width),height=copy.deepcopy(height))
+            if at==0 and not (ph3 or minimax): inputs.update(width=copy.deepcopy(width),height=copy.deepcopy(height))
             graph[node]={'class_type':'H3C_StillImageSource','inputs':inputs}
             image=[node,0]
         bind(ports[at],image,True)
@@ -234,7 +236,7 @@ def prepare(recipe, workflow, request, references):
             named = ('the reference image' if qwen and len(unique) == 1 else canvas['label']) if canvas else None
             prompt = _qwen_prompt(prompt, descriptions, named)
             # P-H3-Image edits <Picture 1>; saying so keeps the scene text from being read as a bare request.
-            if ph3:
+            if ph3 or minimax:
                 prompt = 'Edit <Picture 1>. ' + prompt
         else:
             prompt='Reference roles:\n'+'\n'.join(descriptions)+'\nUse each reference only for its assigned role. Follow the requested camera, pose and action; preserve the approved environment across viewpoints.\n\nRequested frame:\n'+prompt

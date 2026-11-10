@@ -192,8 +192,17 @@ and adds the edit instruction. Never guess picture ordinals or emit Edit <Pictur
 Keep supplied logical reference names and the existing JSON schema; native prompt syntax belongs to code."""
 
 
+MINIMAX_IMAGE = """The still generator is MiniMax H3 Image.
+Write a complete natural-language description of one visible instant, including the requested medium,
+subject, framing, materials, light and exact requested lettering. Preserve the user's style and intent.
+With references, describe what stays and what changes. The first image is the edit base and the other
+images supply their assigned reference roles. Keep logical @imageN names; the Studio assigns native
+<Picture N> labels at generation time. Do not guess picture ordinals or write video stages, timestamps,
+dialogue or sound in still-image prose. Keep the existing JSON schema."""
+
+
 def image_model_instructions(model):
-    return PH3_IMAGE if model == "P-H3-Image" else ""
+    return {"P-H3-Image": PH3_IMAGE, "MiniMax H3 Image": MINIMAX_IMAGE}.get(model, "")
 
 
 IMAGE_SNAPSHOTS = """Write one storyboard box as structured JSON for a still-image generator.
