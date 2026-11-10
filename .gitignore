@@ -4,4 +4,6 @@ __pycache__/
 mcp_adapter/.venv/
 *.egg-info/
 build/
+!guide/build/
+!guide/build/*.md
 dist/

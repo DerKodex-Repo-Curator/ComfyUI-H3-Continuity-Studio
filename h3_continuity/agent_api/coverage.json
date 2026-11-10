@@ -22,6 +22,7 @@
     "H3C_StillConditioning",
     "H3C_StillImageSource",
     "H3C_PH3ImageStill",
+    "H3C_MiniMaxH3ImageStill",
     "H3C_TimelineImage",
     "H3C_ContextWindows",
     "H3C_JoinChain",

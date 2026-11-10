@@ -277,6 +277,7 @@ def _template(value):
 
 
 PH3_IMAGE_CLASS = "H3C_PH3ImageStill"
+SELF_IMAGE_MODELS = {PH3_IMAGE_CLASS: 'P-H3-Image', 'H3C_MiniMaxH3ImageStill': 'MiniMax H3 Image'}
 
 
 def still_recipe_node(prompt, timeline_id):
@@ -303,9 +304,9 @@ def still_recipe_node(prompt, timeline_id):
             return {}
         link = inputs.get("on_true" if selected else "on_false")
         node = (prompt.get(str(link[0])) or {}) if _link(link) else {}
-        if not _link(link) or link[1] != (1 if node.get("class_type") == PH3_IMAGE_CLASS else 0):
+        if not _link(link) or link[1] != (1 if node.get("class_type") in SELF_IMAGE_MODELS else 0):
             return {}
-    if node.get("class_type") == PH3_IMAGE_CLASS:
+    if node.get("class_type") in SELF_IMAGE_MODELS:
         # The P-H3-Image node is its own pixel generator; its recipe output is slot 1.
         if link[1] != 1:
             return {}
@@ -322,9 +323,7 @@ def still_recipe_node(prompt, timeline_id):
 
 def still_model_for(prompt, timeline_id):
     node = still_recipe_node(prompt, timeline_id)
-    if node.get("class_type") == PH3_IMAGE_CLASS:
-        return "P-H3-Image"
-    return ""
+    return SELF_IMAGE_MODELS.get(node.get('class_type'), '')
 
 
 def renderer_for(prompt, timeline_id):
