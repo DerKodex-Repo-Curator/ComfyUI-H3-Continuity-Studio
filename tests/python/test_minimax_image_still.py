@@ -45,6 +45,49 @@ class MiniMaxImageTest(unittest.TestCase):
         self.assertIn('vae', cond)
         self.assertEqual(result.result[1]['label'], 'MiniMax H3 Image')
 
+    def test_lora_stack_is_an_optional_connection(self):
+        schema = image.H3C_MiniMaxH3ImageStill.define_schema()
+        socket = next((item for item in schema.inputs if item.id == 'lora_stack'), None)
+        self.assertIsNotNone(socket)
+        self.assertTrue(socket.optional)
+        self.assertEqual(image.H3C_MiniMaxH3ImageStill.INPUT_TYPES()['optional']['lora_stack'][0], 'LORA_STACK')
+
+    def test_loras_patch_model_and_clip_in_stack_order(self):
+        with mock.patch.dict('nodes.NODE_CLASS_MAPPINGS', {'MiniMaxH3ImageConditioning': object}):
+            graph = image.H3C_MiniMaxH3ImageStill.execute(**ARGS, lora_stack=[
+                ('style.safetensors', 0.7, 0.2), ('detail.safetensors', -0.3, 0.0)]).expand
+        loaders = [(key, node['inputs']) for key, node in graph.items() if node['class_type'] == 'LoraLoader']
+        self.assertEqual(len(loaders), 2)
+        (first_id, first), (second_id, second) = loaders
+        by_type = {node['class_type']: key for key, node in graph.items()}
+        self.assertEqual(first, {'model': [by_type['UNETLoader'], 0], 'clip': [by_type['CLIPLoader'], 0],
+                                'lora_name': 'style.safetensors', 'strength_model': 0.7, 'strength_clip': 0.2})
+        self.assertEqual(second, {'model': [first_id, 0], 'clip': [first_id, 1],
+                                 'lora_name': 'detail.safetensors', 'strength_model': -0.3, 'strength_clip': 0.0})
+        self.assertEqual(graph[by_type['KSampler']]['inputs']['model'], [second_id, 0])
+        self.assertEqual(graph[by_type['MiniMaxH3ImageConditioning']]['inputs']['clip'], [second_id, 1])
+
+    def test_empty_or_disabled_stack_keeps_unpatched_model_and_clip(self):
+        for stack in (None, [], [('None', 1.0, 1.0), ('', 1.0, 1.0), ('unused.safetensors', 0.0, 0.0)]):
+            with self.subTest(stack=stack), mock.patch.dict('nodes.NODE_CLASS_MAPPINGS', {'MiniMaxH3ImageConditioning': object}):
+                graph = image.H3C_MiniMaxH3ImageStill.execute(**ARGS, lora_stack=stack).expand
+                by_type = {node['class_type']: key for key, node in graph.items()}
+                self.assertNotIn('LoraLoader', by_type)
+                self.assertEqual(graph[by_type['KSampler']]['inputs']['model'], [by_type['UNETLoader'], 0])
+                self.assertEqual(graph[by_type['MiniMaxH3ImageConditioning']]['inputs']['clip'], [by_type['CLIPLoader'], 0])
+
+    def test_studio_candidates_keep_connected_stack_and_ancestors(self):
+        workflow = {'api': {
+            '5': {'class_type': 'H3C_MiniMaxH3ImageStill', 'inputs': {**ARGS, 'lora_stack': ['stack', 0]}},
+            'stack': {'class_type': 'easy loraStack', 'inputs': {'optional_lora_stack': ['base', 0]}},
+            'base': {'class_type': 'easy loraStack', 'inputs': {'lora_1_name': 'style.safetensors'}},
+        }}
+        with mock.patch.dict('nodes.NODE_CLASS_MAPPINGS', {'H3C_MiniMaxH3ImageStill': image.H3C_MiniMaxH3ImageStill}):
+            result = image_recipe.prepare({**recipe(), 'label': 'MiniMax H3 Image'}, workflow, {'prompt': 'A room.'}, [])
+        self.assertEqual(result['prompt']['5']['inputs']['lora_stack'], ['stack', 0])
+        for node_id in ('stack', 'base'):
+            self.assertEqual(result['prompt'][node_id], workflow['api'][node_id])
+
     def test_unavailable_core_and_wrong_vae_fail_before_loading(self):
         with mock.patch('nodes.NODE_CLASS_MAPPINGS', {}):
             with self.assertRaisesRegex(ValueError, 'Update ComfyUI.*MiniMaxH3ImageConditioning'):
