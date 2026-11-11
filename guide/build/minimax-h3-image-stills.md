@@ -41,6 +41,13 @@ Still**, then connect its **still_recipe** output to Timeline **still_recipe**.
 In the Studio, select a First, Last or Shot marker, choose **Generate candidates**,
 and accept an image with **Use as guide**.
 
+Optionally connect a **LORA_STACK** output, such as Easy Use's LoRA stack, to
+**lora_stack**. Each entry is `(filename, model strength, CLIP strength)`. Entries
+apply in order to the diffusion model and conditioning text encoder for both
+direct images and Studio candidates. Use LoRAs compatible with MiniMax H3 Image.
+An unconnected or empty stack leaves generation unchanged; entries named `None`
+and entries with both strengths at zero are skipped.
+
 The Studio fills the prompt, seed and reference images for each request. It
 preserves scene and character reference roles, putting the scene canvas first
 when one is available. Prompts use native `<Picture 1>`, `<Picture 2>` labels;

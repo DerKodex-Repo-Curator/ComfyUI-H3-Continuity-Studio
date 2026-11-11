@@ -4,6 +4,12 @@ All notable changes to H3 Continuity Studio are recorded here. Versions follow [
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-11-11
+
+### Fixed
+
+- **MiniMax H3 Image Still accepts LoRA stacks.** Connect an optional `LORA_STACK`, as with P-H3 Still, to apply ordered model and CLIP strengths to direct images and Studio candidates. Empty and disabled stacks leave generation unchanged.
+
 ## [0.21.0] - 2026-11-10
 
 ### Added

@@ -50,10 +50,13 @@ class H3C_MiniMaxH3ImageStill(io.ComfyNode):
                 io.Autogrow.Input('images', optional=True, template=io.Autogrow.TemplateNames(
                     io.Image.Input('image'), names=[f'image_{i}' for i in range(1, MAX_REFERENCES + 1)], min=0),
                     tooltip='image_1 is the edit base; later images supply references. The Studio fills these slots.'),
+                io.Custom('LORA_STACK').Input('lora_stack', optional=True,
+                    tooltip='Optional LoRA stack (for example Easy Use): filename, model strength and CLIP strength. '
+                            'Applied in order to direct images and Studio stills. Use LoRAs compatible with MiniMax H3 Image.'),
             ], outputs=[io.Image.Output('image'), StillRecipeType.Output('still_recipe')])
 
     @classmethod
-    def execute(cls, diffusion_model, text_encoder, vae, prompt, instruction, seed, width, height, images=None):
+    def execute(cls, diffusion_model, text_encoder, vae, prompt, instruction, seed, width, height, images=None, lora_stack=None):
         import nodes
         if 'MiniMaxH3ImageConditioning' not in nodes.NODE_CLASS_MAPPINGS:
             raise ValueError('Update ComfyUI to a version with MiniMaxH3ImageConditioning (native MiniMax H3 Image '
@@ -73,11 +76,18 @@ class H3C_MiniMaxH3ImageStill(io.ComfyNode):
         g = GraphBuilder()
         model = g.node('UNETLoader', unet_name=files['diffusion_model'], weight_dtype='default')
         clip = g.node('CLIPLoader', clip_name=files['text_encoder'], type='minimax', device='default')
+        model_link, clip_link = model.out(0), clip.out(0)
+        for lora_name, strength_model, strength_clip in lora_stack or []:
+            if not lora_name or lora_name == 'None' or (strength_model == 0 and strength_clip == 0):
+                continue
+            lora = g.node('LoraLoader', model=model_link, clip=clip_link, lora_name=lora_name,
+                          strength_model=strength_model, strength_clip=strength_clip)
+            model_link, clip_link = lora.out(0), lora.out(1)
         vae_node = g.node('VAELoader', vae_name=files['vae'])
-        cond = g.node('MiniMaxH3ImageConditioning', clip=clip.out(0), vae=vae_node.out(0), prompt=text,
+        cond = g.node('MiniMaxH3ImageConditioning', clip=clip_link, vae=vae_node.out(0), prompt=text,
                       width=width, height=height, **{'images.' + key: value for key, value in references.items()})
         negative = g.node('ConditioningZeroOut', conditioning=cond.out(0))
-        sampled = g.node('KSampler', model=model.out(0), seed=seed, steps=6, cfg=1.0, sampler_name='euler',
+        sampled = g.node('KSampler', model=model_link, seed=seed, steps=6, cfg=1.0, sampler_name='euler',
                          scheduler='simple', positive=cond.out(0), negative=negative.out(0), latent_image=cond.out(1), denoise=1.0)
         decoded = g.node('VAEDecode', samples=sampled.out(0), vae=vae_node.out(0))
         return io.NodeOutput(decoded.out(0), recipe(), expand=g.finalize())
